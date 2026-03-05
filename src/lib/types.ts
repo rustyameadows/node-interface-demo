@@ -1,6 +1,30 @@
 export type ProviderId = "openai" | "google-gemini" | "topaz";
 export type NodeKind = "text-gen" | "image-gen" | "video-gen" | "transform";
 export type OutputType = "text" | "image" | "video";
+export type ProviderModelAvailability = "ready" | "coming_soon";
+export type ImageOutputFormat = "png" | "jpeg" | "webp";
+export type ImageSize = "1024x1024" | "1536x1024" | "1024x1536" | "auto";
+export type ImageQuality = "low" | "medium" | "high" | "auto";
+export type ImageInputFidelity = "high" | "low";
+
+export type ProviderModelCapabilities = {
+  text: boolean;
+  image: boolean;
+  video: boolean;
+  runnable: boolean;
+  availability: ProviderModelAvailability;
+  requiresApiKeyEnv: string | null;
+  apiKeyConfigured: boolean;
+  executionMode: "image-edit" | "coming-soon";
+  acceptedInputMimeTypes: string[];
+  maxInputImages: number;
+  defaults: {
+    outputFormat?: ImageOutputFormat;
+    quality?: ImageQuality;
+    size?: ImageSize;
+    inputFidelity?: ImageInputFidelity;
+  };
+};
 
 export type NodePayload = {
   nodeId: string;
@@ -8,8 +32,22 @@ export type NodePayload = {
   prompt: string;
   settings: Record<string, unknown>;
   outputType: OutputType;
+  promptSourceNodeId?: string | null;
   upstreamNodeIds: string[];
   upstreamAssetIds: string[];
+  inputImageAssetIds: string[];
+};
+
+export type ProviderInputAsset = {
+  assetId: string;
+  type: OutputType;
+  storageRef: string;
+  mimeType: string;
+  buffer: Buffer;
+  checksum?: string | null;
+  width?: number | null;
+  height?: number | null;
+  durationMs?: number | null;
 };
 
 export type ProviderJobInput = {
@@ -18,14 +56,15 @@ export type ProviderJobInput = {
   providerId: ProviderId;
   modelId: string;
   payload: NodePayload;
+  inputAssets: ProviderInputAsset[];
 };
 
 export type NormalizedOutput = {
   type: OutputType;
   mimeType: string;
   metadata: Record<string, unknown>;
-  content: string;
-  encoding: "utf8";
+  content: string | Buffer;
+  encoding: BufferEncoding | "binary";
   extension: string;
 };
 
@@ -33,7 +72,7 @@ export type ProviderModelDescriptor = {
   providerId: ProviderId;
   modelId: string;
   displayName: string;
-  capabilities: Record<string, unknown>;
+  capabilities: ProviderModelCapabilities;
   defaultSettings: Record<string, unknown>;
 };
 

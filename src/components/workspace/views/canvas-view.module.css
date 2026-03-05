@@ -241,6 +241,18 @@
   font-weight: 700;
 }
 
+.connectionSummaryReady {
+  border-color: rgba(98, 195, 123, 0.45);
+  background: rgba(236, 255, 237, 0.9);
+  color: rgba(18, 67, 27, 0.92);
+}
+
+.connectionSummaryWarning {
+  border-color: rgba(255, 188, 16, 0.5);
+  background: rgba(255, 248, 221, 0.92);
+  color: rgba(102, 55, 0, 0.94);
+}
+
 .debuggerBlock {
   display: flex;
   flex-direction: column;
@@ -290,6 +302,11 @@
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.nodeModalActions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 900px) {

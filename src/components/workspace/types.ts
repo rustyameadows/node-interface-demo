@@ -2,11 +2,30 @@ export type ProviderId = "openai" | "google-gemini" | "topaz";
 
 export type WorkspaceView = "canvas" | "assets" | "queue" | "settings";
 
+export type ProviderModelCapabilities = {
+  text: boolean;
+  image: boolean;
+  video: boolean;
+  runnable: boolean;
+  availability: "ready" | "coming_soon";
+  requiresApiKeyEnv: string | null;
+  apiKeyConfigured: boolean;
+  executionMode: "image-edit" | "coming-soon";
+  acceptedInputMimeTypes: string[];
+  maxInputImages: number;
+  defaults: {
+    outputFormat?: "png" | "jpeg" | "webp";
+    quality?: "low" | "medium" | "high" | "auto";
+    size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto";
+    inputFidelity?: "high" | "low";
+  };
+};
+
 export type ProviderModel = {
   providerId: ProviderId;
   modelId: string;
   displayName: string;
-  capabilities: Record<string, unknown>;
+  capabilities: ProviderModelCapabilities;
 };
 
 export type Project = {
@@ -83,12 +102,15 @@ export type Job = {
     prompt?: string;
     settings?: Record<string, unknown>;
     outputType?: WorkflowNode["outputType"];
+    promptSourceNodeId?: string | null;
     upstreamNodeIds?: string[];
     upstreamAssetIds?: string[];
+    inputImageAssetIds?: string[];
   };
   assets?: Array<{
     id: string;
     type: Asset["type"];
+    mimeType: string;
     createdAt: string;
   }>;
 };

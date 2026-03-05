@@ -4,9 +4,20 @@ import { getAllProviderModels } from "@/lib/providers/registry";
 
 export async function syncProviderModels() {
   const models = getAllProviderModels();
+  const activePairs = models.map((model) => ({ providerId: model.providerId, modelId: model.modelId }));
 
-  await prisma.$transaction(
-    models.map((model) =>
+  await prisma.$transaction([
+    prisma.providerModel.updateMany({
+      where: {
+        NOT: {
+          OR: activePairs,
+        },
+      },
+      data: {
+        active: false,
+      },
+    }),
+    ...models.map((model) =>
       prisma.providerModel.upsert({
         where: {
           providerId_modelId: {
@@ -27,6 +38,6 @@ export async function syncProviderModels() {
           active: true,
         },
       })
-    )
-  );
+    ),
+  ]);
 }

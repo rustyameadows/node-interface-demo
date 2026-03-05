@@ -49,12 +49,13 @@
 ## Node Configuration UX
 - Node settings live in the draggable canvas modal and only appear for a single selected node.
 - Text notes are first-class canvas nodes with inline editing plus modal editing.
+- Connected text notes act as prompt-source nodes for model execution.
 - Node modal includes:
   - provider selector
   - model selector
   - output type
   - prompt
-  - settings panel generated from `settingsSchema`
+  - run-state helper that explains why the node is or is not runnable
   - run controls
   - API call preview for the normalized request payload
 - Input/output ports display supported media types.
@@ -63,6 +64,12 @@
 - Canvas-selected nodes use a high-visibility citrus selection border/glow.
 - Canvas node chrome uses squared corners rather than rounded cards/pills.
 - Validation appears before run when required ports/settings are missing.
+- Model execution rules in this pass:
+  - `openai / gpt-image-1.5` is the only runnable model
+  - connected text note overrides the model prompt field during execution
+  - model prompt field remains as fallback when no text note is connected
+  - at least one supported image input must be connected to run
+  - all placeholder models/providers remain selectable but show `Coming soon` and disable Run
 
 ## Job Feedback UX
 - Queue summary remains visible from canvas via the bottom-right queue pill.
@@ -70,6 +77,7 @@
 - Failed jobs show normalized error class and short detail.
 - Users can retry failed jobs or cancel running jobs when supported.
 - Queue rows support source-call inspection for provider request/response debugging.
+- Successful OpenAI image jobs auto-materialize as new generated image nodes on the canvas, connected from the source model node.
 
 ## Asset Viewer Modes
 - `grid`: regular row/column thumbnail grid using contain-fit previews without cropping.

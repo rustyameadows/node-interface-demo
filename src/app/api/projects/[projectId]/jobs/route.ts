@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getProviderModel } from "@/lib/providers/registry";
 import { badRequest, internalError } from "@/lib/server/http";
 import { dispatchJob } from "@/lib/server/job-dispatch";
 import { syncProviderModels } from "@/lib/server/provider-models";
@@ -15,10 +16,41 @@ const createJobSchema = z.object({
     prompt: z.string().default(""),
     settings: z.record(z.string(), z.unknown()).default({}),
     outputType: z.enum(["text", "image", "video"]),
+    promptSourceNodeId: z.string().nullable().optional(),
     upstreamNodeIds: z.array(z.string()).default([]),
     upstreamAssetIds: z.array(z.string()).default([]),
+    inputImageAssetIds: z.array(z.string()).default([]),
   }),
 });
+
+function getSubmissionError(input: z.infer<typeof createJobSchema>) {
+  const model = getProviderModel(input.providerId, input.modelId);
+  if (!model) {
+    return "Unknown provider/model selection.";
+  }
+
+  if (model.capabilities.availability !== "ready") {
+    return `${model.displayName} is coming soon.`;
+  }
+
+  if (model.capabilities.requiresApiKeyEnv && !model.capabilities.apiKeyConfigured) {
+    return `Set ${model.capabilities.requiresApiKeyEnv} in .env.local and restart npm run dev.`;
+  }
+
+  if (!model.capabilities.runnable) {
+    return `${model.displayName} is not runnable right now.`;
+  }
+
+  if (!input.nodePayload.prompt.trim()) {
+    return "Connect a prompt note or enter a prompt before running.";
+  }
+
+  if (input.nodePayload.inputImageAssetIds.length === 0) {
+    return "Connect at least one supported image input before running.";
+  }
+
+  return null;
+}
 
 export async function GET(
   _request: Request,
@@ -31,7 +63,7 @@ export async function GET(
       where: { projectId },
       include: {
         assets: {
-          select: { id: true, type: true, createdAt: true },
+          select: { id: true, type: true, mimeType: true, createdAt: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -57,6 +89,11 @@ export async function POST(
     }
 
     await syncProviderModels();
+
+    const submissionError = getSubmissionError(parsed.data);
+    if (submissionError) {
+      return badRequest(submissionError);
+    }
 
     const job = await prisma.job.create({
       data: {

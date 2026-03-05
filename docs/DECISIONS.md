@@ -59,3 +59,8 @@
 - Decision: remove TLDraw and use a custom React infinite canvas so layout and interaction design are fully controlled in-app.
 - Rationale: product direction requires tighter visual control and a full-viewport workspace with floating overlays.
 - Consequence: canvas behavior is now owned in local components (pan/zoom/node drag/drop/modal), with project-persisted viewport and node coordinates.
+
+## 2026-03-05 - OpenAI Is the First Real Provider Path
+- Decision: make `openai / gpt-image-1.5` the only live provider execution path for now, and keep Gemini/Topaz plus other OpenAI models visible as `Coming soon`.
+- Rationale: ship a real end-to-end prompt-note + image-reference generation loop without pretending the rest of the provider catalog is production-ready.
+- Consequence: UI gating now comes from provider-model capability metadata, job payloads snapshot resolved prompt/image inputs, and generated OpenAI outputs are materialized back onto the canvas as image nodes.

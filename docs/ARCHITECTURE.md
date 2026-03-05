@@ -11,9 +11,9 @@
 ## Runtime Topology
 1. Next.js web app provides UI and API route handlers.
 2. Postgres stores project, canvas, job, and asset metadata.
-3. `pg-boss` worker processes queued jobs and calls provider APIs.
-4. Filesystem storage adapter persists generated binaries.
-5. Provider adapters normalize OpenAI, Gemini, and Topaz behavior.
+3. Jobs run inline by default (`JOB_EXECUTION_MODE=inline`) and can also run through `pg-boss`.
+4. Filesystem storage adapter persists uploaded and generated binaries.
+5. Provider adapters normalize OpenAI behavior now and reserve Gemini/Topaz placeholders behind the same contract.
 
 ## Core Modules
 - `ProjectService`: project lifecycle and active project switching.
@@ -26,12 +26,15 @@
 
 ## Data Flow: Node Execution
 1. User triggers graph run from active project canvas.
-2. API validates graph inputs and creates a `job` record.
-3. API enqueues provider execution work into `pg-boss`.
-4. Worker pulls queue job, invokes adapter, and records attempts.
-5. Worker normalizes provider outputs into canonical asset records.
+2. Canvas client resolves the actual run snapshot before enqueue:
+  - connected text note content becomes `nodePayload.prompt` when present
+  - model prompt field is fallback when no text note is connected
+  - connected image inputs resolve to concrete asset IDs and are capped to the model limit
+3. API validates the resolved payload and creates a `job` record.
+4. Inline executor or `pg-boss` worker loads referenced asset bytes from local storage and invokes the provider adapter.
+5. Adapter returns normalized outputs, including binary image buffers for generated images.
 6. Storage adapter writes binaries to disk; DB stores metadata + storage ref.
-7. UI polls or subscribes to job updates and refreshes canvas/asset panels.
+7. UI polls job updates and materializes any newly generated image asset as a new asset-source node on the canvas exactly once.
 
 ## Project Switching Behavior
 1. Only one project workspace can be open at once.
@@ -47,20 +50,26 @@
 - Provider/model IDs are internal and stable.
 - UI display names are configurable and may differ from IDs.
 - Gemini 3.1 Flash is displayed as `Nano Banana 2`.
+- Current runtime status:
+  - `openai / gpt-image-1.5`: real execution path for image edit/reference flow
+  - other OpenAI models, Gemini, and Topaz: visible in model pickers as `Coming soon`, not runnable
 
 ## Configuration (Expected Env Vars)
 ```bash
 DATABASE_URL=postgresql://...
 PG_BOSS_SCHEMA=pgboss
+JOB_EXECUTION_MODE=inline
 ASSET_STORAGE_ROOT=./.local-assets
 OPENAI_API_KEY=...
 GOOGLE_API_KEY=...
 TOPAZ_API_KEY=...
 ```
 
+`OPENAI_API_KEY` is only required when you want to run real OpenAI generations. The rest of the local app boots without it.
+
 ## Error and Recovery Strategy
 - Queue retry policy with bounded attempts and exponential backoff.
-- Explicit job states and failure codes for UI visibility.
+- Explicit job states and failure codes for UI visibility (`CONFIG_ERROR`, `COMING_SOON`, `INVALID_INPUT`, `PROVIDER_ERROR`).
 - Idempotency key on job submissions to avoid duplicate execution.
 - Storage write failures mark job failed with structured reason.
 - On restart, worker resumes uncompleted queue items.

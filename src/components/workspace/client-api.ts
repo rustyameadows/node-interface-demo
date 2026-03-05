@@ -122,22 +122,45 @@ export async function uploadProjectAsset(projectId: string, file: File) {
 }
 
 export async function createJob(projectId: string, node: WorkflowNode) {
+  return createJobFromRequest(projectId, {
+    providerId: node.providerId,
+    modelId: node.modelId,
+    nodePayload: {
+      nodeId: node.id,
+      nodeType: node.nodeType === "text-note" ? "text-gen" : node.nodeType,
+      prompt: node.prompt,
+      settings: node.settings,
+      outputType: node.outputType,
+      promptSourceNodeId: node.promptSourceNodeId,
+      upstreamNodeIds: node.upstreamNodeIds,
+      upstreamAssetIds: node.upstreamAssetIds,
+      inputImageAssetIds: [],
+    },
+  });
+}
+
+export async function createJobFromRequest(
+  projectId: string,
+  requestPayload: {
+    providerId: ProviderId;
+    modelId: string;
+    nodePayload: {
+      nodeId: string;
+      nodeType: Exclude<WorkflowNode["nodeType"], "text-note">;
+      prompt: string;
+      settings: Record<string, unknown>;
+      outputType: WorkflowNode["outputType"];
+      promptSourceNodeId?: string | null;
+      upstreamNodeIds: string[];
+      upstreamAssetIds: string[];
+      inputImageAssetIds: string[];
+    };
+  }
+) {
   const res = await fetch(`/api/projects/${projectId}/jobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      providerId: node.providerId,
-      modelId: node.modelId,
-      nodePayload: {
-        nodeId: node.id,
-        nodeType: node.nodeType,
-        prompt: node.prompt,
-        settings: node.settings,
-        outputType: node.outputType,
-        upstreamNodeIds: node.upstreamNodeIds,
-        upstreamAssetIds: node.upstreamAssetIds,
-      },
-    }),
+    body: JSON.stringify(requestPayload),
   });
 
   await readJson<{ job: unknown }>(res);
@@ -228,8 +251,8 @@ export function normalizeNode(raw: Record<string, unknown>, index: number): Work
   return {
     id: String(raw.id || uid()),
     label: String(raw.label || `Node ${index + 1}`),
-    providerId: (raw.providerId as ProviderId) || "google-gemini",
-    modelId: String(raw.modelId || "gemini-3.1-flash"),
+    providerId: (raw.providerId as ProviderId) || "openai",
+    modelId: String(raw.modelId || "gpt-image-1.5"),
     kind: inferredKind,
     nodeType:
       ((raw.nodeType as WorkflowNode["nodeType"]) || (inferredKind === "text-note" ? "text-note" : "image-gen")),

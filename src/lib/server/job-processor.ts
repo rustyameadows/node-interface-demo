@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getProviderAdapter } from "@/lib/providers/registry";
-import { saveContentAsAsset } from "@/lib/storage/local-storage";
+import { readAssetContent, saveBufferAsAsset, saveContentAsAsset } from "@/lib/storage/local-storage";
 import type { NodePayload, ProviderId } from "@/lib/types";
 
 function asNodePayload(value: unknown): NodePayload {
@@ -16,20 +16,89 @@ function asNodePayload(value: unknown): NodePayload {
     prompt: String(raw.prompt || ""),
     settings: (raw.settings as Record<string, unknown>) || {},
     outputType: (raw.outputType as NodePayload["outputType"]) || "image",
+    promptSourceNodeId: raw.promptSourceNodeId ? String(raw.promptSourceNodeId) : null,
     upstreamNodeIds: Array.isArray(raw.upstreamNodeIds)
       ? raw.upstreamNodeIds.map((id) => String(id))
       : [],
     upstreamAssetIds: Array.isArray(raw.upstreamAssetIds)
       ? raw.upstreamAssetIds.map((id) => String(id))
       : [],
+    inputImageAssetIds: Array.isArray(raw.inputImageAssetIds)
+      ? raw.inputImageAssetIds.map((id) => String(id))
+      : [],
   };
 }
 
 function toErrorMessage(error: unknown): { code: string; message: string } {
+  if (error && typeof error === "object" && "code" in error && typeof error.code === "string") {
+    return {
+      code: error.code,
+      message: error instanceof Error ? error.message : "Provider execution error",
+    };
+  }
+
   if (error instanceof Error) {
     return { code: "PROVIDER_ERROR", message: error.message };
   }
   return { code: "PROVIDER_ERROR", message: "Unknown provider execution error" };
+}
+
+async function loadInputAssets(projectId: string, inputImageAssetIds: string[]) {
+  if (inputImageAssetIds.length === 0) {
+    return [];
+  }
+
+  const uniqueAssetIds = [...new Set(inputImageAssetIds)];
+  const assets = await prisma.asset.findMany({
+    where: {
+      projectId,
+      id: {
+        in: uniqueAssetIds,
+      },
+    },
+  });
+
+  const assetMap = new Map(assets.map((asset) => [asset.id, asset]));
+  const orderedAssets = uniqueAssetIds
+    .map((assetId) => assetMap.get(assetId))
+    .filter((asset): asset is NonNullable<typeof asset> => Boolean(asset));
+
+  return Promise.all(
+    orderedAssets.map(async (asset) => ({
+      assetId: asset.id,
+      type: asset.type,
+      storageRef: asset.storageRef,
+      mimeType: asset.mimeType,
+      buffer: await readAssetContent(asset.storageRef),
+      checksum: asset.checksum,
+      width: asset.width,
+      height: asset.height,
+      durationMs: asset.durationMs,
+    }))
+  );
+}
+
+function buildProviderRequest(
+  providerId: ProviderId,
+  modelId: string,
+  payload: NodePayload,
+  inputAssets: Awaited<ReturnType<typeof loadInputAssets>>
+) {
+  return {
+    providerId,
+    modelId,
+    payload,
+    inputAssets: inputAssets.map((asset) => ({
+      assetId: asset.assetId,
+      type: asset.type,
+      storageRef: asset.storageRef,
+      mimeType: asset.mimeType,
+      checksum: asset.checksum || null,
+      width: asset.width ?? null,
+      height: asset.height ?? null,
+      durationMs: asset.durationMs ?? null,
+    })),
+  } as Prisma.InputJsonValue;
 }
 
 export async function processJobById(jobId: string) {
@@ -54,8 +123,10 @@ export async function processJobById(jobId: string) {
   });
 
   const start = Date.now();
+  let inputAssets: Awaited<ReturnType<typeof loadInputAssets>> = [];
 
   try {
+    inputAssets = await loadInputAssets(existing.projectId, payload.inputImageAssetIds);
     const adapter = getProviderAdapter(providerId);
     const outputs = await adapter.submitJob({
       projectId: existing.projectId,
@@ -63,27 +134,32 @@ export async function processJobById(jobId: string) {
       providerId,
       modelId: existing.modelId,
       payload,
+      inputAssets,
     });
 
     await prisma.jobAttempt.create({
       data: {
         jobId,
         attemptNumber,
-        providerRequest: {
-          providerId,
-          modelId: existing.modelId,
-          payload,
-        } as Prisma.InputJsonValue,
+        providerRequest: buildProviderRequest(providerId, existing.modelId, payload, inputAssets),
         providerResponse: {
           outputCount: outputs.length,
           outputTypes: outputs.map((output) => output.type),
+          outputs: outputs.map((output) => ({
+            type: output.type,
+            mimeType: output.mimeType,
+            extension: output.extension,
+            metadata: output.metadata,
+          })),
         } as Prisma.InputJsonValue,
         durationMs: Date.now() - start,
       },
     });
 
     for (const output of outputs) {
-      const stored = await saveContentAsAsset(existing.projectId, output.extension, output.content, output.encoding);
+      const stored = Buffer.isBuffer(output.content)
+        ? await saveBufferAsAsset(existing.projectId, output.extension, output.content)
+        : await saveContentAsAsset(existing.projectId, output.extension, output.content, output.encoding);
       const width = typeof output.metadata.width === "number" ? output.metadata.width : null;
       const height = typeof output.metadata.height === "number" ? output.metadata.height : null;
       const durationMs = typeof output.metadata.durationMs === "number" ? output.metadata.durationMs : null;
@@ -125,11 +201,7 @@ export async function processJobById(jobId: string) {
       data: {
         jobId,
         attemptNumber,
-        providerRequest: {
-          providerId,
-          modelId: existing.modelId,
-          payload,
-        } as Prisma.InputJsonValue,
+        providerRequest: buildProviderRequest(providerId, existing.modelId, payload, inputAssets),
         errorCode: code,
         errorMessage: message,
         durationMs: Date.now() - start,
