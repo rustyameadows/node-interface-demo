@@ -67,8 +67,9 @@
   - `openai / gpt-image-1.5` is the only runnable model
   - connected text note overrides the model prompt field during execution
   - model prompt field remains as fallback when no text note is connected
-  - `Generate` mode requires a resolved prompt and zero image inputs
-  - `Edit` mode requires a resolved prompt and at least one supported image input
+  - OpenAI execution mode is inferred automatically from connected inputs
+  - no connected image inputs => prompt-only generation
+  - one or more supported connected image inputs => reference-image generation
   - all placeholder models/providers remain selectable but show `Coming soon` and disable Run
 
 ## Job Feedback UX

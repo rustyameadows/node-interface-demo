@@ -29,7 +29,7 @@
 2. Canvas client resolves the actual run snapshot before enqueue:
   - connected text note content becomes `nodePayload.prompt` when present
   - model prompt field is fallback when no text note is connected
-  - OpenAI image mode is snapshotted as `nodePayload.executionMode`
+  - OpenAI image execution mode is inferred from connected image inputs and snapshotted as `nodePayload.executionMode`
   - connected image inputs resolve to concrete asset IDs and are capped to the model limit
 3. API validates the resolved payload and creates a `job` record.
 4. Canvas client inserts a generated output placeholder node immediately after job creation and stores the originating `jobId` on that node.

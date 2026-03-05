@@ -30,7 +30,6 @@ import {
   type CanvasDocument,
   type Job,
   type JobDebugResponse,
-  type OpenAIImageMode,
   type ProviderModel,
   type WorkflowNode,
 } from "@/components/workspace/types";
@@ -62,14 +61,7 @@ function capabilityEnabled(value: unknown) {
 }
 
 function getModelDefaultSettings(model: ProviderModel | undefined) {
-  const settings = model?.capabilities?.defaults ? { ...model.capabilities.defaults } : {};
-  if (model?.providerId === "openai" && model.modelId === "gpt-image-1.5") {
-    return {
-      ...settings,
-      openaiImageMode: settings.openaiImageMode === "generate" ? "generate" : "edit",
-    };
-  }
-  return settings;
+  return model?.capabilities?.defaults ? { ...model.capabilities.defaults } : {};
 }
 
 function getModelSupportedOutputs(model: ProviderModel | undefined): WorkflowNode["outputType"][] {
@@ -163,7 +155,6 @@ function fallbackProviderModel(providers: ProviderModel[]): ProviderModel {
         quality: "medium",
         size: "1024x1024",
         inputFidelity: "high",
-        openaiImageMode: "edit",
       },
     },
   };
@@ -192,10 +183,6 @@ function isGeneratedAssetNode(node: WorkflowNode | null | undefined) {
     return false;
   }
   return node.settings.source === "generated" || Boolean(getNodeSourceJobId(node));
-}
-
-function readOpenAiImageMode(node: WorkflowNode | null | undefined): OpenAIImageMode {
-  return node?.settings.openaiImageMode === "generate" ? "generate" : "edit";
 }
 
 function getGeneratedNodeLabel(existingCount: number) {
@@ -515,12 +502,12 @@ export function CanvasView({ projectId }: Props) {
       const prompt = node.promptSourceNodeId ? (promptSourceNode?.prompt || "") : node.prompt;
       const maxInputImages = model?.capabilities.maxInputImages || 0;
       const acceptedMimeTypes = new Set(model?.capabilities.acceptedInputMimeTypes || []);
-      const executionMode = readOpenAiImageMode(node);
-
-      const inputImageAssetIds = node.upstreamNodeIds
+      const connectedImageRefs = node.upstreamNodeIds
         .map((nodeId) => nodesById[nodeId] || null)
         .map((inputNode) => (inputNode ? resolveNodeImageAsset(inputNode) : null))
-        .filter((assetRef): assetRef is NonNullable<ReturnType<typeof resolveNodeImageAsset>> => Boolean(assetRef))
+        .filter((assetRef): assetRef is NonNullable<ReturnType<typeof resolveNodeImageAsset>> => Boolean(assetRef));
+
+      const inputImageAssetIds = connectedImageRefs
         .filter((assetRef) => {
           if (acceptedMimeTypes.size === 0) {
             return true;
@@ -530,6 +517,9 @@ export function CanvasView({ projectId }: Props) {
         .map((assetRef) => assetRef.assetId)
         .filter((assetId, index, array) => array.indexOf(assetId) === index)
         .slice(0, maxInputImages || undefined);
+      const executionMode = inputImageAssetIds.length > 0 ? "edit" : "generate";
+      const sanitizedSettings = { ...node.settings };
+      delete sanitizedSettings.openaiImageMode;
 
       const requestPayload = {
         providerId: node.providerId,
@@ -540,7 +530,7 @@ export function CanvasView({ projectId }: Props) {
           prompt: prompt.trim(),
           settings: {
             ...getModelDefaultSettings(model),
-            ...node.settings,
+            ...sanitizedSettings,
           },
           outputType: node.outputType,
           executionMode,
@@ -565,18 +555,16 @@ export function CanvasView({ projectId }: Props) {
         disabledReason = node.promptSourceNodeId
           ? "Connected text note is empty."
           : "Connect a prompt note or enter a prompt.";
-      } else if (executionMode === "generate" && requestPayload.nodePayload.inputImageAssetIds.length > 0) {
-        disabledReason = "Generate mode is prompt-only. Disconnect image inputs or switch to Edit.";
-      } else if (executionMode === "edit" && requestPayload.nodePayload.inputImageAssetIds.length === 0) {
+      } else if (connectedImageRefs.length > 0 && requestPayload.nodePayload.inputImageAssetIds.length === 0) {
         disabledReason =
           acceptedMimeTypes.size > 0
-            ? "Connect a PNG, JPEG, or WebP image input."
-            : "Connect an image input.";
+            ? "Connected image inputs are unsupported. Use PNG, JPEG, or WebP references."
+            : "Connected image inputs are unsupported for this model.";
       } else {
         readyMessage =
           executionMode === "generate"
-            ? "Ready to generate from prompt only."
-            : `Ready to edit with ${requestPayload.nodePayload.inputImageAssetIds.length} image input${
+            ? "Ready for prompt-only generation."
+            : `Ready for reference-image generation from ${requestPayload.nodePayload.inputImageAssetIds.length} image input${
                 requestPayload.nodePayload.inputImageAssetIds.length === 1 ? "" : "s"
               }.`;
       }
@@ -1547,23 +1535,16 @@ export function CanvasView({ projectId }: Props) {
 
                   {selectedModel?.providerId === "openai" && selectedModel.modelId === "gpt-image-1.5" ? (
                     <label>
-                      Mode
-                      <select
-                        value={readOpenAiImageMode(selectedNode)}
-                        onChange={(event) =>
-                          updateNode(selectedNode.id, {
-                            settings: {
-                              ...selectedNode.settings,
-                              openaiImageMode: event.target.value === "generate" ? "generate" : "edit",
-                            },
-                          })
-                        }
-                      >
-                        <option value="generate">Generate</option>
-                        <option value="edit">Edit</option>
-                      </select>
+                      Execution
+                      <div className={styles.connectionSummary}>
+                        {selectedNodeRunPreview?.requestPayload.nodePayload.executionMode === "edit"
+                          ? `Reference-image generation from ${selectedNodeRunPreview.requestPayload.nodePayload.inputImageAssetIds.length} image input${
+                              selectedNodeRunPreview.requestPayload.nodePayload.inputImageAssetIds.length === 1 ? "" : "s"
+                            }.`
+                          : "Prompt-only generation."}
+                      </div>
                       <small className={styles.helperText}>
-                        Generate uses prompt only. Edit requires one or more connected image inputs.
+                        Inferred automatically from whether supported image inputs are connected.
                       </small>
                     </label>
                   ) : null}

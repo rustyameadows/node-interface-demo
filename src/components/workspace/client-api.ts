@@ -123,6 +123,7 @@ export async function uploadProjectAsset(projectId: string, file: File) {
 }
 
 export async function createJob(projectId: string, node: WorkflowNode) {
+  const executionMode: OpenAIImageMode = node.upstreamAssetIds.length > 0 ? "edit" : "generate";
   return createJobFromRequest(projectId, {
     providerId: node.providerId,
     modelId: node.modelId,
@@ -132,7 +133,7 @@ export async function createJob(projectId: string, node: WorkflowNode) {
       prompt: node.prompt,
       settings: node.settings,
       outputType: node.outputType,
-      executionMode: node.settings.openaiImageMode === "generate" ? "generate" : "edit",
+      executionMode,
       promptSourceNodeId: node.promptSourceNodeId,
       upstreamNodeIds: node.upstreamNodeIds,
       upstreamAssetIds: node.upstreamAssetIds,
@@ -255,10 +256,7 @@ export function normalizeNode(raw: Record<string, unknown>, index: number): Work
     raw.settings && typeof raw.settings === "object"
       ? ({ ...(raw.settings as Record<string, unknown>) } as Record<string, unknown>)
       : {};
-
-  if (inferredKind === "model") {
-    normalizedSettings.openaiImageMode = normalizedSettings.openaiImageMode === "generate" ? "generate" : "edit";
-  }
+  delete normalizedSettings.openaiImageMode;
 
   return {
     id: String(raw.id || uid()),

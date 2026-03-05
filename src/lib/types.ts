@@ -24,7 +24,6 @@ export type ProviderModelCapabilities = {
     quality?: ImageQuality;
     size?: ImageSize;
     inputFidelity?: ImageInputFidelity;
-    openaiImageMode?: OpenAIImageMode;
   };
 };
 

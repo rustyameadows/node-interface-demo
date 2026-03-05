@@ -81,10 +81,10 @@ This keeps the browser truthful about whether a node can run without inventing c
 - Prompt comes from:
   - connected text note when present
   - otherwise the model node prompt textarea
-- Execution mode comes from the model node setting:
-  - `generate`: prompt only
-  - `edit`: prompt plus connected image inputs
-- Image references come from connected image-producing nodes when the node is in `edit` mode
+- Execution mode is inferred from connected image inputs:
+  - `generate`: no connected image inputs
+  - `edit`: one or more connected supported image inputs
+- Image references come from connected image-producing nodes when the inferred mode is `edit`
 - Server resolves those references into concrete asset bytes before invoking OpenAI
 - Run inserts a generated output placeholder node on the canvas immediately after job creation
 - Successful output is stored as a project asset and attached to that same output node
@@ -109,8 +109,7 @@ This keeps the browser truthful about whether a node can run without inventing c
 OpenAI run is disabled when:
 - `OPENAI_API_KEY` is missing
 - resolved prompt is empty
-- node mode is `generate` and image inputs are still connected
-- node mode is `edit` and no supported image inputs are connected
+- one or more image connections exist but none resolve to supported image assets
 
 ### Output Normalization
 - Generated image bytes are decoded from OpenAI base64 output into `Buffer`
