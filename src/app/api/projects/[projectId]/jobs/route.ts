@@ -15,6 +15,7 @@ const createJobSchema = z.object({
     prompt: z.string().default(""),
     settings: z.record(z.string(), z.unknown()).default({}),
     outputType: z.enum(["text", "image", "video"]),
+    upstreamNodeIds: z.array(z.string()).default([]),
     upstreamAssetIds: z.array(z.string()).default([]),
   }),
 });

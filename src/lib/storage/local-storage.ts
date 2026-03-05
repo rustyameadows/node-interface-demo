@@ -14,28 +14,47 @@ async function ensureRoot() {
   await mkdir(assetRoot, { recursive: true });
 }
 
-export async function saveContentAsAsset(
-  projectId: string,
-  extension: string,
-  content: string,
-  encoding: BufferEncoding = "utf8"
-): Promise<StoredAsset> {
+function sanitizeExtension(extension: string) {
+  const cleaned = extension.replace(/^\.+/, "").toLowerCase();
+  return cleaned || "bin";
+}
+
+async function saveBuffer(projectId: string, extension: string, buffer: Buffer): Promise<StoredAsset> {
   await ensureRoot();
 
   const bucketDir = path.join(assetRoot, projectId);
   await mkdir(bucketDir, { recursive: true });
 
-  const hash = crypto.createHash("sha1").update(content).digest("hex").slice(0, 16);
-  const fileName = `${Date.now()}-${hash}.${extension}`;
+  const safeExtension = sanitizeExtension(extension);
+  const hash = crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 16);
+  const fileName = `${Date.now()}-${hash}.${safeExtension}`;
   const absolutePath = path.join(bucketDir, fileName);
 
-  await writeFile(absolutePath, content, { encoding });
+  await writeFile(absolutePath, buffer);
 
   return {
     storageRef: path.join(projectId, fileName),
     absolutePath,
     checksum: hash,
   };
+}
+
+export async function saveContentAsAsset(
+  projectId: string,
+  extension: string,
+  content: string,
+  encoding: BufferEncoding = "utf8"
+): Promise<StoredAsset> {
+  const buffer = Buffer.from(content, encoding);
+  return saveBuffer(projectId, extension, buffer);
+}
+
+export async function saveBufferAsAsset(
+  projectId: string,
+  extension: string,
+  content: Buffer
+): Promise<StoredAsset> {
+  return saveBuffer(projectId, extension, content);
 }
 
 export function getAssetAbsolutePath(storageRef: string): string {

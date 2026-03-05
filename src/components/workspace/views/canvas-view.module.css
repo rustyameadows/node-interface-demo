@@ -1,0 +1,169 @@
+.page {
+  position: absolute;
+  inset: 0;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 1rem;
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.uploadCta {
+  position: absolute;
+  right: 14px;
+  bottom: 106px;
+  z-index: 39;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.9);
+  color: #101010;
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(255, 255, 255, 0.66) inset;
+}
+
+.uploadCta:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.nodeModal {
+  position: absolute;
+  z-index: 35;
+  width: 386px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 20px 46px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+  overflow: hidden;
+}
+
+.nodeModalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: move;
+  user-select: none;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.nodeModalHeader strong {
+  color: #0c0c0c;
+  font-size: 0.84rem;
+}
+
+.nodeModalHeader span {
+  color: rgba(0, 0, 0, 0.52);
+  font-size: 0.68rem;
+}
+
+.nodeModalBody {
+  padding: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nodeGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.nodeGrid label,
+.nodeModalBody label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.71rem;
+  color: rgba(0, 0, 0, 0.76);
+}
+
+.nodeInput,
+.nodePrompt,
+.nodeGrid select,
+.nodeModalActions button {
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.84);
+  color: #111;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.nodeInput,
+.nodePrompt,
+.nodeGrid select {
+  width: 100%;
+  padding: 6px;
+}
+
+.nodePrompt {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.helperText {
+  display: block;
+  margin-top: 2px;
+  color: rgba(0, 0, 0, 0.52);
+  font-size: 0.62rem;
+}
+
+.connectionSummary {
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 6px;
+  font-size: 0.68rem;
+  color: rgba(0, 0, 0, 0.82);
+  line-height: 1.3;
+}
+
+.nodeModalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nodeModalActions button {
+  padding: 6px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .uploadCta {
+    right: 12px;
+    bottom: 104px;
+  }
+
+  .nodeModal {
+    width: calc(100vw - 28px);
+    left: 14px !important;
+    top: 70px !important;
+  }
+}

@@ -16,6 +16,9 @@ function asNodePayload(value: unknown): NodePayload {
     prompt: String(raw.prompt || ""),
     settings: (raw.settings as Record<string, unknown>) || {},
     outputType: (raw.outputType as NodePayload["outputType"]) || "image",
+    upstreamNodeIds: Array.isArray(raw.upstreamNodeIds)
+      ? raw.upstreamNodeIds.map((id) => String(id))
+      : [],
     upstreamAssetIds: Array.isArray(raw.upstreamAssetIds)
       ? raw.upstreamAssetIds.map((id) => String(id))
       : [],

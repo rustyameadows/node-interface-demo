@@ -8,6 +8,7 @@ export type NodePayload = {
   prompt: string;
   settings: Record<string, unknown>;
   outputType: OutputType;
+  upstreamNodeIds: string[];
   upstreamAssetIds: string[];
 };
 

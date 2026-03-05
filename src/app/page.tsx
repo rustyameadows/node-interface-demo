@@ -1,5 +1,5 @@
-import { StudioApp } from "@/components/studio-app";
+import { RootRouter } from "@/components/workspace/root-router";
 
 export default function Home() {
-  return <StudioApp />;
+  return <RootRouter />;
 }

@@ -1,0 +1,302 @@
+.page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  padding: 72px 14px 14px;
+  gap: 14px;
+}
+
+.filterRail,
+.content {
+  border: 1px solid rgba(120, 200, 255, 0.35);
+  background: rgba(15, 18, 28, 0.55);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow:
+    0 20px 54px rgba(0, 0, 0, 0.48),
+    0 0 0 1px rgba(160, 220, 255, 0.08) inset;
+  border-radius: 14px;
+}
+
+.filterRail {
+  width: 270px;
+  flex-shrink: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filterRail h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.filterRail label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #b8cee7;
+  font-size: 0.8rem;
+}
+
+.filterRail input,
+.filterRail select,
+.filterRail button,
+.modeButtons button,
+.ratingRow button,
+.tagEditor button,
+.tagEditor input {
+  border: 1px solid rgba(120, 200, 255, 0.24);
+  background: rgba(20, 24, 36, 0.42);
+  color: #edf6ff;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.filterRail input,
+.filterRail select,
+.tagEditor input {
+  width: 100%;
+  padding: 8px;
+}
+
+.checkboxRow {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contentHeader {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.modeButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.modeButtons button,
+.ratingRow button,
+.tagEditor button {
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.modeOn {
+  border-color: rgba(95, 214, 255, 0.82) !important;
+  box-shadow: 0 0 0 1px rgba(95, 214, 255, 0.58) inset, 0 0 18px rgba(83, 206, 255, 0.22);
+}
+
+.loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #abc6e2;
+}
+
+.assetGrid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-auto-flow: row;
+  grid-auto-rows: 180px;
+  align-content: start;
+}
+
+.assetCard {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(10, 12, 17, 0.92);
+  cursor: pointer;
+  outline: none;
+}
+
+.assetCard:focus-visible {
+  border-color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.72);
+}
+
+.assetSelected {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.82);
+}
+
+.assetPreviewImage,
+.assetPreviewFrame {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 200, 255, 0.2);
+  background: rgba(4, 6, 10, 0.72);
+}
+
+.assetPreviewFrame {
+  border: none;
+}
+
+.assetPreviewImageCompact,
+.assetPreviewFrameCompact {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border: none;
+  background: rgba(4, 6, 10, 0.72);
+}
+
+.videoPlaceholder {
+  height: 150px;
+  border-radius: 10px;
+  border: 1px dashed rgba(120, 200, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.videoPlaceholderCompact {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed rgba(255, 255, 255, 0.45);
+  background: rgba(5, 7, 12, 0.7);
+  color: #dce6f4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+
+.videoPlaceholder a {
+  color: #7ad6ff;
+}
+
+.videoPlaceholderCompact a {
+  color: #9fe3ff;
+}
+
+.assetMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #bfd1e1;
+}
+
+.assetHoverPanel {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.78);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.assetCard:hover .assetHoverPanel,
+.assetCard:focus-within .assetHoverPanel {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ratingRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.assetHoverPanel .ratingRow button,
+.assetHoverPanel .tagEditor button {
+  padding: 4px 6px;
+  font-size: 0.72rem;
+}
+
+.assetHoverPanel .tagEditor input {
+  padding: 5px 6px;
+  font-size: 0.72rem;
+}
+
+.starOn {
+  color: #ffd987 !important;
+}
+
+.starOff {
+  color: #6d82a0 !important;
+}
+
+.tagEditor {
+  display: flex;
+  gap: 6px;
+}
+
+.compareMode {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compareMode p {
+  margin: 0;
+  color: #b6cee7;
+  font-size: 0.86rem;
+}
+
+.compareTwo,
+.compareFour {
+  display: grid;
+  gap: 12px;
+}
+
+.compareTwo {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compareFour {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compareCard {
+  border: 1px solid rgba(120, 200, 255, 0.24);
+  border-radius: 12px;
+  background: rgba(20, 24, 36, 0.42);
+  padding: 8px;
+}
+
+@media (max-width: 1000px) {
+  .page {
+    flex-direction: column;
+  }
+
+  .filterRail {
+    width: 100%;
+  }
+}

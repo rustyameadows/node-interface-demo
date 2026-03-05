@@ -6,13 +6,25 @@ html,
 body {
   margin: 0;
   padding: 0;
+  width: 100%;
   min-height: 100%;
 }
 
 body {
+  --base-black-1: #060606;
+  --base-black-2: #060606;
+  --base-black-3: #060606;
+  --glass-bg-soft: rgba(255, 255, 255, 0.84);
+  --glass-bg-strong: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.84);
+  --glass-highlight: rgba(255, 255, 255, 0.95);
+  --text-primary: #f8f8f8;
+  --text-muted: rgba(255, 255, 255, 0.68);
+
   font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  background: #070b12;
-  color: #f6f9ff;
+  background: var(--base-black-1);
+  color: var(--text-primary);
+  line-height: 1.4;
 }
 
 button,
@@ -20,4 +32,8 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+a {
+  color: inherit;
 }
