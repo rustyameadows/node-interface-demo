@@ -3,22 +3,17 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
   cursor: grab;
-  background: #090f1a;
+  background:
+    radial-gradient(circle at 10% 8%, rgba(255, 255, 255, 0.065) 0 1.1px, transparent 1.2px) 0 0 / 42px 42px,
+    radial-gradient(circle at 70% 64%, rgba(255, 255, 255, 0.03) 0 1px, transparent 1.1px) 0 0 / 54px 54px,
+    #060606;
 }
 
 .canvasRoot:active {
   cursor: grabbing;
-}
-
-.grid {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgba(94, 155, 196, 0.11) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(94, 155, 196, 0.11) 1px, transparent 1px),
-    radial-gradient(circle at 80% 20%, rgba(64, 110, 160, 0.22), transparent 45%);
 }
 
 .world {
@@ -27,68 +22,221 @@
   transform-origin: top left;
 }
 
+.connectionLayer {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connection {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.54);
+  stroke-width: 1.9;
+}
+
+.connectionDraft {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.88);
+  stroke-width: 2.2;
+  stroke-dasharray: 7 5;
+}
+
 .node {
   position: absolute;
-  width: 220px;
-  border: 1px solid rgba(130, 188, 255, 0.45);
+  width: 212px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
   border-radius: 12px;
-  padding: 10px;
-  background: linear-gradient(180deg, rgba(20, 39, 61, 0.96), rgba(10, 19, 33, 0.94));
-  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.28);
-  color: #e6f4ff;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 14px 26px rgba(0, 0, 0, 0.26),
+    0 0 0 1px rgba(255, 255, 255, 0.65) inset;
+  color: #101010;
   text-align: left;
   cursor: move;
   user-select: none;
 }
 
+.nodeWithImage {
+  padding: 4px;
+}
+
 .nodeSelected {
-  border-color: #5ad4ff;
-  box-shadow: 0 0 0 1px #5ad4ff inset, 0 12px 22px rgba(0, 0, 0, 0.28);
+  border-color: rgba(255, 255, 255, 1);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.96),
+    0 18px 34px rgba(0, 0, 0, 0.34);
 }
 
 .nodeTitle {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 0.85rem;
+  gap: 6px;
+  font-size: 0.76rem;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
+}
+
+.nodeTitle span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nodeBody {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  color: #9ec7ed;
-  font-size: 0.74rem;
+  gap: 6px;
+  color: rgba(0, 0, 0, 0.66);
+  font-size: 0.67rem;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.node:hover .nodeBody,
+.node:focus-within .nodeBody,
+.nodeSelected .nodeBody {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .statusBubble {
   border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 0.68rem;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #d8ecff;
-  background: rgba(255, 255, 255, 0.07);
+  padding: 2px 7px;
+  font-size: 0.62rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  color: rgba(0, 0, 0, 0.82);
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.overlayTop,
-.overlayBottom {
-  position: absolute;
-  left: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.sourcePreviewFrame {
+  margin-top: 0;
   border-radius: 10px;
-  background: rgba(11, 20, 34, 0.82);
-  color: #d2e8ff;
-  padding: 7px 10px;
-  font-size: 0.78rem;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.72);
+  height: 146px;
+  position: relative;
+}
+
+.sourcePreviewImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.imageNodeOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 6px;
+  background:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.68), rgba(0, 0, 0, 0) 34%),
+    linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 34%);
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 120ms ease;
 }
 
-.overlayTop {
-  top: 14px;
+.nodeWithImage .nodeBody {
+  color: rgba(255, 255, 255, 0.96);
+  opacity: 0;
+  transform: translateY(2px);
 }
 
-.overlayBottom {
-  bottom: 14px;
+.nodeWithImage .nodeTitle {
+  margin-bottom: 0;
+  color: rgba(255, 255, 255, 0.98);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.nodeWithImage .statusBubble {
+  border-color: rgba(255, 255, 255, 0.44);
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(0, 0, 0, 0.38);
+}
+
+.nodeWithImage:hover .imageNodeOverlay,
+.nodeWithImage:focus-within .imageNodeOverlay,
+.nodeWithImage.nodeSelected .imageNodeOverlay {
+  opacity: 1;
+}
+
+.nodeWithImage:hover .nodeTitle,
+.nodeWithImage:focus-within .nodeTitle,
+.nodeWithImage.nodeSelected .nodeTitle {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.nodeWithImage:hover .nodeBody,
+.nodeWithImage:focus-within .nodeBody,
+.nodeWithImage.nodeSelected .nodeBody {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.sourceBadge {
+  margin-top: 5px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(0, 0, 0, 0.74);
+  font-size: 0.61rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 7px;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.node:hover .sourceBadge,
+.node:focus-within .sourceBadge,
+.nodeSelected .sourceBadge {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.port {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.58);
+  background: rgba(255, 255, 255, 0.9);
+  cursor: crosshair;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.92);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.node:hover .port,
+.node:focus-within .port,
+.nodeConnected .port {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.port:hover {
+  background: #fff;
+  transform: translateY(-50%) scale(1.08) !important;
+}
+
+.inputPort {
+  left: -8px;
+}
+
+.outputPort {
+  right: -8px;
 }
