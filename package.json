@@ -1,0 +1,38 @@
+{
+  "name": "node-interface-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup:dev": "bash scripts/local-db-url.sh >/dev/null && prisma generate && prisma db push --skip-generate",
+    "dev": "bash scripts/dev-web.sh",
+    "worker": "bash scripts/dev-worker.sh",
+    "dev:all": "concurrently -k -n web,worker \"npm run dev\" \"JOB_EXECUTION_MODE=queue npm run worker\"",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.0",
+    "next": "16.1.6",
+    "pg": "^8.20.0",
+    "pg-boss": "^12.14.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "prisma": "^6.16.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}

@@ -1,24 +1,24 @@
 # UX Spec: Canvas and Asset Viewer (V1)
 
 ## Workspace Shell
-- Left rail: project sidebar (active projects, archived projects, create button).
-- Main area: infinite canvas for the currently open project.
-- Right panel: node settings / run controls / job inspector.
-- Bottom drawer or side panel: asset viewer for active project outputs.
+- Full-viewport canvas is the primary workspace.
+- Floating nested project nav (active + archived + create).
+- Floating node settings modal (draggable), containing provider/model/type/output/prompt and run controls.
+- Floating asset dock for active project outputs.
+- Floating compact jobs panel.
 
 ## Project-Aware Behavior
 - Exactly one project open at any time.
 - Opening another project swaps the entire workspace context.
 - Workspace restore includes canvas viewport, node selection, and viewer layout/filter state.
 
-## Infinite Canvas (TLDraw)
+## Infinite Canvas (Custom Engine)
 - Canvas supports pan/zoom and large graph layouts.
 - Node operations:
   - add node
-  - connect/disconnect edges
-  - duplicate node
+  - drag/move node cards
   - delete node
-  - run selected node or graph path
+  - run selected node or run all
 - Node state indicators:
   - idle
   - queued

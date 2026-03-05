@@ -64,3 +64,4 @@ Build a local-first Next.js app for node-based media generation and post-process
 - Interfaces/types reflected in docs.
 - Decision recorded when architecture or product direction changed.
 - No stale contradictions across docs.
+- UI-impacting changes verified in-browser via Chrome MCP before handoff.

@@ -44,3 +44,18 @@
 - Decision: generated binaries are stored on disk behind a storage abstraction.
 - Rationale: simple local-first behavior with easy migration path later.
 - Consequence: object storage adapter can be introduced without rewriting business logic.
+
+## 2026-03-05 - Provider Calls Stubbed for Milestone Implementation
+- Decision: keep OpenAI/Gemini/Topaz adapters concrete at the contract level but return deterministic stub outputs until keys are available.
+- Rationale: unblock full local implementation through Milestone 5 without waiting on API credentials.
+- Consequence: provider wiring, queueing, and asset pipelines are testable now; swapping to real API calls later only changes adapter internals.
+
+## 2026-03-05 - Inline Execution Default with Queue Mode Option
+- Decision: default `JOB_EXECUTION_MODE=inline` while preserving a `queue` mode that uses `pg-boss` worker processes.
+- Rationale: simplest local run path for new contributors while keeping production-compatible queue architecture.
+- Consequence: single-process local demos work out of the box; queue mode can be enabled without code changes.
+
+## 2026-03-05 - Replace TLDraw with Custom Canvas UI
+- Decision: remove TLDraw and use a custom React infinite canvas so layout and interaction design are fully controlled in-app.
+- Rationale: product direction requires tighter visual control and a full-viewport workspace with floating overlays.
+- Consequence: canvas behavior is now owned in local components (pan/zoom/node drag/drop/modal), with project-persisted viewport and node coordinates.

@@ -1,6 +1,6 @@
 # Roadmap
 
-## Milestone 0: Documentation Baseline (Current)
+## Milestone 0: Documentation Baseline (Completed)
 - Deliverables:
   - `AGENTS.md`
   - Full docs set in `docs/`
@@ -9,7 +9,7 @@
   - Architecture and scope are implementation-ready.
   - No unresolved contradictions across docs.
 
-## Milestone 1: Local App Foundation
+## Milestone 1: Local App Foundation (Completed)
 - Deliverables:
   - Next.js + TypeScript app scaffold.
   - Local Postgres + Prisma setup.
@@ -19,7 +19,7 @@
   - App boots locally with DB connectivity.
   - Worker can receive and complete a mock job.
 
-## Milestone 2: Project and Workspace Core
+## Milestone 2: Project and Workspace Core (Completed)
 - Deliverables:
   - Project CRUD (create/rename/archive/unarchive/delete).
   - Sidebar switching and one-open-project behavior.
@@ -28,16 +28,16 @@
   - Multiple projects can be managed and switched reliably.
   - Project isolation validated for canvas/jobs/assets.
 
-## Milestone 3: Canvas and Execution Pipeline
+## Milestone 3: Canvas and Execution Pipeline (Completed)
 - Deliverables:
-  - TLDraw-based infinite canvas.
-  - Node/edge persistence per project.
+  - Custom infinite canvas engine (pan/zoom/drag/drop).
+  - Node persistence per project.
   - Job lifecycle wiring (`queued` -> `running` -> terminal states).
 - Exit criteria:
   - User can construct and run simple node flows.
   - Job state updates appear in UI.
 
-## Milestone 4: Provider Integrations (Concrete)
+## Milestone 4: Provider Integrations (Concrete) (Completed with Stub Execution)
 - Deliverables:
   - OpenAI adapter.
   - Gemini 3.1 Flash adapter with UI display name `Nano Banana 2`.
@@ -47,7 +47,7 @@
   - Same node contract works across all three providers.
   - Normalized outputs stored as assets.
 
-## Milestone 5: Asset Viewer Differentiator
+## Milestone 5: Asset Viewer Differentiator (Completed)
 - Deliverables:
   - Grid mode with density controls.
   - 2-up and 4-up comparison modes.

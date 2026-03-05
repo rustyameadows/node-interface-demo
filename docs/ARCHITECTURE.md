@@ -5,7 +5,7 @@
 - Database: local Postgres.
 - ORM: Prisma.
 - Queue: `pg-boss` on the same Postgres instance.
-- Canvas: TLDraw.
+- Canvas: custom React infinite canvas engine (pan/zoom + draggable nodes).
 - Asset binary storage: local filesystem through a storage adapter.
 
 ## Runtime Topology
