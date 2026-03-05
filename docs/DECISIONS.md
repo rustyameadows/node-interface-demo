@@ -64,3 +64,8 @@
 - Decision: make `openai / gpt-image-1.5` the only live provider execution path for now, and keep Gemini/Topaz plus other OpenAI models visible as `Coming soon`.
 - Rationale: ship a real end-to-end prompt-note + image-reference generation loop without pretending the rest of the provider catalog is production-ready.
 - Consequence: UI gating now comes from provider-model capability metadata, job payloads snapshot resolved prompt/image inputs, and generated OpenAI outputs are materialized back onto the canvas as image nodes.
+
+## 2026-03-05 - OpenAI Uses Explicit Generate/Edit Modes and Persistent Output Nodes
+- Decision: give `gpt-image-1.5` an explicit node mode of `generate` or `edit`, and move runtime job-state visibility onto an immediately-created generated output node.
+- Rationale: prompt-only image generation must work without fake image-input requirements, and users need a persistent canvas object they can watch transition from queued/running into final output or failure.
+- Consequence: queued job payloads now snapshot `executionMode`, model run gating branches on mode, generated nodes retain `sourceJobId` plus inline source-call inspection, and model nodes no longer show fallback `idle` badges.

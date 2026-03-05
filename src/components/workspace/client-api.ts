@@ -4,6 +4,7 @@ import type {
   CanvasDocument,
   Job,
   JobDebugResponse,
+  OpenAIImageMode,
   Project,
   ProviderModel,
   ProviderId,
@@ -131,6 +132,7 @@ export async function createJob(projectId: string, node: WorkflowNode) {
       prompt: node.prompt,
       settings: node.settings,
       outputType: node.outputType,
+      executionMode: node.settings.openaiImageMode === "generate" ? "generate" : "edit",
       promptSourceNodeId: node.promptSourceNodeId,
       upstreamNodeIds: node.upstreamNodeIds,
       upstreamAssetIds: node.upstreamAssetIds,
@@ -150,6 +152,7 @@ export async function createJobFromRequest(
       prompt: string;
       settings: Record<string, unknown>;
       outputType: WorkflowNode["outputType"];
+      executionMode: OpenAIImageMode;
       promptSourceNodeId?: string | null;
       upstreamNodeIds: string[];
       upstreamAssetIds: string[];
@@ -163,7 +166,8 @@ export async function createJobFromRequest(
     body: JSON.stringify(requestPayload),
   });
 
-  await readJson<{ job: unknown }>(res);
+  const data = await readJson<{ job: Job }>(res);
+  return data.job;
 }
 
 export async function getAssets(projectId: string, filters: AssetFilterState) {
@@ -247,6 +251,14 @@ export function normalizeNode(raw: Record<string, unknown>, index: number): Work
       : raw.sourceAssetId
         ? "asset-source"
         : "model";
+  const normalizedSettings =
+    raw.settings && typeof raw.settings === "object"
+      ? ({ ...(raw.settings as Record<string, unknown>) } as Record<string, unknown>)
+      : {};
+
+  if (inferredKind === "model") {
+    normalizedSettings.openaiImageMode = normalizedSettings.openaiImageMode === "generate" ? "generate" : "edit";
+  }
 
   return {
     id: String(raw.id || uid()),
@@ -258,12 +270,23 @@ export function normalizeNode(raw: Record<string, unknown>, index: number): Work
       ((raw.nodeType as WorkflowNode["nodeType"]) || (inferredKind === "text-note" ? "text-note" : "image-gen")),
     outputType: (raw.outputType as WorkflowNode["outputType"]) || "image",
     prompt: String(raw.prompt || ""),
-    settings: (raw.settings as Record<string, unknown>) || {},
     sourceAssetId: raw.sourceAssetId ? String(raw.sourceAssetId) : null,
     sourceAssetMimeType: raw.sourceAssetMimeType ? String(raw.sourceAssetMimeType) : null,
+    sourceJobId: raw.sourceJobId
+      ? String(raw.sourceJobId)
+      : raw.settings &&
+          typeof raw.settings === "object" &&
+          (raw.settings as Record<string, unknown>).sourceJobId
+        ? String((raw.settings as Record<string, unknown>).sourceJobId)
+        : null,
+    processingState:
+      raw.processingState === "queued" || raw.processingState === "running" || raw.processingState === "failed"
+        ? raw.processingState
+        : null,
     promptSourceNodeId: raw.promptSourceNodeId ? String(raw.promptSourceNodeId) : null,
     upstreamNodeIds,
     upstreamAssetIds,
+    settings: normalizedSettings,
     x: typeof raw.x === "number" ? raw.x : 120 + (index % 4) * 260,
     y: typeof raw.y === "number" ? raw.y : 120 + Math.floor(index / 4) * 160,
   };

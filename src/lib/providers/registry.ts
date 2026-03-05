@@ -1,5 +1,6 @@
 import OpenAI, { toFile } from "openai";
 import type {
+  OpenAIImageMode,
   ImageInputFidelity,
   ImageOutputFormat,
   ImageQuality,
@@ -45,7 +46,7 @@ function buildCapabilities({
   runnable,
   availability,
   requiresApiKeyEnv = null,
-  executionMode,
+  executionModes = [],
   acceptedInputMimeTypes = [],
   maxInputImages = 0,
   defaults = {},
@@ -56,7 +57,7 @@ function buildCapabilities({
   runnable: boolean;
   availability: ProviderModelCapabilities["availability"];
   requiresApiKeyEnv?: string | null;
-  executionMode: ProviderModelCapabilities["executionMode"];
+  executionModes?: ProviderModelCapabilities["executionModes"];
   acceptedInputMimeTypes?: string[];
   maxInputImages?: number;
   defaults?: ProviderModelCapabilities["defaults"];
@@ -69,7 +70,7 @@ function buildCapabilities({
     availability,
     requiresApiKeyEnv,
     apiKeyConfigured: requiresApiKeyEnv ? apiKeyConfigured(requiresApiKeyEnv) : true,
-    executionMode,
+    executionModes,
     acceptedInputMimeTypes,
     maxInputImages,
     defaults,
@@ -84,7 +85,7 @@ function buildProviderCatalog(): Record<ProviderId, ProviderModelDescriptor[]> {
     runnable: apiKeyConfigured("OPENAI_API_KEY"),
     availability: "ready",
     requiresApiKeyEnv: "OPENAI_API_KEY",
-    executionMode: "image-edit",
+    executionModes: ["generate", "edit"],
     acceptedInputMimeTypes: OPENAI_IMAGE_INPUT_MIME_TYPES,
     maxInputImages: OPENAI_MAX_INPUT_IMAGES,
     defaults: {
@@ -101,7 +102,7 @@ function buildProviderCatalog(): Record<ProviderId, ProviderModelDescriptor[]> {
     video: false,
     runnable: false,
     availability: "coming_soon",
-    executionMode: "coming-soon",
+    executionModes: [],
   });
 
   const comingSoonTextCapabilities = buildCapabilities({
@@ -110,7 +111,7 @@ function buildProviderCatalog(): Record<ProviderId, ProviderModelDescriptor[]> {
     video: false,
     runnable: false,
     availability: "coming_soon",
-    executionMode: "coming-soon",
+    executionModes: [],
   });
 
   const comingSoonMixedCapabilities = buildCapabilities({
@@ -119,7 +120,7 @@ function buildProviderCatalog(): Record<ProviderId, ProviderModelDescriptor[]> {
     video: true,
     runnable: false,
     availability: "coming_soon",
-    executionMode: "coming-soon",
+    executionModes: [],
   });
 
   return {
@@ -239,7 +240,11 @@ function readInputFidelity(value: unknown, fallback: ImageInputFidelity): ImageI
   return value === "high" || value === "low" ? value : fallback;
 }
 
-async function submitOpenAiImageEdit(input: ProviderJobInput): Promise<NormalizedOutput[]> {
+function readExecutionMode(value: unknown): OpenAIImageMode {
+  return value === "generate" ? "generate" : "edit";
+}
+
+async function submitOpenAiImage(input: ProviderJobInput): Promise<NormalizedOutput[]> {
   const model = getProviderModelDescriptor(input.providerId, input.modelId);
   if (!model) {
     throw createProviderError("INVALID_INPUT", `Unknown provider model: ${input.providerId}/${input.modelId}`);
@@ -261,12 +266,20 @@ async function submitOpenAiImageEdit(input: ProviderJobInput): Promise<Normalize
     throw createProviderError("INVALID_INPUT", "Connect a prompt note or enter a prompt before running.");
   }
 
+  const executionMode = readExecutionMode(input.payload.executionMode);
   const acceptedMimeTypes = new Set(model.capabilities.acceptedInputMimeTypes);
   const inputAssets = input.inputAssets
     .filter((asset) => asset.type === "image" && acceptedMimeTypes.has(asset.mimeType))
     .slice(0, model.capabilities.maxInputImages);
 
-  if (inputAssets.length === 0) {
+  if (executionMode === "generate" && inputAssets.length > 0) {
+    throw createProviderError(
+      "INVALID_INPUT",
+      "Disconnect image inputs or switch the node to Edit mode before running."
+    );
+  }
+
+  if (executionMode === "edit" && inputAssets.length === 0) {
     throw createProviderError(
       "INVALID_INPUT",
       "Connect at least one PNG, JPEG, or WebP image input before running."
@@ -282,25 +295,33 @@ async function submitOpenAiImageEdit(input: ProviderJobInput): Promise<Normalize
     defaults.inputFidelity || OPENAI_DEFAULT_INPUT_FIDELITY
   );
 
-  const imageFiles = await Promise.all(
-    inputAssets.map((asset, index) =>
-      toFile(asset.buffer, `input-${index + 1}.${extensionForMimeType(asset.mimeType)}`, {
-        type: asset.mimeType,
-      })
-    )
-  );
-
   const client = getOpenAIClient();
-  const response = await client.images.edit({
-    model: input.modelId,
-    image: imageFiles,
-    prompt,
-    size,
-    quality,
-    output_format: outputFormat,
-    input_fidelity: inputFidelity,
-    n: 1,
-  });
+  const response =
+    executionMode === "generate"
+      ? await client.images.generate({
+          model: input.modelId,
+          prompt,
+          size,
+          quality,
+          output_format: outputFormat,
+          n: 1,
+        })
+      : await client.images.edit({
+          model: input.modelId,
+          image: await Promise.all(
+            inputAssets.map((asset, index) =>
+              toFile(asset.buffer, `input-${index + 1}.${extensionForMimeType(asset.mimeType)}`, {
+                type: asset.mimeType,
+              })
+            )
+          ),
+          prompt,
+          size,
+          quality,
+          output_format: outputFormat,
+          input_fidelity: inputFidelity,
+          n: 1,
+        });
 
   const firstImage = response.data?.[0];
   if (!firstImage?.b64_json) {
@@ -321,10 +342,11 @@ async function submitOpenAiImageEdit(input: ProviderJobInput): Promise<Normalize
         modelId: input.modelId,
         width: dimensions.width,
         height: dimensions.height,
+        executionMode,
         quality,
         size,
         outputFormat,
-        inputFidelity,
+        inputFidelity: executionMode === "edit" ? inputFidelity : null,
         inputAssetIds: inputAssets.map((asset) => asset.assetId),
         revisedPrompt: firstImage.revised_prompt || null,
       },
@@ -359,7 +381,7 @@ const adapters: Record<ProviderId, ProviderAdapter> = {
       nodeKinds: ["image-gen"],
     }),
     getModels: () => buildProviderCatalog().openai,
-    submitJob: submitOpenAiImageEdit,
+    submitJob: submitOpenAiImage,
   },
   "google-gemini": buildComingSoonAdapter("google-gemini"),
   topaz: buildComingSoonAdapter("topaz"),

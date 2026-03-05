@@ -15,6 +15,7 @@ import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import {
   createJobFromRequest,
   getCanvasWorkspace,
+  getJobDebug,
   getJobs,
   getProviders,
   normalizeNode,
@@ -28,6 +29,8 @@ import {
   type Asset,
   type CanvasDocument,
   type Job,
+  type JobDebugResponse,
+  type OpenAIImageMode,
   type ProviderModel,
   type WorkflowNode,
 } from "@/components/workspace/types";
@@ -59,7 +62,14 @@ function capabilityEnabled(value: unknown) {
 }
 
 function getModelDefaultSettings(model: ProviderModel | undefined) {
-  return model?.capabilities?.defaults ? { ...model.capabilities.defaults } : {};
+  const settings = model?.capabilities?.defaults ? { ...model.capabilities.defaults } : {};
+  if (model?.providerId === "openai" && model.modelId === "gpt-image-1.5") {
+    return {
+      ...settings,
+      openaiImageMode: settings.openaiImageMode === "generate" ? "generate" : "edit",
+    };
+  }
+  return settings;
 }
 
 function getModelSupportedOutputs(model: ProviderModel | undefined): WorkflowNode["outputType"][] {
@@ -145,7 +155,7 @@ function fallbackProviderModel(providers: ProviderModel[]): ProviderModel {
       availability: "ready" as const,
       requiresApiKeyEnv: "OPENAI_API_KEY",
       apiKeyConfigured: false,
-      executionMode: "image-edit" as const,
+      executionModes: ["generate", "edit"],
       acceptedInputMimeTypes: ["image/png", "image/jpeg", "image/webp"],
       maxInputImages: 5,
       defaults: {
@@ -153,6 +163,7 @@ function fallbackProviderModel(providers: ProviderModel[]): ProviderModel {
         quality: "medium",
         size: "1024x1024",
         inputFidelity: "high",
+        openaiImageMode: "edit",
       },
     },
   };
@@ -164,6 +175,31 @@ function normalizeAssetNodeLabel(fileName: string, index: number) {
     return `Asset ${index + 1}`;
   }
   return trimmed.length <= 28 ? trimmed : `${trimmed.slice(0, 26)}...`;
+}
+
+function getNodeSourceJobId(node: WorkflowNode | null | undefined) {
+  if (!node) {
+    return null;
+  }
+  if (node.sourceJobId) {
+    return node.sourceJobId;
+  }
+  return typeof node.settings.sourceJobId === "string" ? node.settings.sourceJobId : null;
+}
+
+function isGeneratedAssetNode(node: WorkflowNode | null | undefined) {
+  if (!node || node.kind !== "asset-source") {
+    return false;
+  }
+  return node.settings.source === "generated" || Boolean(getNodeSourceJobId(node));
+}
+
+function readOpenAiImageMode(node: WorkflowNode | null | undefined): OpenAIImageMode {
+  return node?.settings.openaiImageMode === "generate" ? "generate" : "edit";
+}
+
+function getGeneratedNodeLabel(existingCount: number) {
+  return `Output ${existingCount + 1}`;
 }
 
 function isInputLikeElement(target: EventTarget | null) {
@@ -189,6 +225,10 @@ export function CanvasView({ projectId }: Props) {
   const [modalPosition, setModalPosition] = useState(defaultNodeModalPosition);
   const [isUploading, setIsUploading] = useState(false);
   const [isApiPreviewOpen, setIsApiPreviewOpen] = useState(false);
+  const [isSourceCallOpen, setIsSourceCallOpen] = useState(false);
+  const [sourceCallDebug, setSourceCallDebug] = useState<JobDebugResponse | null>(null);
+  const [sourceCallLoading, setSourceCallLoading] = useState(false);
+  const [sourceCallError, setSourceCallError] = useState<string | null>(null);
   const [insertMenu, setInsertMenu] = useState<CanvasInsertMenuState | null>(null);
 
   const saveTimer = useRef<NodeJS.Timeout | null>(null);
@@ -242,6 +282,7 @@ export function CanvasView({ projectId }: Props) {
   const selectedNodeIsAssetSource = selectedNode?.kind === "asset-source";
   const selectedNodeIsTextNote = selectedNode?.kind === "text-note";
   const selectedNodeIsModel = selectedNode?.kind === "model";
+  const selectedNodeIsGeneratedAsset = isGeneratedAssetNode(selectedNode);
 
   const selectedModel = useMemo(() => {
     if (!selectedNode || !selectedNodeIsModel) {
@@ -262,17 +303,14 @@ export function CanvasView({ projectId }: Props) {
     return getModelSupportedOutputs(selectedModel);
   }, [selectedModel, selectedNode, selectedNodeIsAssetSource, selectedNodeIsTextNote]);
 
-  const latestNodeStates = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const job of jobs) {
-      const nodeId = job.nodeRunPayload?.nodeId;
-      if (!nodeId || map[nodeId]) {
-        continue;
-      }
-      map[nodeId] = job.state;
+  const selectedNodeSourceJobId = useMemo(() => getNodeSourceJobId(selectedNode), [selectedNode]);
+
+  const selectedGeneratedSourceJob = useMemo(() => {
+    if (!selectedNodeSourceJobId) {
+      return null;
     }
-    return map;
-  }, [jobs]);
+    return jobs.find((job) => job.id === selectedNodeSourceJobId) || null;
+  }, [jobs, selectedNodeSourceJobId]);
 
   const latestImageAssetByNodeId = useMemo(() => {
     const map = new Map<string, { assetId: string; mimeType: string | null; createdAtMs: number }>();
@@ -477,6 +515,7 @@ export function CanvasView({ projectId }: Props) {
       const prompt = node.promptSourceNodeId ? (promptSourceNode?.prompt || "") : node.prompt;
       const maxInputImages = model?.capabilities.maxInputImages || 0;
       const acceptedMimeTypes = new Set(model?.capabilities.acceptedInputMimeTypes || []);
+      const executionMode = readOpenAiImageMode(node);
 
       const inputImageAssetIds = node.upstreamNodeIds
         .map((nodeId) => nodesById[nodeId] || null)
@@ -504,6 +543,7 @@ export function CanvasView({ projectId }: Props) {
             ...node.settings,
           },
           outputType: node.outputType,
+          executionMode,
           promptSourceNodeId: node.promptSourceNodeId,
           upstreamNodeIds: node.upstreamNodeIds,
           upstreamAssetIds: inputImageAssetIds,
@@ -512,26 +552,43 @@ export function CanvasView({ projectId }: Props) {
       } as const;
 
       let disabledReason: string | null = null;
+      let readyMessage: string | null = null;
       if (!model) {
         disabledReason = "Selected model is unavailable.";
       } else if (model.capabilities.availability !== "ready") {
         disabledReason = `${model.displayName} is coming soon.`;
       } else if (model.capabilities.requiresApiKeyEnv && !model.capabilities.apiKeyConfigured) {
         disabledReason = `Set ${model.capabilities.requiresApiKeyEnv} in .env.local and restart npm run dev.`;
+      } else if (!model.capabilities.executionModes.includes(executionMode)) {
+        disabledReason = `${model.displayName} does not support ${executionMode} mode.`;
       } else if (!requestPayload.nodePayload.prompt) {
         disabledReason = node.promptSourceNodeId
           ? "Connected text note is empty."
           : "Connect a prompt note or enter a prompt.";
-      } else if (requestPayload.nodePayload.inputImageAssetIds.length === 0) {
+      } else if (executionMode === "generate" && requestPayload.nodePayload.inputImageAssetIds.length > 0) {
+        disabledReason = "Generate mode is prompt-only. Disconnect image inputs or switch to Edit.";
+      } else if (executionMode === "edit" && requestPayload.nodePayload.inputImageAssetIds.length === 0) {
         disabledReason =
           acceptedMimeTypes.size > 0
             ? "Connect a PNG, JPEG, or WebP image input."
             : "Connect an image input.";
+      } else {
+        readyMessage =
+          executionMode === "generate"
+            ? "Ready to generate from prompt only."
+            : `Ready to edit with ${requestPayload.nodePayload.inputImageAssetIds.length} image input${
+                requestPayload.nodePayload.inputImageAssetIds.length === 1 ? "" : "s"
+              }.`;
       }
 
       return {
         requestPayload,
         disabledReason,
+        readyMessage,
+        endpoint:
+          executionMode === "generate"
+            ? "client.images.generate"
+            : "client.images.edit",
       };
     },
     [nodesById, providers, resolveNodeImageAsset]
@@ -570,7 +627,43 @@ export function CanvasView({ projectId }: Props) {
 
   useEffect(() => {
     setIsApiPreviewOpen(false);
+    setIsSourceCallOpen(false);
+    setSourceCallDebug(null);
+    setSourceCallError(null);
   }, [primarySelectedNodeId]);
+
+  useEffect(() => {
+    if (!isSourceCallOpen || !selectedNodeSourceJobId) {
+      return;
+    }
+
+    let canceled = false;
+    setSourceCallLoading(true);
+    getJobDebug(projectId, selectedNodeSourceJobId)
+      .then((response) => {
+        if (canceled) {
+          return;
+        }
+        setSourceCallDebug(response);
+        setSourceCallError(null);
+      })
+      .catch((error) => {
+        if (canceled) {
+          return;
+        }
+        setSourceCallDebug(null);
+        setSourceCallError(error instanceof Error ? error.message : "Failed to load source call.");
+      })
+      .finally(() => {
+        if (!canceled) {
+          setSourceCallLoading(false);
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [isSourceCallOpen, projectId, selectedNodeSourceJobId]);
 
   useEffect(() => {
     if (jobs.length === 0) {
@@ -578,74 +671,66 @@ export function CanvasView({ projectId }: Props) {
     }
 
     setCanvasDoc((prev) => {
-      const existingAssetNodeIds = new Set(
-        prev.workflow.nodes
-          .filter((node) => node.kind === "asset-source" && node.sourceAssetId)
-          .map((node) => node.sourceAssetId as string)
-      );
+      const jobById = new Map(jobs.map((job) => [job.id, job]));
+      let didChange = false;
 
-      let nextNodes = prev.workflow.nodes;
+      const updatedNodes = prev.workflow.nodes.map((node) => {
+        if (!isGeneratedAssetNode(node)) {
+          return node;
+        }
 
-      for (const modelNode of prev.workflow.nodes.filter((node) => node.kind === "model")) {
-        const generatedAssets = jobs
-          .filter((job) => job.state === "succeeded" && job.nodeRunPayload?.nodeId === modelNode.id)
-          .flatMap((job) =>
-            (job.assets || [])
-              .filter((asset) => asset.type === "image")
-              .map((asset, assetIndex) => ({ job, asset, assetIndex }))
-          )
-          .sort((left, right) => {
-            const timeDelta = new Date(left.asset.createdAt).getTime() - new Date(right.asset.createdAt).getTime();
-            if (timeDelta !== 0) {
-              return timeDelta;
-            }
-            return left.asset.id.localeCompare(right.asset.id);
-          });
+        const sourceJobId = getNodeSourceJobId(node);
+        if (!sourceJobId) {
+          return node;
+        }
 
-        generatedAssets.forEach(({ job, asset }, index) => {
-          if (existingAssetNodeIds.has(asset.id)) {
-            return;
-          }
+        const job = jobById.get(sourceJobId);
+        if (!job) {
+          return node;
+        }
 
-          if (nextNodes === prev.workflow.nodes) {
-            nextNodes = [...prev.workflow.nodes];
-          }
+        const latestImageAsset = [...(job.assets || [])]
+          .filter((asset) => asset.type === "image")
+          .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
+          .at(-1);
 
-          existingAssetNodeIds.add(asset.id);
-          nextNodes.push({
-            id: uid(),
-            label: `Generated ${index + 1}`,
-            kind: "asset-source",
-            providerId: modelNode.providerId,
-            modelId: modelNode.modelId,
-            nodeType: "transform",
-            outputType: "image",
-            prompt: "",
-            settings: {
-              source: "generated",
-              sourceJobId: job.id,
-              sourceModelNodeId: modelNode.id,
-              outputIndex: index,
-            },
-            sourceAssetId: asset.id,
-            sourceAssetMimeType: asset.mimeType,
-            promptSourceNodeId: null,
-            upstreamNodeIds: [modelNode.id],
-            upstreamAssetIds: [`node:${modelNode.id}`],
-            x: Math.round(modelNode.x + generatedNodeBaseOffsetX + Math.floor(index / 4) * generatedNodeColumnOffsetX),
-            y: Math.round(modelNode.y + (index % 4) * generatedNodeOffsetY),
-          });
-        });
-      }
+        const nextProcessingState =
+          job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null;
+        const nextNode: WorkflowNode = {
+          ...node,
+          providerId: job.providerId as WorkflowNode["providerId"],
+          modelId: job.modelId,
+          sourceJobId,
+          processingState: nextProcessingState,
+          sourceAssetId: latestImageAsset?.id || node.sourceAssetId,
+          sourceAssetMimeType: latestImageAsset?.mimeType || node.sourceAssetMimeType,
+          settings: {
+            ...node.settings,
+            source: "generated",
+            sourceJobId,
+            sourceModelNodeId:
+              typeof node.settings.sourceModelNodeId === "string"
+                ? node.settings.sourceModelNodeId
+                : job.nodeRunPayload?.nodeId || null,
+          },
+        };
 
-      if (nextNodes === prev.workflow.nodes) {
+        if (JSON.stringify(nextNode) === JSON.stringify(node)) {
+          return node;
+        }
+
+        didChange = true;
+        return nextNode;
+      });
+
+      if (!didChange) {
         return prev;
       }
 
       const nextDoc: CanvasDocument = {
         ...prev,
         workflow: {
-          nodes: nextNodes,
+          nodes: updatedNodes,
         },
       };
 
@@ -747,6 +832,8 @@ export function CanvasView({ projectId }: Props) {
           settings: getModelDefaultSettings(defaultProvider),
           sourceAssetId: null,
           sourceAssetMimeType: null,
+          sourceJobId: null,
+          processingState: null,
           promptSourceNodeId: null,
           upstreamNodeIds: [],
           upstreamAssetIds: [],
@@ -788,6 +875,8 @@ export function CanvasView({ projectId }: Props) {
           settings: { source: "text-note" },
           sourceAssetId: null,
           sourceAssetMimeType: null,
+          sourceJobId: null,
+          processingState: null,
           promptSourceNodeId: null,
           upstreamNodeIds: [],
           upstreamAssetIds: [],
@@ -864,6 +953,8 @@ export function CanvasView({ projectId }: Props) {
               settings: { source: "upload" },
               sourceAssetId: asset.id,
               sourceAssetMimeType: asset.mimeType,
+              sourceJobId: null,
+              processingState: null,
               promptSourceNodeId: null,
               upstreamNodeIds: [],
               upstreamAssetIds: [],
@@ -1035,6 +1126,66 @@ export function CanvasView({ projectId }: Props) {
     [queueCanvasSave]
   );
 
+  const insertGeneratedOutputPlaceholder = useCallback(
+    (job: Job, sourceNodeId: string) => {
+      setCanvasDoc((prev) => {
+        if (prev.workflow.nodes.some((node) => getNodeSourceJobId(node) === job.id)) {
+          return prev;
+        }
+
+        const modelNode = prev.workflow.nodes.find((node) => node.id === sourceNodeId && node.kind === "model");
+        if (!modelNode) {
+          return prev;
+        }
+
+        const generatedCount = prev.workflow.nodes.filter(
+          (node) =>
+            isGeneratedAssetNode(node) &&
+            (node.settings.sourceModelNodeId === sourceNodeId || node.upstreamNodeIds.includes(sourceNodeId))
+        ).length;
+
+        const outputNode: WorkflowNode = {
+          id: uid(),
+          label: getGeneratedNodeLabel(generatedCount),
+          kind: "asset-source",
+          providerId: modelNode.providerId,
+          modelId: modelNode.modelId,
+          nodeType: "transform",
+          outputType: "image",
+          prompt: "",
+          settings: {
+            source: "generated",
+            sourceJobId: job.id,
+            sourceModelNodeId: sourceNodeId,
+            outputIndex: generatedCount,
+          },
+          sourceAssetId: null,
+          sourceAssetMimeType: null,
+          sourceJobId: job.id,
+          processingState: "queued",
+          promptSourceNodeId: null,
+          upstreamNodeIds: [sourceNodeId],
+          upstreamAssetIds: [`node:${sourceNodeId}`],
+          x: Math.round(
+            modelNode.x + generatedNodeBaseOffsetX + Math.floor(generatedCount / 4) * generatedNodeColumnOffsetX
+          ),
+          y: Math.round(modelNode.y + (generatedCount % 4) * generatedNodeOffsetY),
+        };
+
+        const nextDoc: CanvasDocument = {
+          ...prev,
+          workflow: {
+            nodes: [...prev.workflow.nodes, outputNode],
+          },
+        };
+
+        queueCanvasSave(nextDoc);
+        return nextDoc;
+      });
+    },
+    [queueCanvasSave]
+  );
+
   const runNode = useCallback(
     async (node: WorkflowNode) => {
       if (node.kind !== "model" || node.sourceAssetId) {
@@ -1046,10 +1197,12 @@ export function CanvasView({ projectId }: Props) {
         return;
       }
 
-      await createJobFromRequest(projectId, requestPreview.requestPayload);
+      const job = await createJobFromRequest(projectId, requestPreview.requestPayload);
+      setJobs((prev) => [job, ...prev.filter((existingJob) => existingJob.id !== job.id)]);
+      insertGeneratedOutputPlaceholder(job, node.id);
       await fetchJobs();
     },
-    [buildNodeRunRequest, fetchJobs, projectId]
+    [buildNodeRunRequest, fetchJobs, insertGeneratedOutputPlaceholder, projectId]
   );
 
   const startDraggingModal = useCallback(
@@ -1097,8 +1250,16 @@ export function CanvasView({ projectId }: Props) {
   );
 
   const apiCallPreviewPayload = useMemo(() => {
-    return selectedNodeRunPreview?.requestPayload || null;
+    if (!selectedNodeRunPreview) {
+      return null;
+    }
+
+    return {
+      endpoint: selectedNodeRunPreview.endpoint,
+      request: selectedNodeRunPreview.requestPayload,
+    };
   }, [selectedNodeRunPreview]);
+  const sourceCallLatestAttempt = sourceCallDebug?.attempts[0] || null;
 
   return (
     <WorkspaceShell projectId={projectId} view="canvas" jobs={jobs} showQueuePill>
@@ -1128,7 +1289,6 @@ export function CanvasView({ projectId }: Props) {
             onViewportChange={updateViewport}
             onNodePositionChange={(nodeId, nodePosition) => updateNode(nodeId, nodePosition)}
             onConnectNodes={connectNodes}
-            latestNodeStates={latestNodeStates}
           />
         )}
 
@@ -1236,10 +1396,28 @@ export function CanvasView({ projectId }: Props) {
               />
 
               {selectedNodeIsAssetSource ? (
-                <label>
-                  Uploaded Source Asset
-                  <div className={styles.connectionSummary}>{selectedNode.sourceAssetId}</div>
-                </label>
+                <>
+                  <label>
+                    {selectedNodeIsGeneratedAsset ? "Generated Output Node" : "Uploaded Source Asset"}
+                    <div className={styles.connectionSummary}>
+                      {selectedNode.sourceAssetId || "Waiting for generated image output."}
+                    </div>
+                  </label>
+
+                  {selectedNodeIsGeneratedAsset ? (
+                    <label>
+                      Generation Origin
+                      <div className={styles.connectionSummary}>
+                        <strong>{selectedNode.providerId}</strong>
+                        {` / ${selectedNode.modelId} · `}
+                        {selectedGeneratedSourceJob?.state ||
+                          selectedNode.processingState ||
+                          (selectedNode.sourceAssetId ? "succeeded" : "pending")}
+                        {selectedNodeSourceJobId ? ` · ${selectedNodeSourceJobId}` : ""}
+                      </div>
+                    </label>
+                  ) : null}
+                </>
               ) : selectedNodeIsTextNote ? (
                 <>
                   <label>
@@ -1366,6 +1544,29 @@ export function CanvasView({ projectId }: Props) {
                         : "Output options based on selected model."}
                     </small>
                   </label>
+
+                  {selectedModel?.providerId === "openai" && selectedModel.modelId === "gpt-image-1.5" ? (
+                    <label>
+                      Mode
+                      <select
+                        value={readOpenAiImageMode(selectedNode)}
+                        onChange={(event) =>
+                          updateNode(selectedNode.id, {
+                            settings: {
+                              ...selectedNode.settings,
+                              openaiImageMode: event.target.value === "generate" ? "generate" : "edit",
+                            },
+                          })
+                        }
+                      >
+                        <option value="generate">Generate</option>
+                        <option value="edit">Edit</option>
+                      </select>
+                      <small className={styles.helperText}>
+                        Generate uses prompt only. Edit requires one or more connected image inputs.
+                      </small>
+                    </label>
+                  ) : null}
                 </div>
               )}
 
@@ -1411,7 +1612,7 @@ export function CanvasView({ projectId }: Props) {
 
               {selectedNodeIsModel && selectedNodeRunPreview ? (
                 <label>
-                  Run State
+                  Run Readiness
                   <div
                     className={`${styles.connectionSummary} ${
                       selectedNodeRunPreview.disabledReason ? styles.connectionSummaryWarning : styles.connectionSummaryReady
@@ -1419,9 +1620,7 @@ export function CanvasView({ projectId }: Props) {
                   >
                     {selectedNodeRunPreview.disabledReason
                       ? selectedNodeRunPreview.disabledReason
-                      : `Ready with ${selectedNodeRunPreview.requestPayload.nodePayload.inputImageAssetIds.length} image input${
-                          selectedNodeRunPreview.requestPayload.nodePayload.inputImageAssetIds.length === 1 ? "" : "s"
-                        }.`}
+                      : `${selectedNodeRunPreview.readyMessage} via ${selectedNodeRunPreview.endpoint}.`}
                   </div>
                 </label>
               ) : null}
@@ -1443,6 +1642,54 @@ export function CanvasView({ projectId }: Props) {
                 </div>
               ) : null}
 
+              {selectedNodeIsGeneratedAsset && selectedNodeSourceJobId ? (
+                <div className={styles.debuggerBlock}>
+                  <button
+                    type="button"
+                    className={styles.debuggerToggle}
+                    onClick={() => setIsSourceCallOpen((value) => !value)}
+                  >
+                    {isSourceCallOpen ? "Hide Source Call" : "Show Source Call"}
+                  </button>
+                  {isSourceCallOpen ? (
+                    sourceCallLoading ? (
+                      <div className={styles.connectionSummary}>Loading source call…</div>
+                    ) : sourceCallError ? (
+                      <div className={`${styles.connectionSummary} ${styles.connectionSummaryWarning}`}>
+                        {sourceCallError}
+                      </div>
+                    ) : sourceCallDebug ? (
+                      <>
+                        <div className={styles.connectionSummary}>
+                          {`Job ${sourceCallDebug.job.id} · ${sourceCallDebug.job.state} · ${sourceCallDebug.attempts.length} attempt${
+                            sourceCallDebug.attempts.length === 1 ? "" : "s"
+                          }`}
+                        </div>
+                        <pre className={styles.debuggerPreview}>
+                          {JSON.stringify(
+                            {
+                              request: sourceCallLatestAttempt?.providerRequest || null,
+                              response: sourceCallLatestAttempt?.providerResponse || null,
+                              error:
+                                sourceCallLatestAttempt?.errorCode || sourceCallLatestAttempt?.errorMessage
+                                  ? {
+                                      code: sourceCallLatestAttempt?.errorCode || "ERROR",
+                                      message: sourceCallLatestAttempt?.errorMessage || "Unknown error",
+                                    }
+                                  : null,
+                            },
+                            null,
+                            2
+                          )}
+                        </pre>
+                      </>
+                    ) : (
+                      <div className={styles.connectionSummary}>No source call details found.</div>
+                    )
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className={styles.nodeModalActions}>
                 {selectedNodeIsModel ? (
                   <button
@@ -1452,7 +1699,7 @@ export function CanvasView({ projectId }: Props) {
                     Run Node
                   </button>
                 ) : null}
-                {selectedNodeIsTextNote ? null : (
+                {selectedNodeIsModel ? (
                   <button
                     onClick={() =>
                       updateNode(selectedNode.id, {
@@ -1464,7 +1711,12 @@ export function CanvasView({ projectId }: Props) {
                   >
                     Clear Inputs
                   </button>
-                )}
+                ) : null}
+                {selectedNodeIsGeneratedAsset && selectedNodeSourceJobId ? (
+                  <button onClick={() => router.push(`/projects/${projectId}/queue?inspectJobId=${selectedNodeSourceJobId}`)}>
+                    View Source Call
+                  </button>
+                ) : null}
                 <button onClick={() => removeNodes([selectedNode.id])}>Delete Node</button>
                 <button onClick={() => setSelectedNodeIds([])}>Close</button>
               </div>

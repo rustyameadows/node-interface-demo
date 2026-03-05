@@ -28,6 +28,8 @@ type CanvasNode = {
   prompt: string;
   sourceAssetId: string | null;
   sourceAssetMimeType: string | null;
+  sourceJobId: string | null;
+  processingState: "queued" | "running" | "failed" | null;
   promptSourceNodeId: string | null;
   upstreamNodeIds: string[];
   x: number;
@@ -47,7 +49,6 @@ type Props = {
   onViewportChange: (viewport: CanvasViewport) => void;
   onNodePositionChange: (nodeId: string, position: { x: number; y: number }) => void;
   onConnectNodes: (sourceNodeId: string, targetNodeId: string) => void;
-  latestNodeStates: Record<string, string>;
 };
 
 type InteractionState =
@@ -131,7 +132,6 @@ export function InfiniteCanvas({
   onViewportChange,
   onNodePositionChange,
   onConnectNodes,
-  latestNodeStates,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const nodeElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -216,7 +216,7 @@ export function InfiniteCanvas({
 
       return prev;
     });
-  }, [latestNodeStates, nodes, selectedNodeIds]);
+  }, [nodes, selectedNodeIds]);
 
   const edges = useMemo(() => {
     return nodes.flatMap((targetNode) => {
@@ -743,6 +743,7 @@ export function InfiniteCanvas({
           const hasNonImageSource = Boolean(node.sourceAssetId && node.outputType !== "image");
           const isSelected = selectedNodeIds.includes(node.id);
           const showInputPort = !isTextNote;
+          const showProcessingState = Boolean(node.processingState);
 
           return (
             <div
@@ -823,7 +824,11 @@ export function InfiniteCanvas({
                   <div className={styles.imageNodeOverlay}>
                     <div className={styles.nodeTitle}>
                       <span>{node.label}</span>
-                      <span className={styles.statusBubble}>{latestNodeStates[node.id] || "idle"}</span>
+                      {showProcessingState ? (
+                        <span className={styles.statusBubble} data-state={node.processingState || undefined}>
+                          {node.processingState}
+                        </span>
+                      ) : null}
                     </div>
                     <div className={styles.nodeBody}>
                       <span>{node.providerId}</span>
@@ -860,7 +865,11 @@ export function InfiniteCanvas({
                 <>
                   <div className={styles.nodeTitle}>
                     <span>{node.label}</span>
-                    <span className={styles.statusBubble}>{latestNodeStates[node.id] || "idle"}</span>
+                    {showProcessingState ? (
+                      <span className={styles.statusBubble} data-state={node.processingState || undefined}>
+                        {node.processingState}
+                      </span>
+                    ) : null}
                   </div>
                   <div className={styles.nodeBody}>
                     <span>{node.providerId}</span>

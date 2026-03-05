@@ -6,6 +6,7 @@ import { getProviderModel } from "@/lib/providers/registry";
 import { badRequest, internalError } from "@/lib/server/http";
 import { dispatchJob } from "@/lib/server/job-dispatch";
 import { syncProviderModels } from "@/lib/server/provider-models";
+import type { OpenAIImageMode } from "@/lib/types";
 
 const createJobSchema = z.object({
   providerId: z.enum(["openai", "google-gemini", "topaz"]),
@@ -16,6 +17,7 @@ const createJobSchema = z.object({
     prompt: z.string().default(""),
     settings: z.record(z.string(), z.unknown()).default({}),
     outputType: z.enum(["text", "image", "video"]),
+    executionMode: z.enum(["generate", "edit"]).default("edit"),
     promptSourceNodeId: z.string().nullable().optional(),
     upstreamNodeIds: z.array(z.string()).default([]),
     upstreamAssetIds: z.array(z.string()).default([]),
@@ -41,11 +43,20 @@ function getSubmissionError(input: z.infer<typeof createJobSchema>) {
     return `${model.displayName} is not runnable right now.`;
   }
 
+  const executionMode = input.nodePayload.executionMode as OpenAIImageMode;
+  if (!model.capabilities.executionModes.includes(executionMode)) {
+    return `${model.displayName} does not support ${executionMode} mode.`;
+  }
+
   if (!input.nodePayload.prompt.trim()) {
     return "Connect a prompt note or enter a prompt before running.";
   }
 
-  if (input.nodePayload.inputImageAssetIds.length === 0) {
+  if (executionMode === "generate" && input.nodePayload.inputImageAssetIds.length > 0) {
+    return "Disconnect image inputs or switch the node to Edit mode before running.";
+  }
+
+  if (executionMode === "edit" && input.nodePayload.inputImageAssetIds.length === 0) {
     return "Connect at least one supported image input before running.";
   }
 

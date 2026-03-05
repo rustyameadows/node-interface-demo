@@ -16,6 +16,7 @@ function asNodePayload(value: unknown): NodePayload {
     prompt: String(raw.prompt || ""),
     settings: (raw.settings as Record<string, unknown>) || {},
     outputType: (raw.outputType as NodePayload["outputType"]) || "image",
+    executionMode: raw.executionMode === "generate" ? "generate" : "edit",
     promptSourceNodeId: raw.promptSourceNodeId ? String(raw.promptSourceNodeId) : null,
     upstreamNodeIds: Array.isArray(raw.upstreamNodeIds)
       ? raw.upstreamNodeIds.map((id) => String(id))

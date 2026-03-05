@@ -39,12 +39,10 @@
   - wheel zoom remains cursor-centered
   - trackpad pinch stays inside canvas and must not trigger browser page zoom
 - Node state indicators:
-  - idle
   - queued
   - running
-  - success
   - failed
-  - canceled
+  - completed outputs clear the badge and simply show the final asset
 
 ## Node Configuration UX
 - Node settings live in the draggable canvas modal and only appear for a single selected node.
@@ -53,6 +51,7 @@
 - Node modal includes:
   - provider selector
   - model selector
+  - OpenAI image mode selector (`Generate` or `Edit`) for `gpt-image-1.5`
   - output type
   - prompt
   - run-state helper that explains why the node is or is not runnable
@@ -68,16 +67,21 @@
   - `openai / gpt-image-1.5` is the only runnable model
   - connected text note overrides the model prompt field during execution
   - model prompt field remains as fallback when no text note is connected
-  - at least one supported image input must be connected to run
+  - `Generate` mode requires a resolved prompt and zero image inputs
+  - `Edit` mode requires a resolved prompt and at least one supported image input
   - all placeholder models/providers remain selectable but show `Coming soon` and disable Run
 
 ## Job Feedback UX
 - Queue summary remains visible from canvas via the bottom-right queue pill.
 - Run action creates a project job entry with state and timestamps in the queue view.
+- Run also inserts a generated output placeholder node immediately to the right of the model node.
+- Job-state badge lives on that output node, not on the model node.
+- Completed generated outputs clear their badge; failed outputs stay on canvas with failed state.
 - Failed jobs show normalized error class and short detail.
 - Users can retry failed jobs or cancel running jobs when supported.
 - Queue rows support source-call inspection for provider request/response debugging.
-- Successful OpenAI image jobs auto-materialize as new generated image nodes on the canvas, connected from the source model node.
+- Generated output nodes expose inline `Show Source Call` inspection plus a Queue deep link.
+- Successful OpenAI image jobs update the existing placeholder output node in place rather than creating a second node on completion.
 
 ## Asset Viewer Modes
 - `grid`: regular row/column thumbnail grid using contain-fit previews without cropping.

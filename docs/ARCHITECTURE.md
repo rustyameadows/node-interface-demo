@@ -29,12 +29,17 @@
 2. Canvas client resolves the actual run snapshot before enqueue:
   - connected text note content becomes `nodePayload.prompt` when present
   - model prompt field is fallback when no text note is connected
+  - OpenAI image mode is snapshotted as `nodePayload.executionMode`
   - connected image inputs resolve to concrete asset IDs and are capped to the model limit
 3. API validates the resolved payload and creates a `job` record.
-4. Inline executor or `pg-boss` worker loads referenced asset bytes from local storage and invokes the provider adapter.
-5. Adapter returns normalized outputs, including binary image buffers for generated images.
-6. Storage adapter writes binaries to disk; DB stores metadata + storage ref.
-7. UI polls job updates and materializes any newly generated image asset as a new asset-source node on the canvas exactly once.
+4. Canvas client inserts a generated output placeholder node immediately after job creation and stores the originating `jobId` on that node.
+5. Inline executor or `pg-boss` worker loads referenced asset bytes from local storage and invokes the provider adapter.
+6. Adapter returns normalized outputs, including binary image buffers for generated images.
+7. Storage adapter writes binaries to disk; DB stores metadata + storage ref.
+8. UI polls job updates and reconciles the existing output node by `jobId`:
+  - `queued` -> `running`
+  - `running/queued` -> `failed` keeps the placeholder
+  - `succeeded` attaches the final image asset and clears the processing badge
 
 ## Project Switching Behavior
 1. Only one project workspace can be open at once.
@@ -51,7 +56,7 @@
 - UI display names are configurable and may differ from IDs.
 - Gemini 3.1 Flash is displayed as `Nano Banana 2`.
 - Current runtime status:
-  - `openai / gpt-image-1.5`: real execution path for image edit/reference flow
+  - `openai / gpt-image-1.5`: real execution path for prompt-only generation and image edit/reference flow
   - other OpenAI models, Gemini, and Topaz: visible in model pickers as `Coming soon`, not runnable
 
 ## Configuration (Expected Env Vars)

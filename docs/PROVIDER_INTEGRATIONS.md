@@ -6,7 +6,7 @@
 - Normalize binary outputs so generated assets land in local storage and the asset viewer without provider-specific UI code.
 
 ## Current Provider Status
-- `openai / gpt-image-1.5`: real image-edit/reference execution path.
+- `openai / gpt-image-1.5`: real image generation path with both prompt-only (`generate`) and image-edit/reference (`edit`) modes.
 - `openai / gpt-image-1`, `openai / gpt-image-1-mini`, `openai / gpt-4.1-mini`: visible in UI, `Coming soon`, not runnable.
 - `google-gemini / gemini-3.1-flash` (`Nano Banana 2`): visible in UI, `Coming soon`, not runnable.
 - `topaz / topaz-studio-main`: visible in UI, `Coming soon`, not runnable.
@@ -24,6 +24,7 @@ export type NodePayload = {
   prompt: string; // resolved prompt snapshot
   settings: Record<string, unknown>;
   outputType: "text" | "image" | "video";
+  executionMode: "generate" | "edit";
   promptSourceNodeId?: string | null;
   upstreamNodeIds: string[];
   upstreamAssetIds: string[];
@@ -66,7 +67,7 @@ Provider-model records sync into `provider_models.capabilities` with the runtime
 - `availability` (`ready | coming_soon`)
 - `requiresApiKeyEnv`
 - `apiKeyConfigured`
-- `executionMode`
+- `executionModes`
 - `acceptedInputMimeTypes`
 - `maxInputImages`
 - `defaults`
@@ -80,28 +81,36 @@ This keeps the browser truthful about whether a node can run without inventing c
 - Prompt comes from:
   - connected text note when present
   - otherwise the model node prompt textarea
-- Image references come from connected image-producing nodes
+- Execution mode comes from the model node setting:
+  - `generate`: prompt only
+  - `edit`: prompt plus connected image inputs
+- Image references come from connected image-producing nodes when the node is in `edit` mode
 - Server resolves those references into concrete asset bytes before invoking OpenAI
-- Successful output is stored as a project asset and later materialized as a generated image node on the canvas
+- Run inserts a generated output placeholder node on the canvas immediately after job creation
+- Successful output is stored as a project asset and attached to that same output node
+- Failed output nodes remain on canvas and retain source-call inspection
 
 ### Request Shape
-- API path: OpenAI Images API image-edit flow
+- API path:
+  - `generate`: `client.images.generate(...)`
+  - `edit`: `client.images.edit(...)`
 - Model: `gpt-image-1.5`
 - Defaults used in this pass:
   - `output_format = png`
   - `quality = medium`
   - `size = 1024x1024`
-  - `input_fidelity = high`
+  - `input_fidelity = high` (`edit` only)
 - Input constraints enforced in app:
-  - only image inputs
-  - only `image/png`, `image/jpeg`, `image/webp`
-  - first 5 connected images in stable connection order
+  - `generate`: zero image inputs
+  - `edit`: only image inputs, first 5 connected images in stable connection order
+  - accepted types for `edit`: `image/png`, `image/jpeg`, `image/webp`
 
 ### Run Gating
 OpenAI run is disabled when:
 - `OPENAI_API_KEY` is missing
 - resolved prompt is empty
-- no supported image inputs are connected
+- node mode is `generate` and image inputs are still connected
+- node mode is `edit` and no supported image inputs are connected
 
 ### Output Normalization
 - Generated image bytes are decoded from OpenAI base64 output into `Buffer`
@@ -111,6 +120,10 @@ OpenAI run is disabled when:
   - `width`
   - `height`
   - provider/model metadata in `job_attempts.provider_response`
+- Generated output nodes also retain:
+  - originating `jobId`
+  - transient processing state (`queued | running | failed | null`)
+  - source-call inspection via the same `job_attempts` payloads shown in Queue
 
 ## Placeholder Providers
 Gemini and Topaz currently use the same registry and dropdown surfaces but reject execution with `COMING_SOON`. This preserves the provider-agnostic node contract without pretending those backends are live.

@@ -158,6 +158,24 @@
   background: rgba(255, 255, 255, 0.72);
 }
 
+.statusBubble[data-state="queued"] {
+  border-color: rgba(138, 146, 255, 0.52);
+  background: rgba(234, 236, 255, 0.96);
+  color: rgba(32, 40, 126, 0.94);
+}
+
+.statusBubble[data-state="running"] {
+  border-color: rgba(40, 182, 126, 0.54);
+  background: rgba(227, 255, 245, 0.96);
+  color: rgba(7, 92, 61, 0.95);
+}
+
+.statusBubble[data-state="failed"] {
+  border-color: rgba(255, 104, 104, 0.54);
+  background: rgba(255, 235, 235, 0.96);
+  color: rgba(131, 19, 19, 0.96);
+}
+
 .sourcePreviewFrame {
   margin-top: 0;
   border-radius: var(--canvas-corner-radius);
