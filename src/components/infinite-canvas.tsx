@@ -21,10 +21,14 @@ type CanvasViewport = {
 type CanvasNode = {
   id: string;
   label: string;
+  kind: "model" | "asset-source" | "text-note";
   providerId: "openai" | "google-gemini" | "topaz";
+  nodeType: "text-gen" | "image-gen" | "video-gen" | "transform" | "text-note";
   outputType: "image" | "video" | "text";
+  prompt: string;
   sourceAssetId: string | null;
   sourceAssetMimeType: string | null;
+  promptSourceNodeId: string | null;
   upstreamNodeIds: string[];
   x: number;
   y: number;
@@ -37,7 +41,8 @@ type Props = {
   onSelectSingleNode: (nodeId: string | null) => void;
   onToggleNodeSelection: (nodeId: string) => void;
   onMarqueeSelectNodes: (nodeIds: string[]) => void;
-  onDropNode: (position: { x: number; y: number }) => void;
+  onUpdateTextNote: (nodeId: string, prompt: string) => void;
+  onRequestInsertMenu: (position: { x: number; y: number; clientX: number; clientY: number }) => void;
   onDropFiles: (files: File[], position: { x: number; y: number }) => void;
   onViewportChange: (viewport: CanvasViewport) => void;
   onNodePositionChange: (nodeId: string, position: { x: number; y: number }) => void;
@@ -120,7 +125,8 @@ export function InfiniteCanvas({
   onSelectSingleNode,
   onToggleNodeSelection,
   onMarqueeSelectNodes,
-  onDropNode,
+  onUpdateTextNote,
+  onRequestInsertMenu,
   onDropFiles,
   onViewportChange,
   onNodePositionChange,
@@ -214,7 +220,12 @@ export function InfiniteCanvas({
 
   const edges = useMemo(() => {
     return nodes.flatMap((targetNode) => {
-      return targetNode.upstreamNodeIds
+      const sourceNodeIds = [
+        ...targetNode.upstreamNodeIds,
+        ...(targetNode.promptSourceNodeId ? [targetNode.promptSourceNodeId] : []),
+      ];
+
+      return sourceNodeIds
         .map((sourceNodeId) => {
           const sourceNode = nodesById[sourceNodeId];
           if (!sourceNode) {
@@ -651,9 +662,13 @@ export function InfiniteCanvas({
   const onDoubleClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       const point = toWorldPoint(event.clientX, event.clientY);
-      onDropNode(point);
+      onRequestInsertMenu({
+        ...point,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
     },
-    [onDropNode, toWorldPoint]
+    [onRequestInsertMenu, toWorldPoint]
   );
 
   const draftPath = useMemo(() => {
@@ -675,6 +690,10 @@ export function InfiniteCanvas({
     for (const node of nodes) {
       if (node.upstreamNodeIds.length > 0) {
         ids.add(node.id);
+      }
+      if (node.promptSourceNodeId) {
+        ids.add(node.id);
+        ids.add(node.promptSourceNodeId);
       }
       for (const upstreamNodeId of node.upstreamNodeIds) {
         ids.add(upstreamNodeId);
@@ -719,8 +738,11 @@ export function InfiniteCanvas({
         </svg>
 
         {nodes.map((node) => {
+          const isTextNote = node.kind === "text-note";
           const hasImageSource = Boolean(node.sourceAssetId && node.outputType === "image");
           const hasNonImageSource = Boolean(node.sourceAssetId && node.outputType !== "image");
+          const isSelected = selectedNodeIds.includes(node.id);
+          const showInputPort = !isTextNote;
 
           return (
             <div
@@ -730,9 +752,12 @@ export function InfiniteCanvas({
               }}
               role="button"
               tabIndex={0}
-              className={`${styles.node} ${selectedNodeIds.includes(node.id) ? styles.nodeSelected : ""} ${hasImageSource ? styles.nodeWithImage : ""} ${connectedNodeIds.has(node.id) ? styles.nodeConnected : ""}`}
+              className={`${styles.node} ${isSelected ? styles.nodeSelected : ""} ${hasImageSource ? styles.nodeWithImage : ""} ${isTextNote ? styles.nodeTextNote : ""} ${connectedNodeIds.has(node.id) ? styles.nodeConnected : ""}`}
               style={{ left: `${node.x}px`, top: `${node.y}px` }}
               onClick={(event) => {
+                event.stopPropagation();
+              }}
+              onDoubleClick={(event) => {
                 event.stopPropagation();
               }}
               onPointerDown={(event) => onNodePointerDown(node, event)}
@@ -743,13 +768,15 @@ export function InfiniteCanvas({
                 }
               }}
             >
-              <button
-                type="button"
-                className={`${styles.port} ${styles.inputPort}`}
-                onPointerUp={(event) => onInputPortPointerUp(node.id, event)}
-                onClick={(event) => event.stopPropagation()}
-                aria-label={`Connect input to ${node.label}`}
-              />
+              {showInputPort ? (
+                <button
+                  type="button"
+                  className={`${styles.port} ${styles.inputPort}`}
+                  onPointerUp={(event) => onInputPortPointerUp(node.id, event)}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={`Connect input to ${node.label}`}
+                />
+              ) : null}
 
               <button
                 type="button"
@@ -804,6 +831,31 @@ export function InfiniteCanvas({
                     </div>
                   </div>
                 </div>
+              ) : isTextNote ? (
+                <>
+                  <div className={styles.nodeTitle}>
+                    <span>{node.label}</span>
+                    <span className={styles.statusBubble}>note</span>
+                  </div>
+                  {isSelected ? (
+                    <textarea
+                      className={styles.textNoteEditor}
+                      value={node.prompt}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onChange={(event) => onUpdateTextNote(node.id, event.target.value)}
+                      placeholder="Write prompt notes here"
+                    />
+                  ) : (
+                    <div className={styles.textNotePreview}>
+                      {node.prompt.trim() || "Empty note"}
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   <div className={styles.nodeTitle}>

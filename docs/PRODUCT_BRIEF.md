@@ -19,10 +19,11 @@ Ship a local-first, node-based generation app where one user can run multiple mo
 
 ## Core User Flows
 1. Create Project -> Open Project -> Start Empty Canvas.
-2. Add nodes -> Connect nodes -> Configure settings -> Run graph.
-3. Watch job progress -> Inspect outputs -> Save as assets.
-4. Open asset viewer -> switch Grid / 2-up / 4-up -> rate/flag/filter.
-5. Switch to another project -> reopen later with preserved canvas and viewer state.
+2. Double-click canvas -> choose insert action -> add model nodes, text notes, or uploaded assets.
+3. Connect nodes -> Configure settings -> Run graph.
+4. Watch job progress -> Inspect outputs -> Save as assets.
+5. Open asset viewer -> switch Grid / 2-up / 4-up -> rate/flag/filter.
+6. Switch to another project -> reopen later with preserved canvas and viewer state.
 
 ## Differentiators
 - Provider-agnostic node system with equal treatment of OpenAI, Gemini (`Nano Banana 2` display name), and Topaz.
@@ -34,6 +35,7 @@ Ship a local-first, node-based generation app where one user can run multiple mo
 - Project lifecycle: create, rename, archive, unarchive, delete.
 - One open project workspace at a time.
 - One canvas per project.
+- Canvas prompt-note nodes for writing reusable prompt text and connecting it visually to model nodes.
 - Async job execution with durable queueing.
 - Local filesystem-backed asset binaries and Postgres metadata.
 - Asset viewer modes: grid, 2-up, 4-up.

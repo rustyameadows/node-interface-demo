@@ -22,10 +22,12 @@
 ## Infinite Canvas (Custom Engine)
 - Canvas supports pan/zoom and large graph layouts.
 - Node operations:
-  - add node by double-clicking the canvas
+  - open insert picker by double-clicking empty canvas
+  - add model node
+  - add text note
+  - upload assets from insert picker or upload CTA
   - drag/move node cards
   - connect node output port to another node input port
-  - upload assets by CTA or file drop onto canvas
   - delete the active node selection with `Delete`/`Backspace`
   - run from node modal
 - Selection behavior:
@@ -46,6 +48,7 @@
 
 ## Node Configuration UX
 - Node settings live in the draggable canvas modal and only appear for a single selected node.
+- Text notes are first-class canvas nodes with inline editing plus modal editing.
 - Node modal includes:
   - provider selector
   - model selector
@@ -55,6 +58,7 @@
   - run controls
   - API call preview for the normalized request payload
 - Input/output ports display supported media types.
+- Text notes expose output-only prompt-source connections into model nodes.
 - Image-backed nodes preserve original asset aspect ratio inside the canvas preview.
 - Canvas-selected nodes use a high-visibility citrus selection border/glow.
 - Canvas node chrome uses squared corners rather than rounded cards/pills.

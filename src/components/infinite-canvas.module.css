@@ -68,6 +68,14 @@
   padding: 4px;
 }
 
+.nodeTextNote {
+  width: 244px;
+  min-height: 152px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .nodeSelected {
   border-color: var(--canvas-selection-color);
   box-shadow:
@@ -101,6 +109,36 @@
   opacity: 0;
   transform: translateY(2px);
   transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.textNotePreview,
+.textNoteEditor {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: rgba(245, 247, 240, 0.94);
+  color: #111;
+  font: inherit;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  padding: 8px 9px;
+  white-space: pre-wrap;
+}
+
+.textNotePreview {
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0.76);
+}
+
+.textNoteEditor {
+  resize: vertical;
+  cursor: text;
+}
+
+.nodeTextNote .nodeTitle,
+.nodeTextNote .nodeBody {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .node:hover .nodeBody,

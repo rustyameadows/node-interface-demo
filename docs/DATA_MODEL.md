@@ -39,6 +39,25 @@ type Canvas = {
   updatedAt: Date;
 };
 
+type WorkflowNode = {
+  id: string;
+  kind: "model" | "asset-source" | "text-note";
+  label: string;
+  providerId: string;
+  modelId: string;
+  nodeType: "text-gen" | "image-gen" | "video-gen" | "transform" | "text-note";
+  outputType: AssetType;
+  prompt: string; // model prompt or text-note body
+  settings: Record<string, unknown>;
+  sourceAssetId: string | null;
+  sourceAssetMimeType: string | null;
+  promptSourceNodeId: string | null; // model nodes only in v1
+  upstreamNodeIds: string[];
+  upstreamAssetIds: string[];
+  x: number;
+  y: number;
+};
+
 type Job = {
   id: string;
   projectId: string;
@@ -201,6 +220,7 @@ type Asset = {
 ## Integrity Rules
 - Assets must always reference a valid project.
 - Canvas nodes/edges cannot cross project boundaries.
+- Text-note prompt-source links live inside canvas JSON and are project-scoped like other node relationships.
 - Deleting a project cascades to canvas, jobs, assets, and tags.
 - Archived projects remain readable but are excluded from default active list.
 

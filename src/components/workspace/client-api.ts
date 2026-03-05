@@ -218,17 +218,27 @@ export function normalizeNode(raw: Record<string, unknown>, index: number): Work
     ? raw.upstreamNodeIds.map((item) => String(item))
     : upstreamNodeIdsFromAssets;
 
+  const inferredKind =
+    raw.kind === "model" || raw.kind === "asset-source" || raw.kind === "text-note"
+      ? (raw.kind as WorkflowNode["kind"])
+      : raw.sourceAssetId
+        ? "asset-source"
+        : "model";
+
   return {
     id: String(raw.id || uid()),
     label: String(raw.label || `Node ${index + 1}`),
     providerId: (raw.providerId as ProviderId) || "google-gemini",
     modelId: String(raw.modelId || "gemini-3.1-flash"),
-    nodeType: (raw.nodeType as WorkflowNode["nodeType"]) || "image-gen",
+    kind: inferredKind,
+    nodeType:
+      ((raw.nodeType as WorkflowNode["nodeType"]) || (inferredKind === "text-note" ? "text-note" : "image-gen")),
     outputType: (raw.outputType as WorkflowNode["outputType"]) || "image",
     prompt: String(raw.prompt || ""),
     settings: (raw.settings as Record<string, unknown>) || {},
     sourceAssetId: raw.sourceAssetId ? String(raw.sourceAssetId) : null,
     sourceAssetMimeType: raw.sourceAssetMimeType ? String(raw.sourceAssetMimeType) : null,
+    promptSourceNodeId: raw.promptSourceNodeId ? String(raw.promptSourceNodeId) : null,
     upstreamNodeIds,
     upstreamAssetIds,
     x: typeof raw.x === "number" ? raw.x : 120 + (index % 4) * 260,

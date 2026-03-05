@@ -38,12 +38,14 @@ export type WorkflowNode = {
   label: string;
   providerId: ProviderId;
   modelId: string;
-  nodeType: "text-gen" | "image-gen" | "video-gen" | "transform";
+  kind: "model" | "asset-source" | "text-note";
+  nodeType: "text-gen" | "image-gen" | "video-gen" | "transform" | "text-note";
   outputType: "text" | "image" | "video";
   prompt: string;
   settings: Record<string, unknown>;
   sourceAssetId: string | null;
   sourceAssetMimeType: string | null;
+  promptSourceNodeId: string | null;
   upstreamNodeIds: string[];
   upstreamAssetIds: string[];
   x: number;
