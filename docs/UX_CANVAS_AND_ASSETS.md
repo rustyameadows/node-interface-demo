@@ -68,8 +68,8 @@
 ## Node Configuration UX
 - Node settings live in the fixed bottom settings bar.
 - The bottom bar appears only when one or more nodes are selected:
-  - single selection => compact node controls plus single-image view action when applicable
-  - multi-selection => compare-focused actions only
+  - single selection => compact node controls plus single-image view/download actions when applicable
+  - multi-selection => compare-focused actions plus batch download when selected nodes resolve to image assets
 - Single-selection bars do not show a node-type chip; multi-selection uses a generic `N selected` chip.
 - Text notes are first-class canvas nodes with inline editing plus bottom-bar tray editing.
 - List nodes are first-class canvas nodes with on-canvas table preview plus bottom-bar table editing.

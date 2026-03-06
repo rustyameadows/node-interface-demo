@@ -98,8 +98,21 @@ type AssetPickerState = {
 };
 
 type PreviewFrameSummary = NonNullable<Job["latestPreviewFrames"]>[number];
-type CanvasSemanticType = WorkflowNode["outputType"];
-const canvasSemanticTypeOrder: CanvasSemanticType[] = ["text", "image", "video"];
+type CanvasSemanticType = WorkflowNode["outputType"] | "function" | "citrus";
+const canvasSemanticTypeOrder: CanvasSemanticType[] = ["text", "image", "video", "function", "citrus"];
+
+function getNodeSemanticOutputType(node: WorkflowNode): CanvasSemanticType {
+  if (node.kind === "text-template") {
+    return "function";
+  }
+  if (
+    node.kind === "model" &&
+    (node.outputType === "text" || node.outputType === "image" || node.outputType === "video")
+  ) {
+    return "citrus";
+  }
+  return node.outputType;
+}
 
 function capabilityEnabled(value: unknown) {
   return value === true || value === "true" || value === 1;
@@ -419,8 +432,8 @@ function createGeneratedTextOutputNode(
     sourceOutputIndex: null,
     processingState: null,
     promptSourceNodeId: null,
-    upstreamNodeIds: [],
-    upstreamAssetIds: [],
+    upstreamNodeIds: [templateNode.id],
+    upstreamAssetIds: [`node:${templateNode.id}`],
     x: Math.round(templateNode.x + generatedTextNodeOffsetX),
     y: Math.round(templateNode.y + visualIndex * generatedTextNodeOffsetY),
   };
@@ -453,8 +466,8 @@ function createGeneratedModelTextOutputNode(
     sourceOutputIndex: outputIndex,
     processingState: job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null,
     promptSourceNodeId: null,
-    upstreamNodeIds: [],
-    upstreamAssetIds: [],
+    upstreamNodeIds: [sourceNodeId],
+    upstreamAssetIds: [`node:${sourceNodeId}`],
     x: Math.round(modelNode.x + generatedTextNodeOffsetX),
     y: Math.round(modelNode.y + visualIndex * generatedTextNodeOffsetY),
   };
@@ -746,7 +759,7 @@ export function CanvasView({ projectId }: Props) {
         ...node.upstreamNodeIds
           .map((nodeId) => nodesById[nodeId] || null)
           .filter((inputNode): inputNode is WorkflowNode => Boolean(inputNode))
-          .map((inputNode) => inputNode.outputType),
+          .map((inputNode) => getNodeSemanticOutputType(inputNode)),
       ]);
 
       if (!isGeneratedAssetNode(node)) {
@@ -783,7 +796,7 @@ export function CanvasView({ projectId }: Props) {
                     : `${templatePreview?.nonBlankRowCount || 0} rows ready`
                   : displayModelName,
           inputSemanticTypes,
-          outputSemanticType: node.outputType,
+          outputSemanticType: getNodeSemanticOutputType(node),
           previewImageUrl: null,
           hasStartedJob: node.kind === "model" ? startedJobNodeIds.has(node.id) : true,
           listPreviewColumns,
@@ -807,7 +820,7 @@ export function CanvasView({ projectId }: Props) {
           displayModelName,
           displaySourceLabel: displayModelName,
           inputSemanticTypes,
-          outputSemanticType: node.outputType,
+          outputSemanticType: getNodeSemanticOutputType(node),
         };
       }
 
@@ -819,7 +832,7 @@ export function CanvasView({ projectId }: Props) {
         displayModelName,
         displaySourceLabel: displayModelName,
         inputSemanticTypes,
-        outputSemanticType: node.outputType,
+        outputSemanticType: getNodeSemanticOutputType(node),
         previewImageUrl: previewFrame ? getPreviewFrameUrl(projectId, sourceJobId, previewFrame) : null,
         hasStartedJob: node.kind === "model" ? startedJobNodeIds.has(node.id) : true,
       };
@@ -2293,8 +2306,42 @@ export function CanvasView({ projectId }: Props) {
           return prev;
         }
 
-        if (targetNode.kind === "text-note" || targetNode.kind === "list") {
+        if (targetNode.kind === "list") {
           return prev;
+        }
+
+        if (targetNode.kind === "text-note") {
+          const generatedModelTextSettings = getGeneratedModelTextNoteSettings(targetNode.settings);
+          const generatedTemplateTextSettings = getGeneratedTextNoteSettings(targetNode.settings);
+          const acceptsGeneratedInput = Boolean(generatedModelTextSettings || generatedTemplateTextSettings);
+
+          if (!acceptsGeneratedInput) {
+            return prev;
+          }
+
+          if (sourceNode.kind !== "model" && sourceNode.kind !== "text-template") {
+            return prev;
+          }
+
+          const nextNodes = prev.workflow.nodes.map((node) =>
+            node.id === targetNodeId
+              ? {
+                  ...node,
+                  upstreamNodeIds: [sourceNodeId],
+                  upstreamAssetIds: [`node:${sourceNodeId}`],
+                }
+              : node
+          );
+
+          const nextDoc: CanvasDocument = {
+            ...prev,
+            workflow: {
+              nodes: nextNodes,
+            },
+          };
+
+          queueCanvasSave(nextDoc);
+          return nextDoc;
         }
 
         if (sourceNode.kind === "text-note") {
@@ -2859,6 +2906,19 @@ export function CanvasView({ projectId }: Props) {
     [projectId, router, selectedImageAssetIds]
   );
 
+  const downloadAssets = useCallback((assetIds: string[]) => {
+    const uniqueAssetIds = assetIds.filter((assetId, index) => assetIds.indexOf(assetId) === index);
+    for (const assetId of uniqueAssetIds) {
+      const link = document.createElement("a");
+      link.href = `/api/assets/${assetId}/file`;
+      link.download = "";
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  }, []);
+
   const apiCallPreviewPayload = useMemo(() => {
     if (!selectedNodeRunPreview) {
       return null;
@@ -3184,6 +3244,7 @@ export function CanvasView({ projectId }: Props) {
           onDeleteSelection={handleDeleteSelected}
           onClearInputs={handleClearSelectedInputs}
           onOpenAssetViewer={openAssetViewer}
+          onDownloadAssets={downloadAssets}
           onOpenCompare={openCompare}
           onOpenQueueInspect={openQueueInspect}
         />

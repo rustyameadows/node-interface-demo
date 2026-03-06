@@ -43,8 +43,8 @@ type CanvasNode = {
   sourceModelNodeId?: string | null;
   displayModelName?: string | null;
   displaySourceLabel?: string | null;
-  inputSemanticTypes?: Array<"text" | "image" | "video">;
-  outputSemanticType?: "text" | "image" | "video";
+  inputSemanticTypes?: Array<CanvasAccentType>;
+  outputSemanticType?: CanvasAccentType;
   previewImageUrl?: string | null;
   hasStartedJob?: boolean;
   listPreviewColumns?: string[];
@@ -67,7 +67,7 @@ export type CanvasInsertRequest = {
   connectionPort?: "input" | "output";
 };
 
-type CanvasAccentType = "text" | "image" | "video" | "citrus" | "neutral";
+type CanvasAccentType = "text" | "image" | "video" | "function" | "citrus" | "neutral";
 
 export type CanvasConnection = {
   id: string;
@@ -131,7 +131,6 @@ const LINE_DELTA_PX = 16;
 const WHEEL_ZOOM_SENSITIVITY = 0.00125;
 const GESTURE_ZOOM_SENSITIVITY = 0.00165;
 const PINCH_ZOOM_EXPONENT = 1.18;
-const SEMANTIC_TYPE_ORDER = ["text", "image", "video"] as const;
 const CITRUS_COLOR = "#d8ff3e";
 const CITRUS_GLOW = "rgba(216, 255, 62, 0.52)";
 
@@ -144,6 +143,9 @@ function semanticColor(type: CanvasAccentType) {
   }
   if (type === "text") {
     return "#ff4dc4";
+  }
+  if (type === "function") {
+    return "#9b4dff";
   }
   if (type === "video") {
     return "#ff8d34";
@@ -160,6 +162,9 @@ function semanticGlow(type: CanvasAccentType) {
   }
   if (type === "text") {
     return "rgba(255, 77, 196, 0.5)";
+  }
+  if (type === "function") {
+    return "rgba(155, 77, 255, 0.48)";
   }
   if (type === "video") {
     return "rgba(255, 141, 52, 0.46)";
@@ -209,6 +214,13 @@ function getNodeOutputAccentType(node: CanvasNode): CanvasAccentType {
     return "citrus";
   }
   return getNodeOutputSemanticType(node);
+}
+
+function isGeneratedTextNoteNode(node: CanvasNode) {
+  return (
+    node.kind === "text-note" &&
+    (node.settings.source === "generated-model-text" || node.settings.source === "template-output")
+  );
 }
 
 function hasCustomModelTitle(label: string) {
@@ -305,8 +317,10 @@ function getImageNodeDisplaySize(aspectRatio: number) {
   };
 }
 
-function getInputAccentGradient(inputSemanticTypes: Array<"text" | "image" | "video"> | undefined) {
-  const filteredTypes = SEMANTIC_TYPE_ORDER.filter((type) => inputSemanticTypes?.includes(type));
+function getInputAccentGradient(inputSemanticTypes: CanvasAccentType[] | undefined) {
+  const filteredTypes = (["text", "image", "video", "function", "citrus"] as const).filter((type) =>
+    inputSemanticTypes?.includes(type)
+  );
   if (filteredTypes.length === 0) {
     return "transparent";
   }
@@ -437,12 +451,32 @@ function getSelectionHaloColors(
   kind: CanvasNode["kind"],
   assetOrigin?: CanvasNode["assetOrigin"]
 ) {
-  if (kind === "text-note" || kind === "list" || kind === "text-template") {
+  if (kind === "list") {
     const color = semanticColor("text");
     return {
       leftTop: color,
       leftBottom: color,
       right: color,
+    };
+  }
+
+  if (kind === "text-note") {
+    const leftTop = semanticColor(leftAccentTypes[0] || "text");
+    const leftBottom = semanticColor(leftAccentTypes[1] || leftAccentTypes[0] || "text");
+    return {
+      leftTop,
+      leftBottom,
+      right: semanticColor("text"),
+    };
+  }
+
+  if (kind === "text-template") {
+    const leftTop = semanticColor(leftAccentTypes[0] || "neutral");
+    const leftBottom = semanticColor(leftAccentTypes[1] || leftAccentTypes[0] || "neutral");
+    return {
+      leftTop,
+      leftBottom,
+      right: semanticColor(rightAccentType),
     };
   }
 
@@ -1257,7 +1291,9 @@ export function InfiniteCanvas({
           const isListNode = node.kind === "list";
           const isTextTemplateNode = node.kind === "text-template";
           const isModelNode = node.kind === "model";
+          const isFunctionNode = node.kind === "text-template";
           const isGeneratedAsset = isGeneratedAssetNode(node);
+          const isGeneratedTextNote = isGeneratedTextNoteNode(node);
           const isPendingGeneratedText =
             isTextNote &&
             node.settings.source === "generated-model-text" &&
@@ -1273,10 +1309,11 @@ export function InfiniteCanvas({
           const shouldRenderImageFrame = node.kind === "asset-source" && node.outputType === "image";
           const hasNonImageSource = Boolean(node.sourceAssetId && node.outputType !== "image");
           const isSelected = selectedNodeIds.includes(node.id);
-          const showInputPort = !isTextNote && !isListNode;
+          const showInputPort = !isListNode && (!isTextNote || isGeneratedTextNote);
           const showOutputPort =
             isListNode ||
             isTextNote ||
+            isFunctionNode ||
             (node.kind === "asset-source" && !isModelNode) ||
             (isModelNode && node.outputType !== "text" && Boolean(node.hasStartedJob));
           const showProcessingState = Boolean(node.processingState);
@@ -1289,6 +1326,7 @@ export function InfiniteCanvas({
             ? edges.some((edge) => edge.sourceNodeId === node.id)
             : false;
           const modelRightAccentType: CanvasAccentType = hasConnectedOutput ? "citrus" : "neutral";
+          const functionRightAccentType: CanvasAccentType = hasConnectedOutput ? "function" : "neutral";
           const imageFrameAspectRatio = shouldRenderImageFrame
             ? getImageFrameAspectRatio(node, nodesById, imageAspectRatios)
             : 1;
@@ -1298,13 +1336,19 @@ export function InfiniteCanvas({
             (node.inputSemanticTypes && node.inputSemanticTypes.length > 0
               ? node.inputSemanticTypes
               : ["neutral"]) as CanvasAccentType[],
-            modelRightAccentType
+            isFunctionNode ? functionRightAccentType : modelRightAccentType
+          );
+          const textNoteBorderLayers = getModelBorderLayers(
+            (node.inputSemanticTypes && node.inputSemanticTypes.length > 0
+              ? node.inputSemanticTypes
+              : ["text"]) as CanvasAccentType[],
+            "text"
           );
           const selectionHaloColors = getSelectionHaloColors(
             (node.inputSemanticTypes && node.inputSemanticTypes.length > 0
               ? (node.inputSemanticTypes as CanvasAccentType[])
               : ["neutral"]),
-            isModelNode ? modelRightAccentType : outputAccentType,
+            isModelNode ? modelRightAccentType : isFunctionNode ? functionRightAccentType : outputAccentType,
             node.kind,
             node.assetOrigin
           );
@@ -1321,10 +1365,14 @@ export function InfiniteCanvas({
             "--model-border-right": modelBorderLayers.right,
             "--model-border-bottom": modelBorderLayers.bottom,
             "--model-border-left": modelBorderLayers.left,
+            "--text-note-border-top": textNoteBorderLayers.top,
+            "--text-note-border-right": textNoteBorderLayers.right,
+            "--text-note-border-bottom": textNoteBorderLayers.bottom,
+            "--text-note-border-left": textNoteBorderLayers.left,
             "--node-glow-left-top": selectionHaloColors.leftTop,
             "--node-glow-left-bottom": selectionHaloColors.leftBottom,
             "--node-glow-right": selectionHaloColors.right,
-            "--node-right-accent": semanticColor(isModelNode ? modelRightAccentType : outputAccentType),
+            "--node-right-accent": semanticColor(isModelNode ? modelRightAccentType : isFunctionNode ? functionRightAccentType : outputAccentType),
             ...(imageNodeDisplaySize
               ? {
                   width: `${imageNodeDisplaySize.width}px`,
@@ -1352,7 +1400,7 @@ export function InfiniteCanvas({
               }}
               role="button"
               tabIndex={0}
-              className={`${styles.node} ${isSelected ? styles.nodeSelected : ""} ${shouldRenderImageFrame ? styles.nodeWithImage : ""} ${isGeneratedAsset ? styles.nodeGeneratedAsset : ""} ${isUploadedAsset ? styles.nodeUploadedAsset : ""} ${isTextNote ? styles.nodeTextNote : ""} ${isListNode ? styles.nodeList : ""} ${isTextTemplateNode ? styles.nodeTextTemplate : ""} ${isModelNode ? styles.nodeModel : ""} ${activeConnectionNodeIds.has(node.id) ? styles.nodePortActive : ""} ${showsProcessingShell ? styles.nodeGeneratedProcessing : ""}`}
+              className={`${styles.node} ${isSelected ? styles.nodeSelected : ""} ${shouldRenderImageFrame ? styles.nodeWithImage : ""} ${isGeneratedAsset ? styles.nodeGeneratedAsset : ""} ${isUploadedAsset ? styles.nodeUploadedAsset : ""} ${isTextNote ? styles.nodeTextNote : ""} ${isGeneratedTextNote ? styles.nodeGeneratedTextNote : ""} ${isListNode ? styles.nodeList : ""} ${isTextTemplateNode ? styles.nodeTextTemplate : ""} ${isModelNode || isFunctionNode ? styles.nodeModel : ""} ${activeConnectionNodeIds.has(node.id) ? styles.nodePortActive : ""} ${showsProcessingShell ? styles.nodeGeneratedProcessing : ""}`}
               style={nodeStyle}
               onClick={(event) => {
                 event.stopPropagation();
@@ -1504,24 +1552,13 @@ export function InfiniteCanvas({
                   </div>
                 </div>
               ) : isTextTemplateNode ? (
-                <div className={styles.templateNodeBody}>
-                  <div className={styles.templateNodeHeader}>
-                    <span>{node.label}</span>
-                    <span>{node.templateReady ? "Ready" : "Needs list"}</span>
-                  </div>
-                  <div className={styles.templateNodePreview}>
-                    {node.prompt.trim() || "Write merge text with [[column]] placeholders"}
-                  </div>
-                  <div className={styles.templateNodeMeta}>
-                    <span>{`${node.templateRegisteredColumnCount || 0} columns`}</span>
-                    <span>
-                      {node.templateUnresolvedCount
-                        ? `${node.templateUnresolvedCount} unresolved`
-                        : node.templateReady
-                          ? "Merge ready"
-                          : "Waiting for input"}
-                    </span>
-                  </div>
+                <div
+                  className={`${styles.modelPill} ${
+                    hasCustomModelTitle(node.label) ? styles.modelPillWithTitle : styles.modelPillSolo
+                  }`}
+                >
+                  {hasCustomModelTitle(node.label) ? <div className={styles.modelPillTitle}>{node.label}</div> : null}
+                  <div className={styles.modelPillName}>{node.displayModelName || "Template"}</div>
                 </div>
               ) : (
                 isModelNode ? (

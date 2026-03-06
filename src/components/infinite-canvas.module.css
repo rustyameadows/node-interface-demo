@@ -2,6 +2,7 @@
   --canvas-semantic-text: #ff4dc4;
   --canvas-semantic-image: #3ea4ff;
   --canvas-semantic-video: #ff8d34;
+  --canvas-semantic-function: #9b4dff;
   --canvas-placeholder-citrus: #d8ff3e;
   --canvas-node-border-width: 4px;
   position: relative;
@@ -191,12 +192,47 @@
 .nodeTextNote {
   width: 244px;
   min-height: 152px;
-  border-color: rgba(255, 77, 196, 0.96);
   display: flex;
   flex-direction: column;
   justify-content: stretch;
   padding: 12px 14px;
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 77, 196, 0.96);
+}
+
+.nodeGeneratedTextNote {
+  border-color: transparent;
+  background-image:
+    linear-gradient(#fff, #fff),
+    var(--text-note-border-top, linear-gradient(90deg, rgba(255, 77, 196, 0.96), rgba(255, 77, 196, 0.96))),
+    var(--text-note-border-right, linear-gradient(180deg, rgba(255, 77, 196, 0.96), rgba(255, 77, 196, 0.96))),
+    var(--text-note-border-bottom, linear-gradient(90deg, rgba(255, 77, 196, 0.96), rgba(255, 77, 196, 0.96))),
+    var(--text-note-border-left, linear-gradient(180deg, rgba(255, 77, 196, 0.96), rgba(255, 77, 196, 0.96)));
+  background-repeat: no-repeat;
+  background-position:
+    center,
+    top,
+    right,
+    bottom,
+    left;
+  background-size:
+    auto,
+    100% var(--canvas-node-border-width),
+    var(--canvas-node-border-width) 100%,
+    100% var(--canvas-node-border-width),
+    var(--canvas-node-border-width) 100%;
+  background-origin:
+    padding-box,
+    border-box,
+    border-box,
+    border-box,
+    border-box;
+  background-clip:
+    padding-box,
+    border-box,
+    border-box,
+    border-box,
+    border-box;
 }
 
 .nodeList,
@@ -211,10 +247,12 @@
 }
 
 .nodeTextTemplate {
-  min-height: 132px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.92)),
-    #fff;
+  width: auto;
+  min-width: 172px;
+  max-width: 232px;
+  min-height: 48px;
+  padding: 9px 18px 9px 14px;
+  background: #fff;
 }
 
 .nodeSelected {

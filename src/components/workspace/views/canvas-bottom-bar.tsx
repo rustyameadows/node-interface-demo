@@ -98,6 +98,7 @@ type Props = {
   onDeleteSelection: () => void;
   onClearInputs: () => void;
   onOpenAssetViewer: (assetId: string) => void;
+  onDownloadAssets: (assetIds: string[]) => void;
   onOpenCompare: (mode: "compare_2" | "compare_4", count: number) => void;
   onOpenQueueInspect: (jobId: string) => void;
 };
@@ -530,6 +531,7 @@ export function CanvasBottomBar({
   onDeleteSelection,
   onClearInputs,
   onOpenAssetViewer,
+  onDownloadAssets,
   onOpenCompare,
   onOpenQueueInspect,
 }: Props) {
@@ -1310,6 +1312,16 @@ export function CanvasBottomBar({
               onClick={() => onOpenAssetViewer(selectedSingleImageAssetId)}
             >
               View Image
+            </button>
+          ) : null}
+
+          {selectedImageAssetIds.length > 0 ? (
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={() => onDownloadAssets(selectedImageAssetIds)}
+            >
+              {selectedImageAssetIds.length === 1 ? "Download Asset" : `Download ${selectedImageAssetIds.length}`}
             </button>
           ) : null}
 
