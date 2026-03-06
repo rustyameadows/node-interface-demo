@@ -45,8 +45,18 @@ type CanvasNode = {
   inputSemanticTypes?: Array<"text" | "image" | "video">;
   outputSemanticType?: "text" | "image" | "video";
   previewImageUrl?: string | null;
+  hasStartedJob?: boolean;
   x: number;
   y: number;
+};
+
+export type CanvasInsertRequest = {
+  x: number;
+  y: number;
+  clientX: number;
+  clientY: number;
+  connectionNodeId?: string;
+  connectionPort?: "input" | "output";
 };
 
 type CanvasAccentType = "text" | "image" | "video" | "citrus" | "neutral";
@@ -69,7 +79,7 @@ type Props = {
   onToggleNodeSelection: (nodeId: string) => void;
   onMarqueeSelectNodes: (nodeIds: string[]) => void;
   onUpdateTextNote: (nodeId: string, prompt: string) => void;
-  onRequestInsertMenu: (position: { x: number; y: number; clientX: number; clientY: number }) => void;
+  onRequestInsertMenu: (request: CanvasInsertRequest) => void;
   onDropFiles: (files: File[], position: { x: number; y: number }) => void;
   onViewportChange: (viewport: CanvasViewport) => void;
   onNodePositionChange: (nodeId: string, position: { x: number; y: number }) => void;
@@ -108,6 +118,7 @@ type InteractionState =
 
 const DEFAULT_NODE_WIDTH = 212;
 const DEFAULT_NODE_HEIGHT = 72;
+const IMAGE_NODE_LONG_EDGE = 260;
 const LINE_DELTA_PX = 16;
 const WHEEL_ZOOM_SENSITIVITY = 0.00125;
 const GESTURE_ZOOM_SENSITIVITY = 0.00165;
@@ -254,6 +265,22 @@ function getImageFrameAspectRatio(
   }
 
   return 1;
+}
+
+function getImageNodeDisplaySize(aspectRatio: number) {
+  const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
+
+  if (safeAspectRatio >= 1) {
+    return {
+      width: IMAGE_NODE_LONG_EDGE,
+      height: Math.round(IMAGE_NODE_LONG_EDGE / safeAspectRatio),
+    };
+  }
+
+  return {
+    width: Math.round(IMAGE_NODE_LONG_EDGE * safeAspectRatio),
+    height: IMAGE_NODE_LONG_EDGE,
+  };
 }
 
 function getInputAccentGradient(inputSemanticTypes: Array<"text" | "image" | "video"> | undefined) {
@@ -625,6 +652,20 @@ export function InfiniteCanvas({
     setConnectionDraft(null);
   }, []);
 
+  const isCanvasBackgroundTarget = useCallback((target: EventTarget | null) => {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    const container = containerRef.current;
+    if (!container || !container.contains(target)) {
+      return false;
+    }
+    if (target.closest(`.${styles.node}`) || target.closest(`.${styles.port}`)) {
+      return false;
+    }
+    return true;
+  }, []);
+
   const commitConnection = useCallback(
     (draftNodeId: string, draftPort: "input" | "output", targetNodeId: string, targetPort: "input" | "output") => {
       if (draftNodeId === targetNodeId || draftPort === targetPort) {
@@ -729,9 +770,19 @@ export function InfiniteCanvas({
     [onNodePositionChange, scheduleViewportCommit, toWorldPoint]
   );
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((event: PointerEvent) => {
     const interaction = interactionRef.current;
     if (interaction.type === "connect") {
+      if (isCanvasBackgroundTarget(event.target)) {
+        const point = toWorldPoint(event.clientX, event.clientY);
+        onRequestInsertMenu({
+          ...point,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          connectionNodeId: interaction.nodeId,
+          connectionPort: interaction.port,
+        });
+      }
       clearConnectionDraft();
     }
 
@@ -761,7 +812,7 @@ export function InfiniteCanvas({
     }
 
     interactionRef.current = { type: "idle" };
-  }, [clearConnectionDraft, getNodeSize, nodes, onMarqueeSelectNodes]);
+  }, [clearConnectionDraft, getNodeSize, isCanvasBackgroundTarget, nodes, onMarqueeSelectNodes, onRequestInsertMenu, toWorldPoint]);
 
   useEffect(() => {
     window.addEventListener("pointermove", handlePointerMove);
@@ -1195,6 +1246,7 @@ export function InfiniteCanvas({
           const hasNonImageSource = Boolean(node.sourceAssetId && node.outputType !== "image");
           const isSelected = selectedNodeIds.includes(node.id);
           const showInputPort = !isTextNote;
+          const showOutputPort = !isModelNode || Boolean(node.hasStartedJob);
           const showProcessingState = Boolean(node.processingState);
           const showsProcessingShell = isGeneratedAsset && (node.processingState === "queued" || node.processingState === "running");
           const inputAccentGradient = getInputAccentGradient(node.inputSemanticTypes);
@@ -1208,6 +1260,7 @@ export function InfiniteCanvas({
           const imageFrameAspectRatio = shouldRenderImageFrame
             ? getImageFrameAspectRatio(node, nodesById, imageAspectRatios)
             : 1;
+          const imageNodeDisplaySize = shouldRenderImageFrame ? getImageNodeDisplaySize(imageFrameAspectRatio) : null;
           const generatedBorderGradient = getBorderGradient(["citrus"], semanticOutputType);
           const modelBorderLayers = getModelBorderLayers(
             (node.inputSemanticTypes && node.inputSemanticTypes.length > 0
@@ -1240,6 +1293,12 @@ export function InfiniteCanvas({
             "--node-glow-left-bottom": selectionHaloColors.leftBottom,
             "--node-glow-right": selectionHaloColors.right,
             "--node-right-accent": semanticColor(isModelNode ? modelRightAccentType : outputAccentType),
+            ...(imageNodeDisplaySize
+              ? {
+                  width: `${imageNodeDisplaySize.width}px`,
+                  height: `${imageNodeDisplaySize.height}px`,
+                }
+              : {}),
           } as CSSProperties;
           const inputPortStyle = {
             "--port-fill": inputAccentGradient,
@@ -1292,15 +1351,17 @@ export function InfiniteCanvas({
                 />
               ) : null}
 
-              <button
-                type="button"
-                className={`${styles.port} ${styles.outputPort}`}
-                style={outputPortStyle}
-                onPointerDown={(event) => onPortPointerDown(node, "output", event)}
-                onPointerUp={(event) => onPortPointerUp(node.id, "output", event)}
-                onClick={(event) => event.stopPropagation()}
-                aria-label={`Start output connection from ${node.label}`}
-              />
+              {showOutputPort ? (
+                <button
+                  type="button"
+                  className={`${styles.port} ${styles.outputPort}`}
+                  style={outputPortStyle}
+                  onPointerDown={(event) => onPortPointerDown(node, "output", event)}
+                  onPointerUp={(event) => onPortPointerUp(node.id, "output", event)}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={`Start output connection from ${node.label}`}
+                />
+              ) : null}
 
               {shouldRenderImageFrame ? (
                 <div

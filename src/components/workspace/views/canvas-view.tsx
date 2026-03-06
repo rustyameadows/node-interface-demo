@@ -11,7 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { InfiniteCanvas, type CanvasConnection } from "@/components/infinite-canvas";
+import { InfiniteCanvas, type CanvasConnection, type CanvasInsertRequest } from "@/components/infinite-canvas";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { isModelParameterVisible } from "@/lib/model-parameters";
 import {
@@ -71,12 +71,15 @@ type CanvasInsertMenuState = {
   clientY: number;
   worldX: number;
   worldY: number;
+  mode: "canvas" | "model-input";
+  connectToModelNodeId?: string;
 };
 
 type AssetPickerState = {
   origin: "generated" | "uploaded";
   worldX: number;
   worldY: number;
+  connectToModelNodeId?: string;
 };
 
 type PreviewFrameSummary = NonNullable<Job["latestPreviewFrames"]>[number];
@@ -400,7 +403,7 @@ export function CanvasView({ projectId }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
   const assetPickerRef = useRef<HTMLDivElement | null>(null);
-  const pendingUploadAnchorRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingUploadAnchorRef = useRef<{ x: number; y: number; connectToModelNodeId?: string } | null>(null);
 
   const modalDragStateRef = useRef<{
     active: boolean;
@@ -528,6 +531,17 @@ export function CanvasView({ projectId }: Props) {
     return map;
   }, [jobs]);
 
+  const startedJobNodeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const job of jobs) {
+      const nodeId = job.nodeRunPayload?.nodeId;
+      if (nodeId) {
+        ids.add(nodeId);
+      }
+    }
+    return ids;
+  }, [jobs]);
+
   const resolveNodeImageAsset = useCallback(
     (node: WorkflowNode | null | undefined) => {
       if (!node || node.outputType !== "image") {
@@ -575,6 +589,7 @@ export function CanvasView({ projectId }: Props) {
           inputSemanticTypes,
           outputSemanticType: node.outputType,
           previewImageUrl: null,
+          hasStartedJob: node.kind === "model" ? startedJobNodeIds.has(node.id) : true,
         };
       }
 
@@ -603,9 +618,10 @@ export function CanvasView({ projectId }: Props) {
         inputSemanticTypes,
         outputSemanticType: node.outputType,
         previewImageUrl: previewFrame ? getPreviewFrameUrl(projectId, sourceJobId, previewFrame) : null,
+        hasStartedJob: node.kind === "model" ? startedJobNodeIds.has(node.id) : true,
       };
     });
-  }, [canvasDoc.workflow.nodes, latestPreviewFrameByJobOutputKey, nodesById, projectId, providerModelDisplayNames]);
+  }, [canvasDoc.workflow.nodes, latestPreviewFrameByJobOutputKey, nodesById, projectId, providerModelDisplayNames, startedJobNodeIds]);
 
   const resolveNodeImageAssetId = useCallback(
     (node: WorkflowNode | null | undefined) => resolveNodeImageAsset(node)?.assetId || null,
@@ -1240,12 +1256,15 @@ export function CanvasView({ projectId }: Props) {
   }, []);
 
   const addModelNode = useCallback(
-    (position?: { x: number; y: number }) => {
+    (position?: { x: number; y: number }, options?: { connectFromNodeId?: string }) => {
       const defaultProvider = fallbackProviderModel(providers);
 
       setCanvasDoc((prev) => {
         const outputType = resolveOutputType(undefined, getModelSupportedOutputs(defaultProvider));
         const nextPosition = nextCanvasNodePosition(prev.workflow.nodes.length, position);
+        const connectFromNode = options?.connectFromNodeId
+          ? prev.workflow.nodes.find((candidate) => candidate.id === options.connectFromNodeId) || null
+          : null;
         const node: WorkflowNode = {
           id: uid(),
           label: `Node ${prev.workflow.nodes.length + 1}`,
@@ -1261,9 +1280,13 @@ export function CanvasView({ projectId }: Props) {
           sourceJobId: null,
           sourceOutputIndex: null,
           processingState: null,
-          promptSourceNodeId: null,
-          upstreamNodeIds: [],
-          upstreamAssetIds: [],
+          promptSourceNodeId: connectFromNode?.kind === "text-note" ? connectFromNode.id : null,
+          upstreamNodeIds:
+            connectFromNode && connectFromNode.kind !== "text-note" ? [connectFromNode.id] : [],
+          upstreamAssetIds:
+            connectFromNode && connectFromNode.kind !== "text-note"
+              ? buildAssetRefsFromNodes([connectFromNode.id], prev.workflow.nodes)
+              : [],
           x: nextPosition.x,
           y: nextPosition.y,
         };
@@ -1286,7 +1309,7 @@ export function CanvasView({ projectId }: Props) {
   );
 
   const addTextNote = useCallback(
-    (position?: { x: number; y: number }) => {
+    (position?: { x: number; y: number }, options?: { connectToModelNodeId?: string }) => {
       const defaultProvider = fallbackProviderModel(providers);
 
       setCanvasDoc((prev) => {
@@ -1313,10 +1336,21 @@ export function CanvasView({ projectId }: Props) {
           y: nextPosition.y,
         };
 
+        const nextNodes = prev.workflow.nodes.map((candidate) => {
+          if (candidate.id !== options?.connectToModelNodeId || candidate.kind !== "model") {
+            return candidate;
+          }
+
+          return {
+            ...candidate,
+            promptSourceNodeId: node.id,
+          };
+        });
+
         const nextDoc: CanvasDocument = {
           ...prev,
           workflow: {
-            nodes: [...prev.workflow.nodes, node],
+            nodes: [...nextNodes, node],
           },
         };
 
@@ -1372,7 +1406,7 @@ export function CanvasView({ projectId }: Props) {
   );
 
   const uploadFilesToCanvas = useCallback(
-    async (files: File[], position?: { x: number; y: number }) => {
+    async (files: File[], position?: { x: number; y: number }, options?: { connectToModelNodeId?: string }) => {
       if (files.length === 0) {
         return;
       }
@@ -1418,10 +1452,24 @@ export function CanvasView({ projectId }: Props) {
             };
           });
 
+          const sourceNodeIds = sourceNodes.map((node) => node.id);
+          const nextNodes = prev.workflow.nodes.map((node) => {
+            if (node.id !== options?.connectToModelNodeId || node.kind !== "model") {
+              return node;
+            }
+
+            const upstreamNodeIds = [...new Set([...node.upstreamNodeIds, ...sourceNodeIds])];
+            return {
+              ...node,
+              upstreamNodeIds,
+              upstreamAssetIds: buildAssetRefsFromNodes(upstreamNodeIds, [...prev.workflow.nodes, ...sourceNodes]),
+            };
+          });
+
           const nextDoc: CanvasDocument = {
             ...prev,
             workflow: {
-              nodes: [...prev.workflow.nodes, ...sourceNodes],
+              nodes: [...nextNodes, ...sourceNodes],
             },
           };
 
@@ -1443,7 +1491,7 @@ export function CanvasView({ projectId }: Props) {
   );
 
   const spawnAssetPointerNodes = useCallback(
-    (assets: Asset[], position?: { x: number; y: number }) => {
+    (assets: Asset[], position?: { x: number; y: number }, options?: { connectToModelNodeId?: string }) => {
       if (assets.length === 0) {
         return;
       }
@@ -1487,10 +1535,24 @@ export function CanvasView({ projectId }: Props) {
           };
         });
 
+        const sourceNodeIds = sourceNodes.map((node) => node.id);
+        const nextNodes = prev.workflow.nodes.map((node) => {
+          if (node.id !== options?.connectToModelNodeId || node.kind !== "model") {
+            return node;
+          }
+
+          const upstreamNodeIds = [...new Set([...node.upstreamNodeIds, ...sourceNodeIds])];
+          return {
+            ...node,
+            upstreamNodeIds,
+            upstreamAssetIds: buildAssetRefsFromNodes(upstreamNodeIds, [...prev.workflow.nodes, ...sourceNodes]),
+          };
+        });
+
         const nextDoc: CanvasDocument = {
           ...prev,
           workflow: {
-            nodes: [...prev.workflow.nodes, ...sourceNodes],
+            nodes: [...nextNodes, ...sourceNodes],
           },
         };
 
@@ -1503,6 +1565,44 @@ export function CanvasView({ projectId }: Props) {
       });
     },
     [providers, queueCanvasSave]
+  );
+
+  const handleCanvasInsertRequest = useCallback(
+    (request: CanvasInsertRequest) => {
+      setSelectedConnection(null);
+
+      if (request.connectionNodeId && request.connectionPort === "output") {
+        const sourceNode = nodesById[request.connectionNodeId];
+        if (sourceNode && (sourceNode.kind === "text-note" || sourceNode.kind === "asset-source")) {
+          addModelNode({ x: request.x, y: request.y }, { connectFromNodeId: sourceNode.id });
+          return;
+        }
+      }
+
+      if (request.connectionNodeId && request.connectionPort === "input") {
+        const targetNode = nodesById[request.connectionNodeId];
+        if (targetNode?.kind === "model") {
+          setInsertMenu({
+            clientX: request.clientX,
+            clientY: request.clientY,
+            worldX: request.x,
+            worldY: request.y,
+            mode: "model-input",
+            connectToModelNodeId: targetNode.id,
+          });
+          return;
+        }
+      }
+
+      setInsertMenu({
+        clientX: request.clientX,
+        clientY: request.clientY,
+        worldX: request.x,
+        worldY: request.y,
+        mode: "canvas",
+      });
+    },
+    [addModelNode, nodesById]
   );
 
   const removeConnection = useCallback(
@@ -1876,7 +1976,15 @@ export function CanvasView({ projectId }: Props) {
     (event: ReactChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
       event.target.value = "";
-      uploadFilesToCanvas(files, pendingUploadAnchorRef.current || undefined).catch(console.error);
+      uploadFilesToCanvas(
+        files,
+        pendingUploadAnchorRef.current
+          ? { x: pendingUploadAnchorRef.current.x, y: pendingUploadAnchorRef.current.y }
+          : undefined,
+        pendingUploadAnchorRef.current?.connectToModelNodeId
+          ? { connectToModelNodeId: pendingUploadAnchorRef.current.connectToModelNodeId }
+          : undefined
+      ).catch(console.error);
     },
     [uploadFilesToCanvas]
   );
@@ -1934,15 +2042,7 @@ export function CanvasView({ projectId }: Props) {
             onToggleNodeSelection={toggleNodeSelection}
             onMarqueeSelectNodes={addNodesToSelection}
             onUpdateTextNote={(nodeId, prompt) => updateNode(nodeId, { prompt })}
-            onRequestInsertMenu={(position) => {
-              setSelectedConnection(null);
-              setInsertMenu({
-                clientX: position.clientX,
-                clientY: position.clientY,
-                worldX: position.x,
-                worldY: position.y,
-              });
-            }}
+            onRequestInsertMenu={handleCanvasInsertRequest}
             onDropFiles={(files, position) => {
               uploadFilesToCanvas(files, position).catch(console.error);
             }}
@@ -1962,17 +2062,35 @@ export function CanvasView({ projectId }: Props) {
               top: insertMenu.clientY,
             }}
           >
-            <div className={styles.insertMenuTitle}>Add To Canvas</div>
-            <button type="button" onClick={() => addModelNode({ x: insertMenu.worldX, y: insertMenu.worldY })}>
-              Add Model Node
-            </button>
-            <button type="button" onClick={() => addTextNote({ x: insertMenu.worldX, y: insertMenu.worldY })}>
+            <div className={styles.insertMenuTitle}>
+              {insertMenu.mode === "model-input" ? "Add Model Input" : "Add To Canvas"}
+            </div>
+            {insertMenu.mode === "canvas" ? (
+              <button type="button" onClick={() => addModelNode({ x: insertMenu.worldX, y: insertMenu.worldY })}>
+                Add Model Node
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                addTextNote(
+                  { x: insertMenu.worldX, y: insertMenu.worldY },
+                  insertMenu.connectToModelNodeId
+                    ? { connectToModelNodeId: insertMenu.connectToModelNodeId }
+                    : undefined
+                )
+              }
+            >
               Add Text Note
             </button>
             <button
               type="button"
               onClick={() => {
-                pendingUploadAnchorRef.current = { x: insertMenu.worldX, y: insertMenu.worldY };
+                pendingUploadAnchorRef.current = {
+                  x: insertMenu.worldX,
+                  y: insertMenu.worldY,
+                  connectToModelNodeId: insertMenu.connectToModelNodeId,
+                };
                 setInsertMenu(null);
                 fileInputRef.current?.click();
               }}
@@ -1987,6 +2105,7 @@ export function CanvasView({ projectId }: Props) {
                   origin: "generated",
                   worldX: insertMenu.worldX,
                   worldY: insertMenu.worldY,
+                  connectToModelNodeId: insertMenu.connectToModelNodeId,
                 });
               }}
             >
@@ -2000,6 +2119,7 @@ export function CanvasView({ projectId }: Props) {
                   origin: "uploaded",
                   worldX: insertMenu.worldX,
                   worldY: insertMenu.worldY,
+                  connectToModelNodeId: insertMenu.connectToModelNodeId,
                 });
               }}
             >
@@ -2077,10 +2197,16 @@ export function CanvasView({ projectId }: Props) {
                   disabled={assetPickerSelectedIds.length === 0}
                   onClick={() => {
                     const selectedAssets = assetPickerAssets.filter((asset) => assetPickerSelectedIds.includes(asset.id));
-                    spawnAssetPointerNodes(selectedAssets, {
-                      x: assetPicker.worldX,
-                      y: assetPicker.worldY,
-                    });
+                    spawnAssetPointerNodes(
+                      selectedAssets,
+                      {
+                        x: assetPicker.worldX,
+                        y: assetPicker.worldY,
+                      },
+                      assetPicker.connectToModelNodeId
+                        ? { connectToModelNodeId: assetPicker.connectToModelNodeId }
+                        : undefined
+                    );
                   }}
                 >
                   Add Selected

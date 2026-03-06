@@ -30,6 +30,8 @@
   - add previous uploaded assets from project library
   - drag/move node cards
   - connect nodes from either port direction; canvas normalizes the final source/target relationship
+  - drag a text-note or asset output onto empty canvas to create a new model node already connected to that source
+  - drag a model input onto empty canvas to open an input-scoped insert menu (`text note`, `upload`, `generated asset`, `uploaded asset`) that auto-connects the chosen source into that model
   - click a connection line to select it
   - delete the selected connection with `Delete` / `Backspace`
   - delete the active node selection with `Delete`/`Backspace`
@@ -75,6 +77,7 @@
 - Input/output ports display supported media types.
 - Text notes expose output-only prompt-source connections into model nodes.
 - Image-backed nodes preserve original asset aspect ratio inside the canvas preview.
+- Image-backed nodes size the entire card from the image ratio itself rather than letterboxing into a shared card shape.
 - Generated output nodes can show a streamed partial preview before the final asset lands.
 - Generated image nodes reserve their expected final frame size immediately:
   - explicit aspect-ratio settings shape the placeholder before the first preview
@@ -88,6 +91,7 @@
 - Canvas node chrome uses squared corners rather than rounded cards/pills.
 - Canvas nodes use one unified 4px semantic outer border; image/text/model cards should not render secondary inset frames or double-border treatments.
 - Connection nipples stay hidden until a node is hovered, selected, or actively participating in a connection interaction.
+- Model nodes only expose their output nipple after that model has started at least one job; before first run they are input-only.
 - Validation appears before run when required ports/settings are missing.
 - Model execution rules in this pass:
   - `openai / gpt-image-1.5` is the only runnable model
