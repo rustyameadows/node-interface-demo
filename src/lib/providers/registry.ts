@@ -5,9 +5,16 @@ import {
   OPENAI_MAX_INPUT_IMAGES,
   getOpenAiImageDefaultSettings,
   getOpenAiImageParameterDefinitions,
+  isRunnableOpenAiImageModel,
   parseImageSize,
   resolveOpenAiImageSettings,
 } from "@/lib/openai-image-settings";
+import {
+  getOpenAiTextDefaultSettings,
+  getOpenAiTextParameterDefinitions,
+  isRunnableOpenAiTextModel,
+  resolveOpenAiTextSettings,
+} from "@/lib/openai-text-settings";
 import {
   getTopazExecutionModes,
   getTopazGigapixelDefaultSettings,
@@ -130,6 +137,24 @@ function createOpenAiImageCapabilities(modelId: string) {
   });
 }
 
+function createOpenAiTextCapabilities(modelId: string) {
+  return buildCapabilities({
+    text: true,
+    image: false,
+    video: false,
+    runnable: apiKeyConfigured("OPENAI_API_KEY"),
+    availability: "ready",
+    requiresApiKeyEnv: "OPENAI_API_KEY",
+    requirements: [buildEnvRequirement("OPENAI_API_KEY", "OpenAI API key")],
+    promptMode: "required",
+    executionModes: ["generate"],
+    acceptedInputMimeTypes: [],
+    maxInputImages: 0,
+    parameters: getOpenAiTextParameterDefinitions(modelId),
+    defaults: getOpenAiTextDefaultSettings(modelId),
+  });
+}
+
 function createTopazGigapixelCapabilities(modelId: string) {
   const requirement = getTopazApiRequirement();
 
@@ -159,6 +184,9 @@ function createTopazGigapixelCapabilities(modelId: string) {
 function buildProviderCatalog(): Record<ProviderId, ProviderModelDescriptor[]> {
   const openAi15Capabilities = createOpenAiImageCapabilities("gpt-image-1.5");
   const openAiMiniCapabilities = createOpenAiImageCapabilities("gpt-image-1-mini");
+  const gpt54Capabilities = createOpenAiTextCapabilities("gpt-5.4");
+  const gpt5MiniCapabilities = createOpenAiTextCapabilities("gpt-5-mini");
+  const gpt5NanoCapabilities = createOpenAiTextCapabilities("gpt-5-nano");
 
   const comingSoonImageCapabilities = buildCapabilities({
     text: false,
@@ -215,6 +243,27 @@ function buildProviderCatalog(): Record<ProviderId, ProviderModelDescriptor[]> {
         displayName: "GPT Image 1 Mini",
         capabilities: openAiMiniCapabilities,
         defaultSettings: { ...openAiMiniCapabilities.defaults },
+      },
+      {
+        providerId: "openai",
+        modelId: "gpt-5.4",
+        displayName: "GPT 5.4",
+        capabilities: gpt54Capabilities,
+        defaultSettings: { ...gpt54Capabilities.defaults },
+      },
+      {
+        providerId: "openai",
+        modelId: "gpt-5-mini",
+        displayName: "GPT 5 Mini",
+        capabilities: gpt5MiniCapabilities,
+        defaultSettings: { ...gpt5MiniCapabilities.defaults },
+      },
+      {
+        providerId: "openai",
+        modelId: "gpt-5-nano",
+        displayName: "GPT 5 Nano",
+        capabilities: gpt5NanoCapabilities,
+        defaultSettings: { ...gpt5NanoCapabilities.defaults },
       },
       {
         providerId: "openai",
@@ -363,6 +412,40 @@ function buildPreviewFrame(
   };
 }
 
+function buildTextOutput(
+  input: ProviderJobInput,
+  resolvedSettings: ReturnType<typeof resolveOpenAiTextSettings>,
+  response: {
+    id: string;
+    status?: string | null;
+    usage?: unknown;
+    output_text: string;
+  }
+): NormalizedOutput {
+  const mimeType = resolvedSettings.outputFormat === "text" ? "text/plain" : "application/json";
+  const extension = resolvedSettings.outputFormat === "text" ? "txt" : "json";
+
+  return {
+    type: "text",
+    mimeType,
+    extension,
+    encoding: "utf-8",
+    metadata: {
+      providerId: input.providerId,
+      modelId: input.modelId,
+      outputIndex: 0,
+      responseId: response.id,
+      responseStatus: response.status,
+      outputFormat: resolvedSettings.outputFormat,
+      verbosity: resolvedSettings.verbosity,
+      reasoningEffort: resolvedSettings.reasoningEffort,
+      maxOutputTokens: resolvedSettings.maxOutputTokens,
+      usage: response.usage || null,
+    },
+    content: response.output_text,
+  };
+}
+
 async function submitOpenAiImage(input: ProviderJobInput): Promise<NormalizedOutput[]> {
   const model = getProviderModelDescriptor(input.providerId, input.modelId);
   if (!model) {
@@ -503,6 +586,68 @@ async function submitOpenAiImage(input: ProviderJobInput): Promise<NormalizedOut
   return outputs;
 }
 
+async function submitOpenAiText(input: ProviderJobInput): Promise<NormalizedOutput[]> {
+  const model = getProviderModelDescriptor(input.providerId, input.modelId);
+  if (!model) {
+    throw createProviderError("INVALID_INPUT", `Unknown provider model: ${input.providerId}/${input.modelId}`);
+  }
+
+  if (model.capabilities.availability !== "ready") {
+    throw createProviderError("COMING_SOON", `${model.displayName} is not runnable yet.`);
+  }
+
+  if (!model.capabilities.runnable) {
+    throw createProviderError(
+      "CONFIG_ERROR",
+      "OpenAI is not configured. Set OPENAI_API_KEY in .env.local and restart npm run dev."
+    );
+  }
+
+  const prompt = input.payload.prompt.trim();
+  if (!prompt) {
+    throw createProviderError("INVALID_INPUT", "Connect a prompt note or enter a prompt before running.");
+  }
+
+  if (input.inputAssets.length > 0 || input.payload.inputImageAssetIds.length > 0) {
+    throw createProviderError("INVALID_INPUT", "Disconnect image inputs before running GPT text generation.");
+  }
+
+  const resolvedSettings = resolveOpenAiTextSettings(input.payload.settings, input.modelId);
+  if (resolvedSettings.validationError) {
+    throw createProviderError("INVALID_INPUT", resolvedSettings.validationError);
+  }
+
+  const client = getOpenAIClient();
+  const response = await client.responses.create({
+    model: input.modelId,
+    input: prompt,
+    reasoning: {
+      effort: resolvedSettings.reasoningEffort,
+    },
+    text: {
+      verbosity: resolvedSettings.verbosity,
+      format:
+        resolvedSettings.outputFormat === "text"
+          ? { type: "text" }
+          : resolvedSettings.outputFormat === "json_object"
+            ? { type: "json_object" }
+            : {
+                type: "json_schema",
+                name: resolvedSettings.jsonSchemaName || "response_output",
+                schema: resolvedSettings.parsedJsonSchema || {},
+                strict: true,
+              },
+    },
+    ...(resolvedSettings.maxOutputTokens !== null ? { max_output_tokens: resolvedSettings.maxOutputTokens } : {}),
+  });
+
+  if (!response.output_text) {
+    throw createProviderError("PROVIDER_ERROR", "OpenAI returned no text output.");
+  }
+
+  return [buildTextOutput(input, resolvedSettings, response)];
+}
+
 async function submitTopazGigapixel(input: ProviderJobInput): Promise<NormalizedOutput[]> {
   const model = getProviderModelDescriptor(input.providerId, input.modelId);
   if (!model) {
@@ -574,16 +719,30 @@ function buildComingSoonAdapter(providerId: ProviderId): ProviderAdapter {
   };
 }
 
+async function submitOpenAiJob(input: ProviderJobInput): Promise<NormalizedOutput[]> {
+  if (isRunnableOpenAiImageModel(input.providerId, input.modelId)) {
+    return submitOpenAiImage(input);
+  }
+
+  if (isRunnableOpenAiTextModel(input.providerId, input.modelId)) {
+    return submitOpenAiText(input);
+  }
+
+  const model = getProviderModelDescriptor(input.providerId, input.modelId);
+  const label = model?.displayName || `${input.providerId}/${input.modelId}`;
+  throw createProviderError("COMING_SOON", `${label} is coming soon.`);
+}
+
 const adapters: Record<ProviderId, ProviderAdapter> = {
   openai: {
     providerId: "openai",
     getCapabilities: () => ({
       supportsCancel: false,
       supportsStreaming: true,
-      nodeKinds: ["image-gen"],
+      nodeKinds: ["image-gen", "text-gen"],
     }),
     getModels: () => buildProviderCatalog().openai,
-    submitJob: submitOpenAiImage,
+    submitJob: submitOpenAiJob,
   },
   "google-gemini": buildComingSoonAdapter("google-gemini"),
   topaz: {

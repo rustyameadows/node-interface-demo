@@ -1,4 +1,5 @@
 import type {
+  GeneratedModelTextNoteSettings,
   GeneratedTextNoteSettings,
   ListColumn,
   ListNodeSettings,
@@ -12,6 +13,7 @@ export const LIST_NODE_SOURCE = "list";
 export const TEXT_TEMPLATE_SOURCE = "text-template";
 export const TEXT_NOTE_SOURCE = "text-note";
 export const TEMPLATE_OUTPUT_SOURCE = "template-output";
+export const MODEL_OUTPUT_TEXT_SOURCE = "generated-model-text";
 
 const whitespacePattern = /\s+/g;
 const placeholderPattern = /\[\[\s*([^[\]]+?)\s*\]\]/g;
@@ -107,6 +109,15 @@ export function createGeneratedTextNoteSettings(input: Omit<GeneratedTextNoteSet
   };
 }
 
+export function createGeneratedModelTextNoteSettings(
+  input: Omit<GeneratedModelTextNoteSettings, "source">
+): GeneratedModelTextNoteSettings {
+  return {
+    source: MODEL_OUTPUT_TEXT_SOURCE,
+    ...input,
+  };
+}
+
 export function getListNodeSettings(value: unknown): ListNodeSettings {
   const record = asRecord(value);
   const columns = Array.isArray(record.columns)
@@ -183,8 +194,40 @@ export function getGeneratedTextNoteSettings(value: unknown): GeneratedTextNoteS
   };
 }
 
+export function getGeneratedModelTextNoteSettings(value: unknown): GeneratedModelTextNoteSettings | null {
+  const record = asRecord(value);
+  if (
+    record.source !== MODEL_OUTPUT_TEXT_SOURCE ||
+    !record.sourceJobId ||
+    !record.sourceModelNodeId ||
+    typeof record.outputIndex !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    source: MODEL_OUTPUT_TEXT_SOURCE,
+    sourceJobId: String(record.sourceJobId),
+    sourceModelNodeId: String(record.sourceModelNodeId),
+    outputIndex: Number(record.outputIndex),
+  };
+}
+
+export function normalizeTextNoteSettings(
+  value: unknown
+): TextNoteSettings | GeneratedTextNoteSettings | GeneratedModelTextNoteSettings {
+  return getGeneratedTextNoteSettings(value) || getGeneratedModelTextNoteSettings(value) || createTextNoteSettings();
+}
+
 export function isGeneratedTextNoteNode(node: WorkflowNode | null | undefined) {
-  return node?.kind === "text-note" && Boolean(getGeneratedTextNoteSettings(node.settings));
+  return (
+    node?.kind === "text-note" &&
+    Boolean(getGeneratedTextNoteSettings(node.settings) || getGeneratedModelTextNoteSettings(node.settings))
+  );
+}
+
+export function isGeneratedModelTextNoteNode(node: WorkflowNode | null | undefined) {
+  return node?.kind === "text-note" && Boolean(getGeneratedModelTextNoteSettings(node.settings));
 }
 
 export function getNormalizedListColumns(settings: ListNodeSettings): NormalizedListColumn[] {

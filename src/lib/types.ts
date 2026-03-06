@@ -4,7 +4,8 @@ export type ProviderId = "openai" | "google-gemini" | "topaz";
 export type NodeKind = "text-gen" | "image-gen" | "video-gen" | "transform";
 export type OutputType = "text" | "image" | "video";
 export type ProviderModelAvailability = "ready" | "coming_soon";
-export type OpenAIImageMode = "generate" | "edit";
+export type ProviderExecutionMode = "generate" | "edit";
+export type OpenAIImageMode = ProviderExecutionMode;
 export type ProviderRequirementKind = "env" | "executable";
 export type ProviderPromptMode = "required" | "optional" | "unsupported";
 export type ImageOutputFormat = "png" | "jpeg" | "webp";
@@ -31,7 +32,7 @@ export type ProviderModelCapabilities = {
   apiKeyConfigured: boolean;
   requirements: ProviderRequirement[];
   promptMode: ProviderPromptMode;
-  executionModes: OpenAIImageMode[];
+  executionModes: ProviderExecutionMode[];
   acceptedInputMimeTypes: string[];
   maxInputImages: number;
   parameters: ModelParameterDefinition[];
@@ -44,7 +45,7 @@ export type NodePayload = {
   prompt: string;
   settings: Record<string, unknown>;
   outputType: OutputType;
-  executionMode: OpenAIImageMode;
+  executionMode: ProviderExecutionMode;
   outputCount: number;
   promptSourceNodeId?: string | null;
   upstreamNodeIds: string[];

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { buildOpenAiImageDebugRequest } from "@/lib/openai-image-settings";
+import { buildOpenAiTextDebugRequest, isRunnableOpenAiTextModel } from "@/lib/openai-text-settings";
 import { buildTopazGigapixelDebugRequest } from "@/lib/topaz-gigapixel-settings";
 import { prisma } from "@/lib/prisma";
 import { getProviderAdapter } from "@/lib/providers/registry";
@@ -94,7 +95,13 @@ function buildProviderRequest(
   inputAssets: Awaited<ReturnType<typeof loadInputAssets>>
 ) {
   const providerRequestPreview =
-    providerId === "openai"
+    providerId === "openai" && isRunnableOpenAiTextModel(providerId, modelId)
+      ? buildOpenAiTextDebugRequest({
+          modelId,
+          prompt: payload.prompt,
+          rawSettings: payload.settings,
+        })
+      : providerId === "openai"
       ? buildOpenAiImageDebugRequest({
           modelId,
           prompt: payload.prompt,
@@ -248,6 +255,7 @@ export async function processJobById(jobId: string) {
             mimeType: output.mimeType,
             extension: output.extension,
             metadata: output.metadata,
+            ...(output.type === "text" && typeof output.content === "string" ? { content: output.content } : {}),
           })),
           previewFrameCount: persistedPreviewFrames.length,
           previewFrames: persistedPreviewFrames.map((previewFrame) => ({
@@ -268,6 +276,10 @@ export async function processJobById(jobId: string) {
     });
 
     for (const output of outputs) {
+      if (output.type === "text") {
+        continue;
+      }
+
       const stored = Buffer.isBuffer(output.content)
         ? await saveBufferAsAsset(existing.projectId, output.extension, output.content)
         : await saveContentAsAsset(existing.projectId, output.extension, output.content, output.encoding);

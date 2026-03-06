@@ -5,6 +5,7 @@
 - One canvas per project.
 - Metadata in Postgres, binaries on filesystem.
 - Provider/model IDs are stable and separate from UI labels.
+- Current runtime keeps GPT text outputs note-native, so the asset system remains visual-only in practice.
 
 ## Core Entity Types
 
@@ -127,7 +128,20 @@ type GeneratedTextNoteSettings = {
   rowId: string;
   rowIndex: number; // original source-row index
 };
+
+type GeneratedModelTextNoteSettings = {
+  source: "generated-model-text";
+  sourceJobId: string;
+  sourceModelNodeId: string;
+  outputIndex: number;
+};
 ```
+
+### Note-Native Text Outputs
+- Template-generated row notes and queue-backed GPT text outputs both live inside canvas JSON as `text-note` nodes.
+- GPT model-generated notes persist provenance in `GeneratedModelTextNoteSettings`.
+- These note outputs do not create `assets` rows or filesystem storage entries in v1.
+- `job_attempts.provider_response` stores GPT text content inline, and the jobs API exposes that back to the client as `latestTextOutputs` for note hydration.
 
 ## Table Sketch
 

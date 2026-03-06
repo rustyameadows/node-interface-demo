@@ -22,6 +22,11 @@ import {
   OPENAI_MAX_INPUT_IMAGES,
   resolveOpenAiImageSettings,
 } from "@/lib/openai-image-settings";
+import {
+  buildOpenAiTextDebugRequest,
+  isRunnableOpenAiTextModel,
+  resolveOpenAiTextSettings,
+} from "@/lib/openai-text-settings";
 import { formatProviderRequirementMessage, getFirstUnconfiguredRequirement } from "@/lib/provider-readiness";
 import {
   buildTopazGigapixelDebugRequest,
@@ -52,12 +57,15 @@ import {
 } from "@/components/workspace/types";
 import {
   buildTextTemplatePreview,
+  createGeneratedModelTextNoteSettings,
   createDefaultListNodeSettings,
   createGeneratedTextNoteSettings,
   createTextNoteSettings,
   createTextTemplateNodeSettings,
+  getGeneratedModelTextNoteSettings,
   getGeneratedTextNoteSettings,
   getListNodeSettings,
+  isGeneratedModelTextNoteNode,
   isGeneratedTextNoteNode,
 } from "@/lib/list-template";
 import styles from "./canvas-view.module.css";
@@ -113,6 +121,10 @@ function resolveModelSettings(
 
   if (isRunnableOpenAiImageModel(model?.providerId, model?.modelId)) {
     return resolveOpenAiImageSettings(mergedSettings, executionMode, model?.modelId).effectiveSettings;
+  }
+
+  if (isRunnableOpenAiTextModel(model?.providerId, model?.modelId)) {
+    return resolveOpenAiTextSettings(mergedSettings, model?.modelId).effectiveSettings;
   }
 
   if (isRunnableTopazGigapixelModel(model?.providerId, model?.modelId)) {
@@ -318,6 +330,16 @@ function getExpectedGeneratedOutputCount(job: Job) {
   return job.nodeRunPayload?.outputType === "image" ? 1 : 0;
 }
 
+function getExpectedGeneratedTextOutputCount(job: Job) {
+  const requestedCount =
+    typeof job.nodeRunPayload?.outputCount === "number"
+      ? Math.max(1, Math.min(1, job.nodeRunPayload.outputCount))
+      : 1;
+  const textOutputCount = (job.latestTextOutputs || []).length;
+
+  return Math.max(requestedCount, textOutputCount);
+}
+
 function createGeneratedOutputNode(
   modelNode: WorkflowNode,
   job: Job,
@@ -360,6 +382,13 @@ function getGeneratedTextOutputCount(nodes: WorkflowNode[], templateNodeId: stri
   }).length;
 }
 
+function getGeneratedModelTextOutputCount(nodes: WorkflowNode[], sourceModelNodeId: string) {
+  return nodes.filter((node) => {
+    const generatedSettings = getGeneratedModelTextNoteSettings(node.settings);
+    return generatedSettings?.sourceModelNodeId === sourceModelNodeId;
+  }).length;
+}
+
 function createGeneratedTextOutputNode(
   templateNode: WorkflowNode,
   listNodeId: string,
@@ -397,6 +426,40 @@ function createGeneratedTextOutputNode(
   };
 }
 
+function createGeneratedModelTextOutputNode(
+  modelNode: WorkflowNode,
+  job: Job,
+  sourceNodeId: string,
+  outputIndex: number,
+  visualIndex: number
+): WorkflowNode {
+  return {
+    id: uid(),
+    label: `Generated Text ${visualIndex + 1}`,
+    kind: "text-note",
+    providerId: modelNode.providerId,
+    modelId: modelNode.modelId,
+    nodeType: "text-note",
+    outputType: "text",
+    prompt: "",
+    settings: createGeneratedModelTextNoteSettings({
+      sourceJobId: job.id,
+      sourceModelNodeId: sourceNodeId,
+      outputIndex,
+    }),
+    sourceAssetId: null,
+    sourceAssetMimeType: null,
+    sourceJobId: job.id,
+    sourceOutputIndex: outputIndex,
+    processingState: job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null,
+    promptSourceNodeId: null,
+    upstreamNodeIds: [],
+    upstreamAssetIds: [],
+    x: Math.round(modelNode.x + generatedTextNodeOffsetX),
+    y: Math.round(modelNode.y + visualIndex * generatedTextNodeOffsetY),
+  };
+}
+
 function findMatchingGeneratedImageAsset(job: Job, sourceOutputIndex: number | null) {
   const imageAssets = [...(job.assets || [])]
     .filter((asset) => asset.type === "image")
@@ -423,6 +486,25 @@ function findMatchingGeneratedImageAsset(job: Job, sourceOutputIndex: number | n
   }
 
   return null;
+}
+
+function findMatchingGeneratedTextOutput(job: Job, sourceOutputIndex: number | null) {
+  const textOutputs = [...(job.latestTextOutputs || [])].sort((left, right) => left.outputIndex - right.outputIndex);
+
+  if (textOutputs.length === 0) {
+    return null;
+  }
+
+  if (sourceOutputIndex === null) {
+    return textOutputs.at(-1) || null;
+  }
+
+  const exactMatch = textOutputs.find((output) => output.outputIndex === sourceOutputIndex);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  return textOutputs[sourceOutputIndex] || null;
 }
 
 function isInputLikeElement(target: EventTarget | null) {
@@ -503,11 +585,17 @@ export function CanvasView({ projectId }: Props) {
   const selectedNodeIsTextTemplate = selectedNode?.kind === "text-template";
   const selectedNodeIsModel = selectedNode?.kind === "model";
   const selectedNodeIsGeneratedAsset = isGeneratedAssetNode(selectedNode);
-  const selectedNodeGeneratedTextSettings = useMemo(
+  const selectedTemplateGeneratedTextSettings = useMemo(
     () => getGeneratedTextNoteSettings(selectedNode?.settings),
     [selectedNode?.settings]
   );
-  const selectedNodeIsGeneratedTextNote = Boolean(selectedNodeGeneratedTextSettings);
+  const selectedModelGeneratedTextSettings = useMemo(
+    () => getGeneratedModelTextNoteSettings(selectedNode?.settings),
+    [selectedNode?.settings]
+  );
+  const selectedNodeIsGeneratedTextNote = Boolean(
+    selectedTemplateGeneratedTextSettings || selectedModelGeneratedTextSettings
+  );
 
   const selectedModel = useMemo(() => {
     if (!selectedNode || !selectedNodeIsModel) {
@@ -528,18 +616,25 @@ export function CanvasView({ projectId }: Props) {
   }, [jobs, selectedNodeSourceJobId]);
 
   const selectedGeneratedTextTemplateNode = useMemo(() => {
-    if (!selectedNodeGeneratedTextSettings) {
+    if (!selectedTemplateGeneratedTextSettings) {
       return null;
     }
-    return nodesById[selectedNodeGeneratedTextSettings.sourceTemplateNodeId] || null;
-  }, [nodesById, selectedNodeGeneratedTextSettings]);
+    return nodesById[selectedTemplateGeneratedTextSettings.sourceTemplateNodeId] || null;
+  }, [nodesById, selectedTemplateGeneratedTextSettings]);
 
   const selectedGeneratedTextListNode = useMemo(() => {
-    if (!selectedNodeGeneratedTextSettings) {
+    if (!selectedTemplateGeneratedTextSettings) {
       return null;
     }
-    return nodesById[selectedNodeGeneratedTextSettings.sourceListNodeId] || null;
-  }, [nodesById, selectedNodeGeneratedTextSettings]);
+    return nodesById[selectedTemplateGeneratedTextSettings.sourceListNodeId] || null;
+  }, [nodesById, selectedTemplateGeneratedTextSettings]);
+
+  const selectedGeneratedTextSourceModelNode = useMemo(() => {
+    if (!selectedModelGeneratedTextSettings) {
+      return null;
+    }
+    return nodesById[selectedModelGeneratedTextSettings.sourceModelNodeId] || null;
+  }, [nodesById, selectedModelGeneratedTextSettings]);
 
   const latestImageAssetByNodeId = useMemo(() => {
     const map = new Map<string, { assetId: string; mimeType: string | null; createdAtMs: number }>();
@@ -620,6 +715,27 @@ export function CanvasView({ projectId }: Props) {
       };
     },
     [latestImageAssetByNodeId]
+  );
+
+  const getExecutionModeForModel = useCallback(
+    (model: ProviderModel | undefined, upstreamNodeIds: string[]) => {
+      if (isRunnableOpenAiTextModel(model?.providerId, model?.modelId)) {
+        return "generate" as const;
+      }
+
+      if (isRunnableTopazGigapixelModel(model?.providerId, model?.modelId)) {
+        return "edit" as const;
+      }
+
+      const hasConnectedImageInputs = upstreamNodeIds.some((nodeId) => {
+        const inputNode = nodesById[nodeId];
+        const imageAsset = resolveNodeImageAsset(inputNode);
+        return Boolean(imageAsset);
+      });
+
+      return hasConnectedImageInputs ? ("edit" as const) : ("generate" as const);
+    },
+    [nodesById, resolveNodeImageAsset]
   );
 
   const canvasNodes = useMemo(() => {
@@ -795,18 +911,8 @@ export function CanvasView({ projectId }: Props) {
       return "generate" as const;
     }
 
-    if (isRunnableTopazGigapixelModel(selectedNode.providerId, selectedNode.modelId)) {
-      return "edit" as const;
-    }
-
-    const hasConnectedImageInputs = selectedNode.upstreamNodeIds.some((nodeId) => {
-      const inputNode = nodesById[nodeId];
-      const imageAsset = resolveNodeImageAsset(inputNode);
-      return Boolean(imageAsset);
-    });
-
-    return hasConnectedImageInputs ? ("edit" as const) : ("generate" as const);
-  }, [nodesById, resolveNodeImageAsset, selectedNode, selectedNodeIsModel]);
+    return getExecutionModeForModel(selectedModel, selectedNode.upstreamNodeIds);
+  }, [getExecutionModeForModel, selectedModel, selectedNode, selectedNodeIsModel]);
 
   const selectedNodeResolvedSettings = useMemo<Record<string, unknown>>(() => {
     if (!selectedNodeIsModel || !selectedNode) {
@@ -945,31 +1051,33 @@ export function CanvasView({ projectId }: Props) {
       const model = providers.find(
         (providerModel) => providerModel.providerId === node.providerId && providerModel.modelId === node.modelId
       );
+      const isOpenAiTextModel = isRunnableOpenAiTextModel(model?.providerId, model?.modelId);
       const promptSourceNode = node.promptSourceNodeId ? nodesById[node.promptSourceNodeId] || null : null;
       const prompt = node.promptSourceNodeId ? (promptSourceNode?.prompt || "") : node.prompt;
       const maxInputImages = model?.capabilities.maxInputImages || 0;
       const acceptedMimeTypes = new Set(model?.capabilities.acceptedInputMimeTypes || []);
-      const connectedImageRefs = node.upstreamNodeIds
+      const connectedImageRefs = (isOpenAiTextModel ? [] : node.upstreamNodeIds)
         .map((nodeId) => nodesById[nodeId] || null)
         .map((inputNode) => (inputNode ? resolveNodeImageAsset(inputNode) : null))
         .filter((assetRef): assetRef is NonNullable<ReturnType<typeof resolveNodeImageAsset>> => Boolean(assetRef));
 
-      const inputImageAssetIds = connectedImageRefs
-        .filter((assetRef) => {
-          if (acceptedMimeTypes.size === 0) {
-            return true;
-          }
-          return Boolean(assetRef.mimeType && acceptedMimeTypes.has(assetRef.mimeType));
-        })
-        .map((assetRef) => assetRef.assetId)
-        .filter((assetId, index, array) => array.indexOf(assetId) === index)
-        .slice(0, maxInputImages || undefined);
-      const executionMode = isRunnableTopazGigapixelModel(model?.providerId, model?.modelId)
-        ? ("edit" as const)
-        : inputImageAssetIds.length > 0
-          ? ("edit" as const)
-          : ("generate" as const);
+      const inputImageAssetIds = isOpenAiTextModel
+        ? []
+        : connectedImageRefs
+            .filter((assetRef) => {
+              if (acceptedMimeTypes.size === 0) {
+                return true;
+              }
+              return Boolean(assetRef.mimeType && acceptedMimeTypes.has(assetRef.mimeType));
+            })
+            .map((assetRef) => assetRef.assetId)
+            .filter((assetId, index, array) => array.indexOf(assetId) === index)
+            .slice(0, maxInputImages || undefined);
+      const executionMode = getExecutionModeForModel(model, node.upstreamNodeIds);
       const effectiveSettings = resolveModelSettings(model, node.settings, executionMode);
+      const resolvedTextSettings = isOpenAiTextModel
+        ? resolveOpenAiTextSettings(effectiveSettings, model?.modelId)
+        : null;
       const outputCount = isRunnableOpenAiImageModel(model?.providerId, model?.modelId)
         ? resolveOpenAiImageSettings(effectiveSettings, executionMode, model?.modelId).outputCount
         : 1;
@@ -1016,6 +1124,10 @@ export function CanvasView({ projectId }: Props) {
         (Boolean(node.promptSourceNodeId) || Boolean(requestPayload.nodePayload.prompt))
       ) {
         disabledReason = `${model.displayName} does not support prompt input.`;
+      } else if (isOpenAiTextModel && (node.upstreamNodeIds.length > 0 || node.upstreamAssetIds.length > 0)) {
+        disabledReason = `${model.displayName} only accepts prompt text, not connected asset inputs.`;
+      } else if (resolvedTextSettings?.validationError) {
+        disabledReason = resolvedTextSettings.validationError;
       } else if (connectedImageRefs.length > 0 && requestPayload.nodePayload.inputImageAssetIds.length === 0) {
         disabledReason =
           acceptedMimeTypes.size > 0
@@ -1032,6 +1144,8 @@ export function CanvasView({ projectId }: Props) {
             model.capabilities.promptMode === "optional" && requestPayload.nodePayload.prompt
               ? `Ready to run ${model.displayName} at ${resolvedTopazSettings.scale}x on 1 image with prompt guidance.`
               : `Ready to run ${model.displayName} at ${resolvedTopazSettings.scale}x on 1 image.`;
+        } else if (isOpenAiTextModel) {
+          readyMessage = `Ready to generate 1 text output note with ${model.displayName}.`;
         } else {
           readyMessage =
             executionMode === "generate"
@@ -1042,7 +1156,13 @@ export function CanvasView({ projectId }: Props) {
         }
       }
 
-      const debugRequest = isRunnableOpenAiImageModel(node.providerId, node.modelId)
+      const debugRequest = isOpenAiTextModel
+        ? buildOpenAiTextDebugRequest({
+            modelId: node.modelId,
+            prompt: requestPayload.nodePayload.prompt,
+            rawSettings: requestPayload.nodePayload.settings,
+          })
+        : isRunnableOpenAiImageModel(node.providerId, node.modelId)
         ? buildOpenAiImageDebugRequest({
             modelId: node.modelId,
             prompt: requestPayload.nodePayload.prompt,
@@ -1068,11 +1188,16 @@ export function CanvasView({ projectId }: Props) {
         disabledReason,
         readyMessage,
         endpoint:
-          debugRequest?.endpoint || (executionMode === "generate" ? "client.images.generate" : "client.images.edit"),
+          debugRequest?.endpoint ||
+          (isOpenAiTextModel
+            ? "client.responses.create"
+            : executionMode === "generate"
+              ? "client.images.generate"
+              : "client.images.edit"),
         debugRequest,
       };
     },
-    [nodesById, providers, resolveNodeImageAsset]
+    [getExecutionModeForModel, nodesById, providers, resolveNodeImageAsset]
   );
 
   const selectedNodeRunPreview = useMemo(() => {
@@ -1140,27 +1265,40 @@ export function CanvasView({ projectId }: Props) {
       const workingNodes = [...prev.workflow.nodes];
       let didChange = false;
 
-      const existingGeneratedCountByModelNodeId = new Map<string, number>();
+      const existingGeneratedImageCountByModelNodeId = new Map<string, number>();
+      const existingGeneratedTextCountByModelNodeId = new Map<string, number>();
       for (const node of workingNodes) {
-        if (!isGeneratedAssetNode(node)) {
+        if (isGeneratedAssetNode(node)) {
+          const sourceModelNodeId =
+            typeof node.settings.sourceModelNodeId === "string" ? node.settings.sourceModelNodeId : null;
+          if (!sourceModelNodeId) {
+            continue;
+          }
+          existingGeneratedImageCountByModelNodeId.set(
+            sourceModelNodeId,
+            (existingGeneratedImageCountByModelNodeId.get(sourceModelNodeId) || 0) + 1
+          );
           continue;
         }
-        const sourceModelNodeId =
-          typeof node.settings.sourceModelNodeId === "string" ? node.settings.sourceModelNodeId : null;
-        if (!sourceModelNodeId) {
-          continue;
+
+        if (isGeneratedModelTextNoteNode(node)) {
+          const generatedSettings = getGeneratedModelTextNoteSettings(node.settings);
+          if (!generatedSettings) {
+            continue;
+          }
+          existingGeneratedTextCountByModelNodeId.set(
+            generatedSettings.sourceModelNodeId,
+            (existingGeneratedTextCountByModelNodeId.get(generatedSettings.sourceModelNodeId) || 0) + 1
+          );
         }
-        existingGeneratedCountByModelNodeId.set(
-          sourceModelNodeId,
-          (existingGeneratedCountByModelNodeId.get(sourceModelNodeId) || 0) + 1
-        );
       }
 
-      const insertedGeneratedCountByModelNodeId = new Map<string, number>();
+      const insertedGeneratedImageCountByModelNodeId = new Map<string, number>();
+      const insertedGeneratedTextCountByModelNodeId = new Map<string, number>();
 
       for (const job of jobs) {
         const sourceNodeId = job.nodeRunPayload?.nodeId;
-        if (!sourceNodeId || job.nodeRunPayload?.outputType !== "image") {
+        if (!sourceNodeId) {
           continue;
         }
 
@@ -1169,15 +1307,53 @@ export function CanvasView({ projectId }: Props) {
           continue;
         }
 
-        const expectedOutputCount = getExpectedGeneratedOutputCount(job);
+        if (job.nodeRunPayload?.outputType === "image") {
+          const expectedOutputCount = getExpectedGeneratedOutputCount(job);
+          if (expectedOutputCount <= 0) {
+            continue;
+          }
+
+          const jobNodes = workingNodes.filter(
+            (node) =>
+              getNodeSourceJobId(node) === job.id &&
+              (typeof node.settings.sourceModelNodeId === "string" || node.upstreamNodeIds.includes(sourceNodeId))
+          );
+          for (let outputIndex = 0; outputIndex < expectedOutputCount; outputIndex += 1) {
+            const hasIndexedNode = jobNodes.some((node) => getNodeSourceOutputIndex(node) === outputIndex);
+            const hasLegacyPrimaryNode =
+              outputIndex === 0 && jobNodes.some((node) => getNodeSourceOutputIndex(node) === null);
+
+            if (hasIndexedNode || hasLegacyPrimaryNode) {
+              continue;
+            }
+
+            const visualIndex =
+              (existingGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) +
+              (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0);
+            const outputNode = createGeneratedOutputNode(modelNode, job, sourceNodeId, outputIndex, visualIndex);
+
+            workingNodes.push(outputNode);
+            insertedGeneratedImageCountByModelNodeId.set(
+              sourceNodeId,
+              (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) + 1
+            );
+            didChange = true;
+          }
+          continue;
+        }
+
+        if (job.nodeRunPayload?.outputType !== "text") {
+          continue;
+        }
+
+        const expectedOutputCount = getExpectedGeneratedTextOutputCount(job);
         if (expectedOutputCount <= 0) {
           continue;
         }
 
         const jobNodes = workingNodes.filter(
           (node) =>
-            getNodeSourceJobId(node) === job.id &&
-            (typeof node.settings.sourceModelNodeId === "string" || node.upstreamNodeIds.includes(sourceNodeId))
+            getNodeSourceJobId(node) === job.id && Boolean(getGeneratedModelTextNoteSettings(node.settings))
         );
         for (let outputIndex = 0; outputIndex < expectedOutputCount; outputIndex += 1) {
           const hasIndexedNode = jobNodes.some((node) => getNodeSourceOutputIndex(node) === outputIndex);
@@ -1189,21 +1365,72 @@ export function CanvasView({ projectId }: Props) {
           }
 
           const visualIndex =
-            (existingGeneratedCountByModelNodeId.get(sourceNodeId) || 0) +
-            (insertedGeneratedCountByModelNodeId.get(sourceNodeId) || 0);
-          const outputNode = createGeneratedOutputNode(modelNode, job, sourceNodeId, outputIndex, visualIndex);
+            (existingGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) +
+            (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0);
+          const outputNode = createGeneratedModelTextOutputNode(
+            modelNode,
+            job,
+            sourceNodeId,
+            outputIndex,
+            visualIndex
+          );
 
           workingNodes.push(outputNode);
-          insertedGeneratedCountByModelNodeId.set(
+          insertedGeneratedTextCountByModelNodeId.set(
             sourceNodeId,
-            (insertedGeneratedCountByModelNodeId.get(sourceNodeId) || 0) + 1
+            (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) + 1
           );
           didChange = true;
         }
       }
 
       const updatedNodes = workingNodes.map((node) => {
-        if (!isGeneratedAssetNode(node)) {
+        if (isGeneratedAssetNode(node)) {
+          const sourceJobId = getNodeSourceJobId(node);
+          if (!sourceJobId) {
+            return node;
+          }
+
+          const job = jobById.get(sourceJobId);
+          if (!job) {
+            return node;
+          }
+
+          const sourceOutputIndex = getNodeSourceOutputIndex(node);
+          const matchingImageAsset = findMatchingGeneratedImageAsset(job, sourceOutputIndex);
+
+          const nextProcessingState =
+            job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null;
+          const nextNode: WorkflowNode = {
+            ...node,
+            providerId: job.providerId as WorkflowNode["providerId"],
+            modelId: job.modelId,
+            sourceJobId,
+            sourceOutputIndex,
+            processingState: nextProcessingState,
+            sourceAssetId: matchingImageAsset?.id || node.sourceAssetId,
+            sourceAssetMimeType: matchingImageAsset?.mimeType || node.sourceAssetMimeType,
+            settings: {
+              ...node.settings,
+              source: "generated",
+              sourceJobId,
+              outputIndex: sourceOutputIndex,
+              sourceModelNodeId:
+                typeof node.settings.sourceModelNodeId === "string"
+                  ? node.settings.sourceModelNodeId
+                  : job.nodeRunPayload?.nodeId || null,
+            },
+          };
+
+          if (JSON.stringify(nextNode) === JSON.stringify(node)) {
+            return node;
+          }
+
+          didChange = true;
+          return nextNode;
+        }
+
+        if (!isGeneratedModelTextNoteNode(node)) {
           return node;
         }
 
@@ -1218,7 +1445,12 @@ export function CanvasView({ projectId }: Props) {
         }
 
         const sourceOutputIndex = getNodeSourceOutputIndex(node);
-        const matchingImageAsset = findMatchingGeneratedImageAsset(job, sourceOutputIndex);
+        const matchingTextOutput = findMatchingGeneratedTextOutput(job, sourceOutputIndex);
+        const generatedSettings = getGeneratedModelTextNoteSettings(node.settings);
+        const nextOutputIndex =
+          sourceOutputIndex ?? generatedSettings?.outputIndex ?? matchingTextOutput?.outputIndex ?? 0;
+        const nextSourceModelNodeId =
+          generatedSettings?.sourceModelNodeId || job.nodeRunPayload?.nodeId || null;
 
         const nextProcessingState =
           job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null;
@@ -1227,20 +1459,17 @@ export function CanvasView({ projectId }: Props) {
           providerId: job.providerId as WorkflowNode["providerId"],
           modelId: job.modelId,
           sourceJobId,
-          sourceOutputIndex,
+          sourceOutputIndex: nextOutputIndex,
           processingState: nextProcessingState,
-          sourceAssetId: matchingImageAsset?.id || node.sourceAssetId,
-          sourceAssetMimeType: matchingImageAsset?.mimeType || node.sourceAssetMimeType,
-          settings: {
-            ...node.settings,
-            source: "generated",
-            sourceJobId,
-            outputIndex: sourceOutputIndex,
-            sourceModelNodeId:
-              typeof node.settings.sourceModelNodeId === "string"
-                ? node.settings.sourceModelNodeId
-                : job.nodeRunPayload?.nodeId || null,
-          },
+          prompt: matchingTextOutput?.content || node.prompt,
+          settings:
+            nextSourceModelNodeId
+              ? createGeneratedModelTextNoteSettings({
+                  sourceJobId,
+                  sourceModelNodeId: nextSourceModelNodeId,
+                  outputIndex: nextOutputIndex,
+                })
+              : node.settings,
         };
 
         if (JSON.stringify(nextNode) === JSON.stringify(node)) {
@@ -1653,16 +1882,24 @@ export function CanvasView({ projectId }: Props) {
       const model = (groupedProviders[providerId] || [])[0];
       const supportedOutputs = getModelSupportedOutputs(model);
       const outputType = resolveOutputType(selectedNode.outputType, supportedOutputs);
+      const nextUpstreamNodeIds = isRunnableOpenAiTextModel(model?.providerId, model?.modelId)
+        ? []
+        : selectedNode.upstreamNodeIds;
+      const nextExecutionMode = getExecutionModeForModel(model, nextUpstreamNodeIds);
 
       updateNode(selectedNode.id, {
         providerId,
         modelId: model?.modelId || "",
         outputType,
         nodeType: nodeTypeFromOutput(outputType),
-        settings: resolveModelSettings(model, selectedNode.settings, selectedNodeExecutionMode),
+        upstreamNodeIds: nextUpstreamNodeIds,
+        upstreamAssetIds: isRunnableOpenAiTextModel(model?.providerId, model?.modelId)
+          ? []
+          : buildAssetRefsFromNodes(nextUpstreamNodeIds, canvasDoc.workflow.nodes),
+        settings: resolveModelSettings(model, selectedNode.settings, nextExecutionMode),
       });
     },
-    [groupedProviders, selectedNode, selectedNodeExecutionMode, selectedNodeIsModel, updateNode]
+    [canvasDoc.workflow.nodes, getExecutionModeForModel, groupedProviders, selectedNode, selectedNodeIsModel, updateNode]
   );
 
   const handleSelectedNodeModelChange = useCallback(
@@ -1676,15 +1913,23 @@ export function CanvasView({ projectId }: Props) {
       );
       const supportedOutputs = getModelSupportedOutputs(model);
       const outputType = resolveOutputType(selectedNode.outputType, supportedOutputs);
+      const nextUpstreamNodeIds = isRunnableOpenAiTextModel(model?.providerId, model?.modelId)
+        ? []
+        : selectedNode.upstreamNodeIds;
+      const nextExecutionMode = getExecutionModeForModel(model, nextUpstreamNodeIds);
 
       updateNode(selectedNode.id, {
         modelId,
         outputType,
         nodeType: nodeTypeFromOutput(outputType),
-        settings: resolveModelSettings(model, selectedNode.settings, selectedNodeExecutionMode),
+        upstreamNodeIds: nextUpstreamNodeIds,
+        upstreamAssetIds: isRunnableOpenAiTextModel(model?.providerId, model?.modelId)
+          ? []
+          : buildAssetRefsFromNodes(nextUpstreamNodeIds, canvasDoc.workflow.nodes),
+        settings: resolveModelSettings(model, selectedNode.settings, nextExecutionMode),
       });
     },
-    [groupedProviders, selectedNode, selectedNodeExecutionMode, selectedNodeIsModel, updateNode]
+    [canvasDoc.workflow.nodes, getExecutionModeForModel, groupedProviders, selectedNode, selectedNodeIsModel, updateNode]
   );
 
   const handleClearSelectedInputs = useCallback(() => {
@@ -1758,6 +2003,10 @@ export function CanvasView({ projectId }: Props) {
           const sourceNodeIds = sourceNodes.map((node) => node.id);
           const nextNodes = prev.workflow.nodes.map((node) => {
             if (node.id !== options?.connectToModelNodeId || node.kind !== "model") {
+              return node;
+            }
+
+            if (isRunnableOpenAiTextModel(node.providerId, node.modelId)) {
               return node;
             }
 
@@ -1840,6 +2089,10 @@ export function CanvasView({ projectId }: Props) {
         const sourceNodeIds = sourceNodes.map((node) => node.id);
         const nextNodes = prev.workflow.nodes.map((node) => {
           if (node.id !== options?.connectToModelNodeId || node.kind !== "model") {
+            return node;
+          }
+
+          if (isRunnableOpenAiTextModel(node.providerId, node.modelId)) {
             return node;
           }
 
@@ -2069,6 +2322,10 @@ export function CanvasView({ projectId }: Props) {
           return nextDoc;
         }
 
+        if (targetNode.kind === "model" && isRunnableOpenAiTextModel(targetNode.providerId, targetNode.modelId)) {
+          return prev;
+        }
+
         if (sourceNode.kind === "list") {
           if (targetNode.kind !== "text-template") {
             return prev;
@@ -2100,6 +2357,10 @@ export function CanvasView({ projectId }: Props) {
         }
 
         if (sourceNode.kind === "text-template") {
+          return prev;
+        }
+
+        if (sourceNode.kind === "model" && isRunnableOpenAiTextModel(sourceNode.providerId, sourceNode.modelId)) {
           return prev;
         }
 
@@ -2290,6 +2551,41 @@ export function CanvasView({ projectId }: Props) {
             y: Math.round(modelNode.y + (visualIndex % 4) * generatedNodeOffsetY),
           };
         });
+
+        const nextDoc: CanvasDocument = {
+          ...prev,
+          workflow: {
+            nodes: [...prev.workflow.nodes, ...outputNodes],
+          },
+        };
+
+        queueCanvasSave(nextDoc);
+        return nextDoc;
+      });
+    },
+    [queueCanvasSave]
+  );
+
+  const insertGeneratedTextOutputPlaceholder = useCallback(
+    (job: Job, sourceNodeId: string, outputCount: number) => {
+      setCanvasDoc((prev) => {
+        if (
+          prev.workflow.nodes.filter(
+            (node) => getNodeSourceJobId(node) === job.id && Boolean(getGeneratedModelTextNoteSettings(node.settings))
+          ).length >= outputCount
+        ) {
+          return prev;
+        }
+
+        const modelNode = prev.workflow.nodes.find((node) => node.id === sourceNodeId && node.kind === "model");
+        if (!modelNode) {
+          return prev;
+        }
+
+        const generatedCount = getGeneratedModelTextOutputCount(prev.workflow.nodes, sourceNodeId);
+        const outputNodes: WorkflowNode[] = Array.from({ length: outputCount }, (_, outputOffset) =>
+          createGeneratedModelTextOutputNode(modelNode, job, sourceNodeId, outputOffset, generatedCount + outputOffset)
+        );
 
         const nextDoc: CanvasDocument = {
           ...prev,
@@ -2506,10 +2802,21 @@ export function CanvasView({ projectId }: Props) {
 
       const job = await createJobFromRequest(projectId, requestPreview.requestPayload);
       setJobs((prev) => [job, ...prev.filter((existingJob) => existingJob.id !== job.id)]);
-      insertGeneratedOutputPlaceholder(job, node.id, requestPreview.requestPayload.nodePayload.outputCount);
+      if (requestPreview.requestPayload.nodePayload.outputType === "text") {
+        insertGeneratedTextOutputPlaceholder(job, node.id, requestPreview.requestPayload.nodePayload.outputCount);
+      } else {
+        insertGeneratedOutputPlaceholder(job, node.id, requestPreview.requestPayload.nodePayload.outputCount);
+      }
       await fetchJobs();
     },
-    [buildNodeRunRequest, fetchJobs, generateTextTemplateOutputs, insertGeneratedOutputPlaceholder, projectId]
+    [
+      buildNodeRunRequest,
+      fetchJobs,
+      generateTextTemplateOutputs,
+      insertGeneratedOutputPlaceholder,
+      insertGeneratedTextOutputPlaceholder,
+      projectId,
+    ]
   );
 
   const onFilePickerChange = useCallback(
@@ -2573,6 +2880,15 @@ export function CanvasView({ projectId }: Props) {
     },
     [projectId, router]
   );
+
+  const insertMenuTargetNode =
+    insertMenu?.mode === "model-input" && insertMenu.connectToNodeId ? nodesById[insertMenu.connectToNodeId] || null : null;
+  const insertMenuTargetIsOpenAiTextModel =
+    insertMenuTargetNode?.kind === "model" &&
+    isRunnableOpenAiTextModel(insertMenuTargetNode.providerId, insertMenuTargetNode.modelId);
+  const insertMenuAllowsAssetInputs = insertMenu
+    ? insertMenu.mode === "canvas" || (insertMenu.mode === "model-input" && !insertMenuTargetIsOpenAiTextModel)
+    : false;
 
   return (
     <WorkspaceShell
@@ -2642,19 +2958,21 @@ export function CanvasView({ projectId }: Props) {
                 Add Text Note
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={() =>
-                addListNode(
-                  { x: insertMenu.worldX, y: insertMenu.worldY },
-                  insertMenu.mode === "template-input" && insertMenu.connectToNodeId
-                    ? { connectToTemplateNodeId: insertMenu.connectToNodeId }
-                    : undefined
-                )
-              }
-            >
-              Add List
-            </button>
+            {insertMenu.mode !== "model-input" ? (
+              <button
+                type="button"
+                onClick={() =>
+                  addListNode(
+                    { x: insertMenu.worldX, y: insertMenu.worldY },
+                    insertMenu.mode === "template-input" && insertMenu.connectToNodeId
+                      ? { connectToTemplateNodeId: insertMenu.connectToNodeId }
+                      : undefined
+                  )
+                }
+              >
+                Add List
+              </button>
+            ) : null}
             {insertMenu.mode === "canvas" ? (
               <button
                 type="button"
@@ -2663,7 +2981,7 @@ export function CanvasView({ projectId }: Props) {
                 Add Text Template
               </button>
             ) : null}
-            {insertMenu.mode !== "template-input" ? (
+            {insertMenuAllowsAssetInputs ? (
               <button
                 type="button"
                 onClick={() => {
@@ -2680,7 +2998,7 @@ export function CanvasView({ projectId }: Props) {
                 Upload Assets
               </button>
             ) : null}
-            {insertMenu.mode !== "template-input" ? (
+            {insertMenuAllowsAssetInputs ? (
               <button
                 type="button"
                 onClick={() => {
@@ -2697,7 +3015,7 @@ export function CanvasView({ projectId }: Props) {
                 Add Generated Asset
               </button>
             ) : null}
-            {insertMenu.mode !== "template-input" ? (
+            {insertMenuAllowsAssetInputs ? (
               <button
                 type="button"
                 onClick={() => {
@@ -2837,9 +3155,11 @@ export function CanvasView({ projectId }: Props) {
           selectedListSettings={selectedListSettings}
           selectedTemplatePreview={selectedTemplatePreview}
           selectedTemplateListNode={selectedTemplateListNode}
-          selectedGeneratedTextSettings={selectedNodeGeneratedTextSettings}
+          selectedTemplateGeneratedTextSettings={selectedTemplateGeneratedTextSettings}
+          selectedModelGeneratedTextSettings={selectedModelGeneratedTextSettings}
           selectedGeneratedTextTemplateNode={selectedGeneratedTextTemplateNode}
           selectedGeneratedTextListNode={selectedGeneratedTextListNode}
+          selectedGeneratedTextSourceModelNode={selectedGeneratedTextSourceModelNode}
           selectedImageAssetIds={selectedImageAssetIds}
           selectedSingleImageAssetId={selectedSingleImageAssetId}
           providerOptions={providerOptions}

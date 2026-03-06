@@ -3,15 +3,16 @@
 ## Goals
 - Keep provider execution behind one adapter contract.
 - Snapshot real graph inputs before enqueue so job execution is deterministic.
-- Normalize binary outputs so generated assets land in local storage and the asset viewer without provider-specific UI code.
+- Normalize provider outputs so image/video results can land in local storage and the asset viewer, while GPT text results can hydrate canvas notes without provider-specific UI code.
 
 ## Current Provider Status
 - `openai / gpt-image-1.5`, `openai / gpt-image-1-mini`: real OpenAI image generation paths with both prompt-only (`generate`) and image-edit/reference (`edit`) modes.
+- `openai / gpt-5.4`, `openai / gpt-5-mini`, `openai / gpt-5-nano`: real OpenAI text-generation paths through the Responses API.
 - `topaz / high_fidelity_v2`, `topaz / redefine`: real Topaz Image API transform paths with one image input and one image output.
 - `openai / gpt-image-1`, `openai / gpt-4.1-mini`: visible in UI, `Coming soon`, not runnable.
 - `google-gemini / gemini-3.1-flash` (`Nano Banana 2`): visible in UI, `Coming soon`, not runnable.
 
-The dropdowns still expose the future catalog so node IDs and routing stay stable, but runnable provider families now include OpenAI Images and the Topaz Image API.
+The dropdowns still expose the future catalog so node IDs and routing stay stable, but runnable provider families now include OpenAI Images, OpenAI GPT text generation, and the Topaz Image API.
 
 ## Runtime Contract
 
@@ -90,7 +91,7 @@ This keeps the browser truthful about whether a node can run without inventing c
 
 ## OpenAI (`openai`)
 
-### Supported Flow
+### OpenAI Images
 - One model node targeting `gpt-image-1.5` or `gpt-image-1-mini`
 - Prompt comes from:
   - connected text note when present
@@ -165,6 +166,63 @@ OpenAI run is disabled when:
   - transient processing state (`queued | running | failed | null`)
   - source-call inspection via the same `job_attempts` payloads shown in Queue
 - When the job is still running, the canvas renders the latest preview frame instead of waiting for the final asset.
+
+### OpenAI GPT Text
+
+#### Supported Flow
+- One model node targeting:
+  - `gpt-5.4`
+  - `gpt-5-mini`
+  - `gpt-5-nano`
+- Prompt comes from:
+  - connected text note when present
+  - otherwise the model node prompt textarea
+- App scope in this pass is `text prompt in -> text note out`:
+  - no connected image inputs
+  - no tool calls or function calling
+  - no web search / MCP / image generation exposure
+- Run creates one generated `text-note` placeholder immediately to the right of the model node.
+- Queue completion hydrates that note from the latest successful attempt response.
+- Re-running appends another generated note instead of overwriting earlier note outputs.
+- Generated notes can connect into downstream image-model prompt inputs as normal prompt-source notes.
+- Generated GPT text does not create `asset` rows, storage files, asset-view entries, or asset-picker entries.
+
+#### Request Shape
+- API path:
+  - `client.responses.create(...)`
+- Shared controls exposed in node UI:
+  - `Max Output Tokens` (`1..128000`, optional)
+  - `Verbosity` (`low | medium | high`)
+  - `Output Format` (`text | json_object | json_schema`)
+- Advanced controls exposed in node UI:
+  - `Reasoning Effort` (model-profiled)
+  - `Schema Name` (`json_schema` only)
+  - `Schema JSON` (`json_schema` only)
+- Model-specific reasoning controls:
+  - `gpt-5.4`: `none | low | medium | high | xhigh`
+  - `gpt-5-mini`: `minimal | low | medium | high`
+  - `gpt-5-nano`: `minimal | low | medium | high`
+- Controls intentionally not exposed in v1:
+  - temperature / top_p / logprobs
+  - service tier / store / metadata / parallel tool calls
+  - image inputs / multimodal output / tools
+
+#### Run Gating
+OpenAI GPT text run is disabled when:
+- `OPENAI_API_KEY` is missing
+- resolved prompt is empty
+- any asset/image upstream is connected
+- JSON Schema output is selected but schema name or schema JSON is invalid
+
+#### Output Normalization
+- Responses output text is stored inline in `job_attempts.provider_response.outputs[].content`.
+- Jobs API exposes that text back to the client as `latestTextOutputs`.
+- Generated note metadata stores:
+  - originating `jobId`
+  - originating model node id
+  - output index
+- Source-call inspection for GPT text notes reuses the same queue/debug payloads as image jobs.
+- Generated note text is queue-backed but note-native: there is no asset persistence step for these outputs.
 
 ## Topaz (`topaz`)
 

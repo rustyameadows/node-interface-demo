@@ -33,7 +33,10 @@
   - connect nodes from either port direction; canvas normalizes the final source/target relationship
   - drag a text-note or asset output onto empty canvas to create a new model node already connected to that source
   - drag a list output onto empty canvas to create a new text-template node already connected to that list
-  - drag a model input onto empty canvas to open an input-scoped insert menu (`text note`, `upload`, `generated asset`, `uploaded asset`) that auto-connects the chosen source into that model
+  - drag a model input onto empty canvas to open an input-scoped insert menu:
+    - text-only GPT nodes: `text note`
+    - image-capable model nodes: `text note`, `upload`, `generated asset`, `uploaded asset`
+    - chosen source auto-connects into that model
   - drag a text-template input onto empty canvas to open an input-scoped insert menu (`list`) that auto-connects the chosen source into that template
   - click a connection line to select it
   - delete the selected connection with `Delete` / `Backspace`
@@ -88,6 +91,7 @@
 - Text notes expose output-only prompt-source connections into model nodes.
 - List nodes expose output-only list/text connections into text-template nodes.
 - Text-template nodes expose input-only list connections, then materialize new text-note outputs on run.
+- GPT text model nodes stay input-only; chaining happens through their generated text-note outputs.
 - Image-backed nodes preserve original asset aspect ratio inside the canvas preview.
 - Image-backed nodes size the entire card from the image ratio itself rather than letterboxing into a shared card shape.
 - Generated output nodes can show a streamed partial preview before the final asset lands.
@@ -104,9 +108,11 @@
 - Canvas nodes use one unified 4px semantic outer border; image/text/model cards should not render secondary inset frames or double-border treatments.
 - Connection nipples stay hidden until a node is hovered, selected, or actively participating in a connection interaction.
 - Model nodes only expose their output nipple after that model has started at least one job; before first run they are input-only.
+- GPT text model nodes never expose a model-output nipple in this pass.
 - Validation appears before run when required ports/settings are missing.
 - Model execution rules in this pass:
   - `openai / gpt-image-1.5` and `openai / gpt-image-1-mini` are the runnable OpenAI image models
+  - `openai / gpt-5.4`, `openai / gpt-5-mini`, and `openai / gpt-5-nano` are the runnable OpenAI text-generation models
   - `topaz / high_fidelity_v2` and `topaz / redefine` are the runnable Topaz image-transform models
   - unavailable models remain selectable in the picker, show `Coming soon`, and still disable Run
   - connected text note overrides the model prompt field during execution
@@ -124,6 +130,22 @@
     - input fidelity (`edit` only, values vary by selected model)
     - compression (`jpeg` / `webp` only)
     - moderation (`generate` only)
+  - OpenAI GPT text-model core controls:
+    - `Max Output Tokens`
+    - `Verbosity`
+    - `Output Format`
+  - OpenAI GPT text-model advanced controls:
+    - `Reasoning Effort` (model-profiled)
+    - `Schema Name` (`JSON Schema` only)
+    - `Schema JSON` (`JSON Schema` only)
+  - OpenAI GPT text-model rules:
+    - accept prompt text only in this pass
+    - reject image/asset upstream inputs
+    - always produce exactly one generated text note per run
+    - generated note stays read-only while queued/running, then becomes editable on success
+    - generated note exposes source-call inspection and Queue deep links
+    - generated note can connect into downstream image models as a prompt source
+    - generated text does not enter the asset viewer or asset pickers
   - Topaz model rules:
     - always require exactly one connected image input
     - always produce exactly one output image
@@ -146,6 +168,7 @@
 - Queue summary remains visible from canvas via the top-right queue pill.
 - Run action creates a project job entry with state and timestamps in the queue view.
 - Run also inserts one or more generated output placeholder nodes immediately to the right of the model node.
+- GPT text jobs insert one generated text-note placeholder node and hydrate it from the completed job response.
 - Text-template generation does not create queue rows; it appends new text-note outputs directly on the canvas.
 - Job-state badge lives on that output node, not on the model node.
 - Completed generated outputs clear their badge; failed outputs stay on canvas with failed state.
@@ -155,6 +178,7 @@
 - Queue rows support source-call inspection for provider request/response debugging.
 - Generated output nodes expose inline `Show Source Call` inspection plus a Queue deep link.
 - Successful OpenAI image jobs update the existing placeholder output nodes in place rather than creating second nodes on completion.
+- Successful GPT text jobs update the existing generated text-note placeholder in place rather than creating a second note for the same run.
 - Successful Topaz jobs update the existing placeholder output node in place and do not use partial-preview frames in v1.
 - While a job is `running`, output nodes render the latest durable preview frame available for that `(jobId, outputIndex)`.
 - Reloading during a run restores those preview frames from durable job-preview records.
@@ -164,6 +188,7 @@
 - `2-up`: side-by-side comparison view for two selected assets at full aspect ratio.
 - `4-up`: tiled comparison view for four selected assets at full aspect ratio.
 - `single`: dedicated single-asset viewer with metadata panel and source-call deep link when available.
+- Canvas notes, including GPT-generated text notes, do not appear in these views.
 
 ## Asset Curation Controls
 - Rating: 1-5 stars.
@@ -194,6 +219,7 @@
   - no asset duplication
   - no master/child hierarchy
   - any generated-asset pointer still exposes source-call inspection
+- GPT-generated text notes are intentionally absent from this library because they are not assets.
 
 ## Canvas Card Styling
 - Image nodes are image-first:

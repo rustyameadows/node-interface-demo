@@ -1,4 +1,4 @@
-export type ModelParameterControl = "select" | "number";
+export type ModelParameterControl = "select" | "number" | "text" | "textarea";
 export type ModelParameterSection = "core" | "advanced";
 
 export type ModelParameterOption = {
@@ -24,6 +24,7 @@ export type ModelParameterDefinition = {
   max?: number;
   step?: number;
   placeholder?: string;
+  rows?: number;
   visibleWhen?: ModelParameterVisibilityRule[];
 };
 

@@ -21,7 +21,7 @@ Ship a local-first, node-based generation app where one user can run multiple mo
 1. Create Project -> Open Project -> Start Empty Canvas.
 2. Double-click canvas -> choose insert action -> add model nodes, text notes, list nodes, text templates, or uploaded assets.
 3. Connect nodes -> Configure settings -> Run graph.
-4. Watch job progress -> Inspect outputs -> Save as assets.
+4. Watch job progress -> Inspect outputs -> keep generated text on canvas as notes and save visual outputs as assets.
 5. Open asset viewer -> switch Grid / 2-up / 4-up -> rate/flag/filter.
 6. Switch to another project -> reopen later with preserved canvas and viewer state.
 
@@ -37,9 +37,11 @@ Ship a local-first, node-based generation app where one user can run multiple mo
 - One canvas per project.
 - Canvas prompt-note nodes for writing reusable prompt text and connecting it visually to model nodes.
 - Canvas list nodes plus text-template nodes for local mail-merge style text expansion into per-row prompt notes.
+- Queue-backed OpenAI GPT text-generation nodes that materialize generated prompt notes on canvas instead of creating assets.
 - Async job execution with durable queueing.
 - Local filesystem-backed asset binaries and Postgres metadata.
 - Asset viewer modes: grid, 2-up, 4-up.
+- Asset viewer stays focused on visual outputs; text notes do not appear there.
 - Curation controls: 1-5 stars, flagged state, tags, and filters.
 
 ## V1 Non-Goals
@@ -52,7 +54,7 @@ Ship a local-first, node-based generation app where one user can run multiple mo
 ## Success Criteria
 - User can create at least 3 projects and switch among them with state preserved.
 - Jobs survive app restart and continue or recover cleanly.
-- Provider nodes can run on all three initial providers via one contract.
+- Provider nodes can run OpenAI image, OpenAI text, and Topaz workflows through one contract.
 - Asset viewer supports grid, 2-up, and 4-up with responsive performance for typical local datasets.
 - Rating/flag/filter workflows produce deterministic, predictable result sets.
 

@@ -1258,6 +1258,10 @@ export function InfiniteCanvas({
           const isTextTemplateNode = node.kind === "text-template";
           const isModelNode = node.kind === "model";
           const isGeneratedAsset = isGeneratedAssetNode(node);
+          const isPendingGeneratedText =
+            isTextNote &&
+            node.settings.source === "generated-model-text" &&
+            (node.processingState === "queued" || node.processingState === "running");
           const isUploadedAsset = node.kind === "asset-source" && node.assetOrigin === "uploaded";
           const imageSourceUrl =
             node.outputType === "image"
@@ -1271,7 +1275,10 @@ export function InfiniteCanvas({
           const isSelected = selectedNodeIds.includes(node.id);
           const showInputPort = !isTextNote && !isListNode;
           const showOutputPort =
-            isListNode || isTextNote || (node.kind === "asset-source" && !isModelNode) || (isModelNode && Boolean(node.hasStartedJob));
+            isListNode ||
+            isTextNote ||
+            (node.kind === "asset-source" && !isModelNode) ||
+            (isModelNode && node.outputType !== "text" && Boolean(node.hasStartedJob));
           const showProcessingState = Boolean(node.processingState);
           const showsProcessingShell = isGeneratedAsset && (node.processingState === "queued" || node.processingState === "running");
           const inputAccentGradient = getInputAccentGradient(node.inputSemanticTypes);
@@ -1449,6 +1456,7 @@ export function InfiniteCanvas({
                       spellCheck={false}
                       autoCorrect="off"
                       autoCapitalize="off"
+                      readOnly={isPendingGeneratedText}
                       onPointerDown={(event) => {
                         event.stopPropagation();
                       }}
@@ -1459,11 +1467,11 @@ export function InfiniteCanvas({
                         event.stopPropagation();
                       }}
                       onChange={(event) => onUpdateTextNote(node.id, event.target.value)}
-                      placeholder="Write prompt notes here"
+                      placeholder={isPendingGeneratedText ? "Generating text…" : "Write prompt notes here"}
                     />
                   ) : (
                     <div className={styles.textNotePreview}>
-                      {node.prompt.trim() || "Empty note"}
+                      {node.prompt.trim() || (isPendingGeneratedText ? "Generating text…" : "Empty note")}
                     </div>
                   )}
                 </>

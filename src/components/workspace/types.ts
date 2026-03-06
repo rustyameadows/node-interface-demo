@@ -1,7 +1,8 @@
 import type { ModelParameterDefinition } from "@/lib/model-parameters";
 
 export type ProviderId = "openai" | "google-gemini" | "topaz";
-export type OpenAIImageMode = "generate" | "edit";
+export type ProviderExecutionMode = "generate" | "edit";
+export type OpenAIImageMode = ProviderExecutionMode;
 export type ImageBackground = "auto" | "opaque" | "transparent";
 export type ImageModeration = "auto" | "low";
 export type ProviderRequirementKind = "env" | "executable";
@@ -75,6 +76,13 @@ export type GeneratedTextNoteSettings = {
   batchId: string;
   rowId: string;
   rowIndex: number;
+};
+
+export type GeneratedModelTextNoteSettings = {
+  source: "generated-model-text";
+  sourceJobId: string;
+  sourceModelNodeId: string;
+  outputIndex: number;
 };
 
 export type WorkflowNodeSettings = Record<string, unknown>;
@@ -156,7 +164,7 @@ export type Job = {
     prompt?: string;
     settings?: Record<string, unknown>;
     outputType?: WorkflowNode["outputType"];
-    executionMode?: OpenAIImageMode;
+    executionMode?: ProviderExecutionMode;
     outputCount?: number;
     promptSourceNodeId?: string | null;
     upstreamNodeIds?: string[];
@@ -178,6 +186,11 @@ export type Job = {
     width: number | null;
     height: number | null;
     createdAt: string;
+  }>;
+  latestTextOutputs?: Array<{
+    outputIndex: number;
+    content: string;
+    responseId: string | null;
   }>;
 };
 

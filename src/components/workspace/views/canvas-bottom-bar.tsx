@@ -15,6 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { getJobDebug } from "@/components/workspace/client-api";
 import type {
+  GeneratedModelTextNoteSettings,
   GeneratedTextNoteSettings,
   Job,
   JobDebugResponse,
@@ -72,9 +73,11 @@ type Props = {
   selectedListSettings: ListNodeSettings | null;
   selectedTemplatePreview: TextTemplatePreview | null;
   selectedTemplateListNode: WorkflowNode | null;
-  selectedGeneratedTextSettings: GeneratedTextNoteSettings | null;
+  selectedTemplateGeneratedTextSettings: GeneratedTextNoteSettings | null;
+  selectedModelGeneratedTextSettings: GeneratedModelTextNoteSettings | null;
   selectedGeneratedTextTemplateNode: WorkflowNode | null;
   selectedGeneratedTextListNode: WorkflowNode | null;
+  selectedGeneratedTextSourceModelNode: WorkflowNode | null;
   selectedImageAssetIds: string[];
   selectedSingleImageAssetId: string | null;
   providerOptions: SelectOption[];
@@ -356,6 +359,36 @@ function InlineParameterField({
     );
   }
 
+  if (parameter.control === "text") {
+    return (
+      <label className={styles.textField}>
+        <span className={styles.fieldLabel}>{parameter.label}</span>
+        <input
+          className={styles.textInput}
+          type="text"
+          value={value === null || value === undefined ? "" : String(value)}
+          placeholder={parameter.placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </label>
+    );
+  }
+
+  if (parameter.control === "textarea") {
+    return (
+      <label className={styles.textField}>
+        <span className={styles.fieldLabel}>{parameter.label}</span>
+        <textarea
+          className={styles.trayTextarea}
+          rows={parameter.rows || 6}
+          value={value === null || value === undefined ? "" : String(value)}
+          placeholder={parameter.placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </label>
+    );
+  }
+
   return (
     <label className={styles.numberField}>
       <span className={styles.fieldLabel}>{parameter.label}</span>
@@ -472,9 +505,11 @@ export function CanvasBottomBar({
   selectedListSettings,
   selectedTemplatePreview,
   selectedTemplateListNode,
-  selectedGeneratedTextSettings,
+  selectedTemplateGeneratedTextSettings,
+  selectedModelGeneratedTextSettings,
   selectedGeneratedTextTemplateNode,
   selectedGeneratedTextListNode,
+  selectedGeneratedTextSourceModelNode,
   selectedImageAssetIds,
   selectedSingleImageAssetId,
   providerOptions,
@@ -514,6 +549,10 @@ export function CanvasBottomBar({
   );
   const selectionChip = selectionChipLabel(selectedNodeIds, selectedNode);
   const showCompareActions = selectedNodeIds.length > 1;
+  const selectedPendingModelGeneratedText = Boolean(
+    selectedModelGeneratedTextSettings &&
+      (selectedNode?.processingState === "queued" || selectedNode?.processingState === "running")
+  );
 
   useEffect(() => {
     setOpenPopoverId(null);
@@ -763,6 +802,32 @@ export function CanvasBottomBar({
                                 </option>
                               ))}
                             </select>
+                          ) : parameter.control === "text" ? (
+                            <input
+                              className={styles.trayInput}
+                              type="text"
+                              value={
+                                selectedNodeResolvedSettings[parameter.key] === null ||
+                                selectedNodeResolvedSettings[parameter.key] === undefined
+                                  ? ""
+                                  : String(selectedNodeResolvedSettings[parameter.key])
+                              }
+                              placeholder={parameter.placeholder}
+                              onChange={(event) => onParameterChange(parameter.key, event.target.value)}
+                            />
+                          ) : parameter.control === "textarea" ? (
+                            <textarea
+                              className={styles.trayTextarea}
+                              rows={parameter.rows || 8}
+                              value={
+                                selectedNodeResolvedSettings[parameter.key] === null ||
+                                selectedNodeResolvedSettings[parameter.key] === undefined
+                                  ? ""
+                                  : String(selectedNodeResolvedSettings[parameter.key])
+                              }
+                              placeholder={parameter.placeholder}
+                              onChange={(event) => onParameterChange(parameter.key, event.target.value)}
+                            />
                           ) : (
                             <input
                               className={styles.trayNumberInput}
@@ -1048,8 +1113,9 @@ export function CanvasBottomBar({
                       spellCheck={false}
                       autoCorrect="off"
                       autoCapitalize="off"
+                      readOnly={selectedPendingModelGeneratedText}
                       onChange={(event) => onPromptChange(event.target.value)}
-                      placeholder="Write prompt notes here"
+                      placeholder={selectedPendingModelGeneratedText ? "Generating text…" : "Write prompt notes here"}
                     />
                   </div>
                 </CanvasBarTray>
@@ -1057,7 +1123,13 @@ export function CanvasBottomBar({
                 <CanvasBarTray
                   id="note-links"
                   label="Details"
-                  value={selectedNodeIsGeneratedTextNote ? "Generated" : summarizeConnections(selectedTextNoteTargets)}
+                  value={
+                    selectedNodeIsGeneratedTextNote
+                      ? selectedModelGeneratedTextSettings
+                        ? "Model Output"
+                        : "Generated"
+                      : summarizeConnections(selectedTextNoteTargets)
+                  }
                   width={360}
                   maxWidth={520}
                   openPopoverId={openPopoverId}
@@ -1068,8 +1140,10 @@ export function CanvasBottomBar({
                   <div className={styles.traySection}>
                     <span className={styles.traySectionLabel}>Connection State</span>
                     <div className={styles.traySummary}>
-                      {selectedNodeIsGeneratedTextNote
-                        ? "Generated notes are editable prompt sources."
+                      {selectedPendingModelGeneratedText
+                        ? "This generated note becomes editable after the job completes."
+                        : selectedNodeIsGeneratedTextNote
+                          ? "Generated notes are editable prompt sources."
                         : "Text notes connect to model nodes as external prompt sources."}
                     </div>
                   </div>
@@ -1081,20 +1155,37 @@ export function CanvasBottomBar({
                         : "No model nodes are using this note yet."}
                     </div>
                   </div>
-                  {selectedNodeIsGeneratedTextNote && selectedGeneratedTextSettings ? (
+                  {selectedTemplateGeneratedTextSettings ? (
                     <>
                       <div className={styles.traySection}>
                         <span className={styles.traySectionLabel}>Generated From</span>
                         <div className={styles.traySummary}>
-                          {selectedGeneratedTextTemplateNode?.label || selectedGeneratedTextSettings.sourceTemplateNodeId}
+                          {selectedGeneratedTextTemplateNode?.label || selectedTemplateGeneratedTextSettings.sourceTemplateNodeId}
                           {" via "}
-                          {selectedGeneratedTextListNode?.label || selectedGeneratedTextSettings.sourceListNodeId}
+                          {selectedGeneratedTextListNode?.label || selectedTemplateGeneratedTextSettings.sourceListNodeId}
                         </div>
                       </div>
                       <div className={styles.traySection}>
                         <span className={styles.traySectionLabel}>Batch Metadata</span>
                         <div className={styles.traySummary}>
-                          {`Batch ${selectedGeneratedTextSettings.batchId} · Row ${selectedGeneratedTextSettings.rowIndex + 1}`}
+                          {`Batch ${selectedTemplateGeneratedTextSettings.batchId} · Row ${selectedTemplateGeneratedTextSettings.rowIndex + 1}`}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                  {selectedModelGeneratedTextSettings ? (
+                    <>
+                      <div className={styles.traySection}>
+                        <span className={styles.traySectionLabel}>Generated From</span>
+                        <div className={styles.traySummary}>
+                          {selectedGeneratedTextSourceModelNode?.label ||
+                            selectedModelGeneratedTextSettings.sourceModelNodeId}
+                        </div>
+                      </div>
+                      <div className={styles.traySection}>
+                        <span className={styles.traySectionLabel}>Model Output Metadata</span>
+                        <div className={styles.traySummary}>
+                          {`Job ${selectedModelGeneratedTextSettings.sourceJobId} · Output ${selectedModelGeneratedTextSettings.outputIndex + 1}`}
                         </div>
                       </div>
                     </>
@@ -1142,61 +1233,67 @@ export function CanvasBottomBar({
                       </div>
                     ) : null}
                   </CanvasBarTray>
-
-                  {selectedNodeIsGeneratedAsset && selectedNodeSourceJobId ? (
-                    <CanvasBarTray
-                      id="source-call"
-                      label="Source"
-                      value={selectedGeneratedSourceJob?.state || "Inspect"}
-                      width={480}
-                      maxWidth={660}
-                      openPopoverId={openPopoverId}
-                      onOpenPopoverChange={setOpenPopoverId}
-                      triggerRefs={triggerRefs}
-                      popoverRef={popoverRef}
-                      headerNote={selectedNodeSourceJobId}
-                    >
-                      {sourceCallLoading ? (
-                        <div className={styles.traySummary}>Loading source call…</div>
-                      ) : sourceCallError ? (
-                        <div className={`${styles.traySummary} ${styles.traySummaryWarning}`}>{sourceCallError}</div>
-                      ) : sourceCallDebug ? (
-                        <>
-                          <div className={styles.traySummary}>
-                            {`Job ${sourceCallDebug.job.id} · ${sourceCallDebug.job.state} · ${sourceCallDebug.attempts.length} attempt${
-                              sourceCallDebug.attempts.length === 1 ? "" : "s"
-                            }`}
-                          </div>
-                          <pre className={styles.trayCode}>
-                            {JSON.stringify(
-                              {
-                                request: sourceCallLatestAttempt?.providerRequest || null,
-                                response: sourceCallLatestAttempt?.providerResponse || null,
-                                error:
-                                  sourceCallLatestAttempt?.errorCode || sourceCallLatestAttempt?.errorMessage
-                                    ? {
-                                        code: sourceCallLatestAttempt?.errorCode || "ERROR",
-                                        message: sourceCallLatestAttempt?.errorMessage || "Unknown error",
-                                      }
-                                    : null,
-                              },
-                              null,
-                              2
-                            )}
-                          </pre>
-                        </>
-                      ) : (
-                        <div className={styles.traySummary}>No source call details found.</div>
-                      )}
-                    </CanvasBarTray>
-                  ) : null}
                 </>
+            ) : null}
+
+            {selectedNode &&
+            selectedNodeIds.length === 1 &&
+            selectedNodeSourceJobId &&
+            (selectedNodeIsGeneratedAsset || Boolean(selectedModelGeneratedTextSettings)) ? (
+              <CanvasBarTray
+                id="source-call"
+                label="Source"
+                value={selectedGeneratedSourceJob?.state || "Inspect"}
+                width={480}
+                maxWidth={660}
+                openPopoverId={openPopoverId}
+                onOpenPopoverChange={setOpenPopoverId}
+                triggerRefs={triggerRefs}
+                popoverRef={popoverRef}
+                headerNote={selectedNodeSourceJobId}
+              >
+                {sourceCallLoading ? (
+                  <div className={styles.traySummary}>Loading source call…</div>
+                ) : sourceCallError ? (
+                  <div className={`${styles.traySummary} ${styles.traySummaryWarning}`}>{sourceCallError}</div>
+                ) : sourceCallDebug ? (
+                  <>
+                    <div className={styles.traySummary}>
+                      {`Job ${sourceCallDebug.job.id} · ${sourceCallDebug.job.state} · ${sourceCallDebug.attempts.length} attempt${
+                        sourceCallDebug.attempts.length === 1 ? "" : "s"
+                      }`}
+                    </div>
+                    <pre className={styles.trayCode}>
+                      {JSON.stringify(
+                        {
+                          request: sourceCallLatestAttempt?.providerRequest || null,
+                          response: sourceCallLatestAttempt?.providerResponse || null,
+                          error:
+                            sourceCallLatestAttempt?.errorCode || sourceCallLatestAttempt?.errorMessage
+                              ? {
+                                  code: sourceCallLatestAttempt?.errorCode || "ERROR",
+                                  message: sourceCallLatestAttempt?.errorMessage || "Unknown error",
+                                }
+                              : null,
+                        },
+                        null,
+                        2
+                      )}
+                    </pre>
+                  </>
+                ) : (
+                  <div className={styles.traySummary}>No source call details found.</div>
+                )}
+              </CanvasBarTray>
             ) : null}
         </div>
       </div>
 
       <div className={styles.actionLane}>
-        {selectedNode && selectedNodeIds.length === 1 && selectedNodeIsGeneratedAsset && selectedNodeSourceJobId ? (
+        {selectedNode &&
+        selectedNodeIds.length === 1 &&
+        selectedNodeSourceJobId &&
+        (selectedNodeIsGeneratedAsset || Boolean(selectedModelGeneratedTextSettings)) ? (
           <button
             type="button"
             className={styles.actionButton}

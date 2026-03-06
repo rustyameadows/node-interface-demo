@@ -114,3 +114,8 @@
 - Decision: add `list` and `text-template` canvas nodes, and keep row expansion as a synchronous local canvas transform rather than a queued provider job.
 - Rationale: mail-merge style text expansion is deterministic local data shaping, so pushing it through jobs/assets/queueing adds latency and product noise without adding resilience.
 - Consequence: generated row outputs are materialized as new editable text-note nodes with provenance metadata in canvas JSON, the queue/assets views stay unchanged, and future server-side batch history would require a separate execution record instead of reusing provider jobs.
+
+## 2026-03-06 - OpenAI GPT Text Uses Responses API and Stays Note-Native
+- Decision: launch `openai / gpt-5.4`, `openai / gpt-5-mini`, and `openai / gpt-5-nano` through the OpenAI Responses API, and materialize their outputs as generated canvas `text-note` nodes instead of assets.
+- Rationale: GPT text generation is a first-class queued workflow, but the user-facing output is prompt text for further graph composition, not something that should clutter the visual asset library or asset pickers.
+- Consequence: GPT text nodes are prompt-only in this pass, queue runs snapshot schema-driven Responses settings, job attempts store returned text inline in `provider_response`, completed jobs hydrate generated notes on the canvas, and the asset viewer remains focused on visual media only.

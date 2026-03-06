@@ -1,10 +1,10 @@
 import { isRunnableOpenAiImageModel, resolveOpenAiImageSettings } from "@/lib/openai-image-settings";
+import { isRunnableOpenAiTextModel } from "@/lib/openai-text-settings";
 import { isRunnableTopazGigapixelModel, normalizeLegacyTopazModelId } from "@/lib/topaz-gigapixel-settings";
 import {
-  createTextNoteSettings,
   getListNodeSettings,
+  normalizeTextNoteSettings,
   getTextTemplateNodeSettings,
-  TEXT_NOTE_SOURCE,
 } from "@/lib/list-template";
 import type {
   Asset,
@@ -134,6 +134,8 @@ export async function uploadProjectAsset(projectId: string, file: File) {
 export async function createJob(projectId: string, node: WorkflowNode) {
   const executionMode: OpenAIImageMode = isRunnableTopazGigapixelModel(node.providerId, node.modelId)
     ? "edit"
+    : isRunnableOpenAiTextModel(node.providerId, node.modelId)
+      ? "generate"
     : node.upstreamAssetIds.length > 0
       ? "edit"
       : "generate";
@@ -318,8 +320,8 @@ export function normalizeNode(raw: Record<string, unknown>, index: number): Work
       ? getListNodeSettings(baseSettings)
       : inferredKind === "text-template"
         ? getTextTemplateNodeSettings(baseSettings)
-        : inferredKind === "text-note" && baseSettings.source !== TEXT_NOTE_SOURCE
-          ? createTextNoteSettings()
+        : inferredKind === "text-note"
+          ? normalizeTextNoteSettings(baseSettings)
           : baseSettings;
 
   return {

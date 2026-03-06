@@ -14,7 +14,7 @@
 3. Postgres also stores transient `job_preview_frames` for in-progress streamed images.
 4. Jobs run inline by default (`JOB_EXECUTION_MODE=inline`) and can also run through `pg-boss`.
 5. Filesystem storage adapter persists uploaded/generated binaries plus transient streamed preview frames.
-6. Provider adapters normalize OpenAI and Topaz behavior behind the same contract while Gemini remains placeholder-only.
+6. Provider adapters normalize OpenAI Images, OpenAI Responses text generation, and Topaz behavior behind the same contract while Gemini remains placeholder-only.
 
 ## Core Modules
 - `ProjectService`: project lifecycle and active project switching.
@@ -32,24 +32,30 @@
   - connected text note content becomes `nodePayload.prompt` when present
   - model prompt field is fallback when no text note is connected
   - OpenAI image execution mode is inferred from connected image inputs and snapshotted as `nodePayload.executionMode`
+  - OpenAI GPT text models always run in `generate` mode and accept prompt text only
   - Topaz Image API runs stay in `edit` mode and require exactly one connected image input
   - schema-driven model parameters are resolved to effective provider settings before enqueue
-  - requested OpenAI output count is snapshotted as `nodePayload.outputCount`; Topaz remains fixed at one output
-  - connected image inputs resolve to concrete asset IDs and are capped to the model limit
+  - requested OpenAI image output count is snapshotted as `nodePayload.outputCount`; GPT text and Topaz remain fixed at one output
+  - connected image inputs resolve to concrete asset IDs and are capped to the image-model limit
 3. API validates the resolved payload and creates a `job` record.
-4. Canvas client inserts one or more generated output placeholder nodes immediately after job creation and stores the originating `jobId` plus `outputIndex` on each node.
+4. Canvas client inserts output placeholders immediately after job creation:
+  - image and Topaz jobs create `asset-source` placeholder nodes
+  - GPT text jobs create generated `text-note` placeholder nodes
+  - each placeholder stores the originating `jobId` plus `outputIndex`
 5. Inline executor or `pg-boss` worker loads referenced asset bytes from local storage and invokes the provider adapter.
 6. OpenAI image runs stream partial images; the processor persists them as durable preview-frame records keyed by `(jobId, outputIndex, previewIndex)`.
-7. Topaz Image API runs use provider-native transport:
+7. OpenAI GPT text runs use `client.responses.create(...)` and finish as one normalized text output without token streaming in v1.
+8. Topaz Image API runs use provider-native transport:
   - `high_fidelity_v2` is synchronous and returns one output image directly from `/image/v1/enhance`
   - `redefine` is asynchronous, polls status, downloads the final output, then ingests that file back into normal asset storage
-8. Adapter returns normalized final outputs, including binary image buffers for generated images.
-9. Storage adapter writes final binaries to disk; DB stores metadata + storage ref + output ordering for generated variants.
-10. UI polls job updates and reconciles output nodes by `(jobId, outputIndex)`:
+9. Adapter returns normalized final outputs, including binary image buffers for generated images and inline text for GPT note outputs.
+10. Storage adapter writes final binaries to disk only for non-text outputs; DB stores metadata + storage ref + output ordering for generated visual variants.
+11. UI polls job updates and reconciles output nodes by `(jobId, outputIndex)`:
   - `queued` -> `running`
   - `running` nodes render the latest streamed preview frame when available
   - `running/queued` -> `failed` keeps the placeholder
-  - `succeeded` attaches the final image asset and clears the processing badge
+  - `succeeded` image nodes attach the final asset and clear the processing badge
+  - `succeeded` GPT text nodes hydrate the note body from `latestTextOutputs` and clear the processing badge
 
 ## Data Flow: Template Text Generation
 1. User triggers `Generate Rows` from a `text-template` node on the active canvas.
@@ -71,6 +77,8 @@
 - List-template connections use standard upstream node relationships:
   - list -> text-template stores the list node id in `upstreamNodeIds`
   - text-template nodes do not emit prompt-source links directly; their generated text-note outputs do
+- GPT text model nodes are input-only in the graph:
+  - prompt chaining happens through their generated `text-note` outputs, not through a model output connection
 - Asset-source nodes are peer pointers to one `asset` record:
   - uploaded asset pointers resolve `jobId = null`
   - generated asset pointers resolve `jobId != null`
@@ -92,6 +100,7 @@
 - Gemini 3.1 Flash is displayed as `Nano Banana 2`.
 - Current runtime status:
   - `openai / gpt-image-1.5` and `openai / gpt-image-1-mini`: real execution paths for prompt-only generation and image edit/reference flow
+  - `openai / gpt-5.4`, `openai / gpt-5-mini`, `openai / gpt-5-nano`: real Responses-API text-generation paths that materialize canvas notes instead of assets
   - `topaz / high_fidelity_v2` and `topaz / redefine`: real Topaz Image API execution paths
   - other OpenAI models and Gemini: visible in model pickers as `Coming soon`, not runnable
 

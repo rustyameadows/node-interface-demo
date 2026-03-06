@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { isRunnableOpenAiImageModel, resolveOpenAiImageSettings } from "@/lib/openai-image-settings";
+import { isRunnableOpenAiTextModel, resolveOpenAiTextSettings } from "@/lib/openai-text-settings";
 import { formatProviderRequirementMessage, getFirstUnconfiguredRequirement } from "@/lib/provider-readiness";
 import { prisma } from "@/lib/prisma";
 import { getProviderModel } from "@/lib/providers/registry";
@@ -10,6 +11,36 @@ import { dispatchJob } from "@/lib/server/job-dispatch";
 import { syncProviderModels } from "@/lib/server/provider-models";
 import { isRunnableTopazGigapixelModel, resolveTopazGigapixelSettings } from "@/lib/topaz-gigapixel-settings";
 import type { OpenAIImageMode } from "@/lib/types";
+
+function getLatestTextOutputs(providerResponse: Prisma.JsonValue | null | undefined) {
+  if (!providerResponse || typeof providerResponse !== "object") {
+    return [];
+  }
+
+  const record = providerResponse as Record<string, unknown>;
+  const outputs = Array.isArray(record.outputs) ? record.outputs : [];
+
+  return outputs
+    .map((output) => (output && typeof output === "object" ? (output as Record<string, unknown>) : null))
+    .filter((output): output is Record<string, unknown> => Boolean(output))
+    .filter((output) => output.type === "text" && typeof output.content === "string")
+    .map((output, index) => {
+      const metadata =
+        output.metadata && typeof output.metadata === "object"
+          ? (output.metadata as Record<string, unknown>)
+          : {};
+      return {
+        outputIndex:
+          typeof metadata.outputIndex === "number"
+            ? Number(metadata.outputIndex)
+            : typeof output.outputIndex === "number"
+              ? Number(output.outputIndex)
+              : index,
+        content: String(output.content),
+        responseId: metadata.responseId ? String(metadata.responseId) : null,
+      };
+    });
+}
 
 const createJobSchema = z.object({
   providerId: z.enum(["openai", "google-gemini", "topaz"]),
@@ -76,6 +107,25 @@ function getSubmissionError(input: z.infer<typeof createJobSchema>) {
     }
   }
 
+  if (isRunnableOpenAiTextModel(input.providerId, input.modelId)) {
+    if (input.nodePayload.executionMode !== "generate") {
+      return `${model.displayName} only supports generate mode.`;
+    }
+
+    if (input.nodePayload.upstreamNodeIds.length > 0 || input.nodePayload.upstreamAssetIds.length > 0) {
+      return `${model.displayName} only accepts prompt text, not connected asset inputs.`;
+    }
+
+    if (input.nodePayload.outputCount !== 1) {
+      return `${model.displayName} produces exactly one output note.`;
+    }
+
+    const resolved = resolveOpenAiTextSettings(input.nodePayload.settings, input.modelId);
+    if (resolved.validationError) {
+      return resolved.validationError;
+    }
+  }
+
   if (isRunnableTopazGigapixelModel(input.providerId, input.modelId)) {
     if (input.nodePayload.executionMode !== "edit") {
       return `${model.displayName} only supports edit mode.`;
@@ -125,6 +175,24 @@ export async function GET(
       take: 100,
     });
 
+    const latestAttempts = jobs.length
+      ? await prisma.jobAttempt.findMany({
+          where: {
+            jobId: {
+              in: jobs.map((job) => job.id),
+            },
+          },
+          orderBy: [{ attemptNumber: "desc" }, { createdAt: "desc" }],
+        })
+      : [];
+
+    const latestAttemptByJobId = latestAttempts.reduce<Map<string, (typeof latestAttempts)[number]>>((acc, attempt) => {
+      if (!acc.has(attempt.jobId)) {
+        acc.set(attempt.jobId, attempt);
+      }
+      return acc;
+    }, new Map());
+
     const serializedJobs = jobs.map(({ previewFrames, ...job }) => {
       const latestPreviewFrames = previewFrames.reduce<typeof previewFrames>((acc, previewFrame) => {
         if (acc.some((existing) => existing.outputIndex === previewFrame.outputIndex)) {
@@ -133,10 +201,12 @@ export async function GET(
         acc.push(previewFrame);
         return acc;
       }, []);
+      const latestAttempt = latestAttemptByJobId.get(job.id) || null;
 
       return {
         ...job,
         latestPreviewFrames,
+        latestTextOutputs: getLatestTextOutputs(latestAttempt?.providerResponse),
       };
     });
 
