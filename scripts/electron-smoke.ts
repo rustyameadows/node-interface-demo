@@ -103,6 +103,19 @@ async function main() {
     );
     console.log("Preload bridge detected");
 
+    const providerSummary = await window.evaluate(async () => {
+      const providers = await window.nodeInterface.listProviders();
+      return providers
+        .filter((model) => ["openai", "topaz", "google-gemini"].includes(model.providerId))
+        .map((model) => ({
+          providerId: model.providerId,
+          modelId: model.modelId,
+          runnable: model.capabilities.runnable,
+          requirements: model.capabilities.requirements || [],
+        }));
+    });
+    console.log("Provider readiness:", JSON.stringify(providerSummary, null, 2));
+
     await withTimeout(
       "launcher heading",
       window.getByRole("heading", { name: "Start a Project" }).waitFor({ state: "visible", timeout: 15_000 })
@@ -273,6 +286,7 @@ async function main() {
           assetsScreenshotPath,
           queueScreenshotPath,
           settingsScreenshotPath,
+          providerSummary,
           nodeLabels,
           assetCount,
           storedAssetFiles,

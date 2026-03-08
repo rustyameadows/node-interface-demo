@@ -1,4 +1,5 @@
 import path from "node:path";
+import { loadAppEnv } from "@/lib/runtime/load-env";
 import {
   buildTopazOutputDimensionFields,
   getTopazImageModelProfile,
@@ -7,6 +8,8 @@ import {
   resolveTopazImageSettings,
 } from "@/lib/topaz-image-settings";
 import type { NormalizedOutput, ProviderInputAsset } from "@/lib/types";
+
+loadAppEnv();
 
 const TOPAZ_API_BASE_URL = "https://api.topazlabs.com/image/v1";
 const TOPAZ_API_KEY_ENV = "TOPAZ_API_KEY";

@@ -61,6 +61,8 @@ GOOGLE_API_KEY=...
 TOPAZ_API_KEY=...
 ```
 
+The desktop runtime loads `.env` and `.env.local` from the repo root on startup, then reads provider keys from `process.env`.
+
 Read locations:
 - main process
 - worker process

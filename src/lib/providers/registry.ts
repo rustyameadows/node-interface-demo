@@ -1,5 +1,6 @@
 import OpenAI, { toFile } from "openai";
 import { getFirstUnconfiguredRequirement } from "@/lib/provider-readiness";
+import { loadAppEnv } from "@/lib/runtime/load-env";
 import {
   OPENAI_IMAGE_INPUT_MIME_TYPES,
   OPENAI_MAX_INPUT_IMAGES,
@@ -36,6 +37,8 @@ import type {
   ProviderModelCapabilities,
   ProviderModelDescriptor,
 } from "@/lib/types";
+
+loadAppEnv();
 
 type ProviderErrorCode = "CONFIG_ERROR" | "COMING_SOON" | "INVALID_INPUT" | "PROVIDER_ERROR";
 

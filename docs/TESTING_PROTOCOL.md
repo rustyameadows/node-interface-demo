@@ -58,6 +58,7 @@ Expected output:
   - `assetsScreenshotPath`
   - `queueScreenshotPath`
   - `settingsScreenshotPath`
+  - `providerSummary`
   - `nodeLabels`
   - `assetCount`
   - `storedAssetFiles`
