@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
 import type { AppEventPayload, CreateJobRequest, ImportAssetInput } from "@/lib/ipc-contract";
 import type { AssetFilterState } from "@/components/workspace/types";
+import { APP_NAME, createAppIcon } from "@/electron/brand";
 import { getDb } from "@/lib/db/client";
 import { jobPreviewFrames } from "@/lib/db/schema";
 import { readAssetContent } from "@/lib/storage/local-storage";
@@ -26,6 +27,24 @@ function ensureAppEnvironment() {
   }
 }
 
+function applyAppBranding() {
+  const appIcon = createAppIcon();
+
+  app.setName(APP_NAME);
+  process.title = APP_NAME;
+
+  if (process.platform === "darwin") {
+    app.dock.setIcon(appIcon);
+  }
+
+  app.setAboutPanelOptions({
+    applicationName: APP_NAME,
+    applicationVersion: app.getVersion(),
+  });
+
+  return appIcon;
+}
+
 function broadcastEvent(payload: AppEventPayload) {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(APP_EVENT_CHANNEL, payload);
@@ -33,12 +52,16 @@ function broadcastEvent(payload: AppEventPayload) {
 }
 
 async function createWindow() {
+  const appIcon = createAppIcon();
+
   mainWindow = new BrowserWindow({
+    title: APP_NAME,
     width: 1440,
     height: 960,
     minWidth: 1100,
     minHeight: 720,
     backgroundColor: "#060606",
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -56,6 +79,11 @@ async function createWindow() {
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("[renderer:gone]", details.reason, details.exitCode);
+  });
+
+  mainWindow.on("page-title-updated", (event) => {
+    event.preventDefault();
+    mainWindow?.setTitle(APP_NAME);
   });
 
   if (process.env.NODE_ENV === "development") {
@@ -245,6 +273,7 @@ function registerIpc() {
 
 app.whenReady().then(async () => {
   ensureAppEnvironment();
+  applyAppBranding();
   await syncProviderModels();
   protocol.handle("app-asset", handleAssetProtocol);
   registerIpc();
