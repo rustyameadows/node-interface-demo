@@ -6,9 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/renderer/navigation";
 import { CanvasBottomBar } from "@/components/workspace/views/canvas-bottom-bar";
 import { InfiniteCanvas, type CanvasConnection, type CanvasInsertRequest } from "@/components/infinite-canvas";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
@@ -35,10 +34,13 @@ import {
 } from "@/lib/topaz-gigapixel-settings";
 import {
   createJobFromRequest,
+  getAssetFileUrl,
   getCanvasWorkspace,
   getAssetPointers,
   getJobs,
+  getPreviewFrameFileUrl,
   getProviders,
+  importProjectAssets,
   normalizeNode,
   openProject,
   putCanvasWorkspace,
@@ -271,7 +273,12 @@ function getAssetPointerNodeLabel(asset: Asset, index: number) {
 }
 
 function getPreviewFrameUrl(projectId: string, jobId: string, previewFrame: PreviewFrameSummary) {
-  return `/api/projects/${projectId}/jobs/${jobId}/preview-frames/${previewFrame.id}/file?ts=${encodeURIComponent(previewFrame.createdAt)}`;
+  return getPreviewFrameFileUrl(previewFrame.id, previewFrame.createdAt);
+}
+
+function getImportedAssetNodeLabel(asset: Asset, index: number) {
+  const fileName = asset.storageRef.split("/").at(-1) || "";
+  return normalizeAssetNodeLabel(fileName, index);
 }
 
 function getNodeSourceJobId(node: WorkflowNode | null | undefined) {
@@ -552,7 +559,6 @@ export function CanvasView({ projectId }: Props) {
   const saveTimer = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedCanvasRef = useRef(false);
   const pendingCanvasSaveRef = useRef<CanvasDocument | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
   const assetPickerRef = useRef<HTMLDivElement | null>(null);
   const pendingUploadAnchorRef = useRef<{ x: number; y: number; connectToModelNodeId?: string } | null>(null);
@@ -2054,6 +2060,82 @@ export function CanvasView({ projectId }: Props) {
     [projectId, providers, queueCanvasSave]
   );
 
+  const addImportedAssetsToCanvas = useCallback(
+    (
+      imported: Asset[],
+      position?: { x: number; y: number },
+      options?: { connectToModelNodeId?: string }
+    ) => {
+      if (imported.length === 0) {
+        return;
+      }
+
+      const defaultProvider = fallbackProviderModel(providers);
+      setCanvasDoc((prev) => {
+        const baseX = position?.x ?? Math.round(120 + (prev.workflow.nodes.length % 4) * 260);
+        const baseY = position?.y ?? Math.round(120 + Math.floor(prev.workflow.nodes.length / 4) * 170);
+
+        const sourceNodes = imported.map((asset, index) => {
+          const outputType = outputTypeFromAssetType(asset.type);
+          return {
+            id: uid(),
+            label: getImportedAssetNodeLabel(asset, index),
+            kind: "asset-source" as const,
+            providerId: defaultProvider.providerId,
+            modelId: defaultProvider.modelId,
+            nodeType: "transform" as const,
+            outputType,
+            prompt: "",
+            settings: { source: "upload" },
+            sourceAssetId: asset.id,
+            sourceAssetMimeType: asset.mimeType,
+            sourceJobId: null,
+            sourceOutputIndex: null,
+            processingState: null,
+            promptSourceNodeId: null,
+            upstreamNodeIds: [],
+            upstreamAssetIds: [],
+            x: Math.round(baseX + index * 34),
+            y: Math.round(baseY + index * 26),
+          };
+        });
+
+        const sourceNodeIds = sourceNodes.map((node) => node.id);
+        const nextNodes = prev.workflow.nodes.map((node) => {
+          if (node.id !== options?.connectToModelNodeId || node.kind !== "model") {
+            return node;
+          }
+
+          if (isRunnableOpenAiTextModel(node.providerId, node.modelId)) {
+            return node;
+          }
+
+          const upstreamNodeIds = [...new Set([...node.upstreamNodeIds, ...sourceNodeIds])];
+          return {
+            ...node,
+            upstreamNodeIds,
+            upstreamAssetIds: buildAssetRefsFromNodes(upstreamNodeIds, [...prev.workflow.nodes, ...sourceNodes]),
+          };
+        });
+
+        const nextDoc: CanvasDocument = {
+          ...prev,
+          workflow: {
+            nodes: [...nextNodes, ...sourceNodes],
+          },
+        };
+
+        queueCanvasSave(nextDoc);
+        const lastSourceNode = sourceNodes[sourceNodes.length - 1];
+        setSelectedNodeIds(lastSourceNode ? [lastSourceNode.id] : []);
+        setSelectedConnection(null);
+        setInsertMenu(null);
+        return nextDoc;
+      });
+    },
+    [providers, queueCanvasSave]
+  );
+
   const spawnAssetPointerNodes = useCallback(
     (assets: Asset[], position?: { x: number; y: number }, options?: { connectToModelNodeId?: string }) => {
       if (assets.length === 0) {
@@ -2866,22 +2948,19 @@ export function CanvasView({ projectId }: Props) {
     ]
   );
 
-  const onFilePickerChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files || []);
-      event.target.value = "";
-      uploadFilesToCanvas(
-        files,
-        pendingUploadAnchorRef.current
-          ? { x: pendingUploadAnchorRef.current.x, y: pendingUploadAnchorRef.current.y }
-          : undefined,
-        pendingUploadAnchorRef.current?.connectToModelNodeId
-          ? { connectToModelNodeId: pendingUploadAnchorRef.current.connectToModelNodeId }
-          : undefined
-      ).catch(console.error);
-    },
-    [uploadFilesToCanvas]
-  );
+  const openImportDialog = useCallback(async () => {
+    const imported = await importProjectAssets(projectId);
+    addImportedAssetsToCanvas(
+      imported,
+      pendingUploadAnchorRef.current
+        ? { x: pendingUploadAnchorRef.current.x, y: pendingUploadAnchorRef.current.y }
+        : undefined,
+      pendingUploadAnchorRef.current?.connectToModelNodeId
+        ? { connectToModelNodeId: pendingUploadAnchorRef.current.connectToModelNodeId }
+        : undefined
+    );
+    pendingUploadAnchorRef.current = null;
+  }, [addImportedAssetsToCanvas, projectId]);
 
   const openAssetViewer = useCallback(
     (assetId: string) => {
@@ -2910,7 +2989,7 @@ export function CanvasView({ projectId }: Props) {
     const uniqueAssetIds = assetIds.filter((assetId, index) => assetIds.indexOf(assetId) === index);
     for (const assetId of uniqueAssetIds) {
       const link = document.createElement("a");
-      link.href = `/api/assets/${assetId}/file`;
+      link.href = getAssetFileUrl(assetId);
       link.download = "";
       link.rel = "noopener";
       document.body.appendChild(link);
@@ -3052,7 +3131,7 @@ export function CanvasView({ projectId }: Props) {
                       insertMenu.mode === "model-input" ? insertMenu.connectToNodeId : undefined,
                   };
                   setInsertMenu(null);
-                  fileInputRef.current?.click();
+                  void openImportDialog();
                 }}
               >
                 Upload Assets
@@ -3137,7 +3216,7 @@ export function CanvasView({ projectId }: Props) {
                       }
                     >
                       {asset.type === "image" ? (
-                        <img className={styles.assetPickerThumb} src={`/api/assets/${asset.id}/file`} alt={asset.id} />
+                        <img className={styles.assetPickerThumb} src={getAssetFileUrl(asset.id)} alt={asset.id} />
                       ) : (
                         <div className={styles.assetPickerThumbPlaceholder}>{asset.type.toUpperCase()}</div>
                       )}
@@ -3182,14 +3261,6 @@ export function CanvasView({ projectId }: Props) {
             </section>
           </div>
         ) : null}
-
-        <input
-          ref={fileInputRef}
-          className={styles.fileInput}
-          type="file"
-          multiple
-          onChange={onFilePickerChange}
-        />
 
         <CanvasBottomBar
           projectId={projectId}

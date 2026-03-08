@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "@/renderer/navigation";
 import styles from "./workspace-shell.module.css";
 import { getProjects, openProject, summarizeQueue } from "@/components/workspace/client-api";
 import type { Job, MenuFlyoutState, Project, QueueSummary, WorkspaceView } from "@/components/workspace/types";
+import { queryKeys } from "@/renderer/query";
 
 type Props = {
   projectId: string;
@@ -28,12 +30,15 @@ export function WorkspaceShell({
   children,
 }: Props) {
   const router = useRouter();
-  const [projects, setProjects] = useState<Project[]>([]);
   const [menuState, setMenuState] = useState<MenuFlyoutState>({
     open: false,
     projectsOpen: false,
   });
   const [canHover, setCanHover] = useState(false);
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: queryKeys.projects,
+    queryFn: getProjects,
+  });
 
   const closeTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -47,15 +52,6 @@ export function WorkspaceShell({
     [projects, projectId]
   );
 
-  const refreshProjects = useCallback(async () => {
-    try {
-      const nextProjects = await getProjects();
-      setProjects(nextProjects);
-    } catch (error) {
-      console.error("Failed to load projects", error);
-    }
-  }, []);
-
   useEffect(() => {
     const mediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
     const update = () => setCanHover(mediaQuery.matches);
@@ -67,20 +63,6 @@ export function WorkspaceShell({
       mediaQuery.removeEventListener("change", update);
     };
   }, []);
-
-  useEffect(() => {
-    refreshProjects().catch(console.error);
-
-    const handler = () => {
-      refreshProjects().catch(console.error);
-    };
-
-    window.addEventListener("workspace-projects-changed", handler as EventListener);
-
-    return () => {
-      window.removeEventListener("workspace-projects-changed", handler as EventListener);
-    };
-  }, [refreshProjects]);
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -146,7 +128,6 @@ export function WorkspaceShell({
         await openProject(targetProjectId);
         router.push(buildProjectRoute(targetProjectId, view));
         setMenuState({ open: false, projectsOpen: false });
-        window.dispatchEvent(new Event("workspace-projects-changed"));
       } catch (error) {
         console.error("Failed to open project", error);
       }

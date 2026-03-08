@@ -11,6 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { getAssetFileUrl } from "@/components/workspace/client-api";
 import { isRunnableOpenAiImageModel, parseImageSize } from "@/lib/openai-image-settings";
 import { isRunnableTopazGigapixelModel } from "@/lib/topaz-gigapixel-settings";
 import styles from "./infinite-canvas.module.css";
@@ -1302,7 +1303,7 @@ export function InfiniteCanvas({
           const imageSourceUrl =
             node.outputType === "image"
               ? node.sourceAssetId
-                ? `/api/assets/${node.sourceAssetId}/file`
+                ? getAssetFileUrl(node.sourceAssetId)
                 : node.previewImageUrl || null
               : null;
           const hasImageSource = Boolean(imageSourceUrl);

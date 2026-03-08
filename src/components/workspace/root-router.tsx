@@ -1,45 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "@/renderer/navigation";
 import { getProjects } from "@/components/workspace/client-api";
 import { ProjectLauncher } from "@/components/workspace/project-launcher";
+import { queryKeys } from "@/renderer/query";
 
 export function RootRouter() {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
-  const [hasProjects, setHasProjects] = useState(false);
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: queryKeys.projects,
+    queryFn: getProjects,
+  });
 
   useEffect(() => {
-    getProjects()
-      .then((projects) => {
-        const current =
-          projects.find((project) => project.workspaceState?.isOpen) ||
-          projects.find((project) => project.status === "active") ||
-          projects[0] ||
-          null;
+    if (isLoading) {
+      return;
+    }
 
-        if (!current) {
-          setHasProjects(false);
-          setReady(true);
-          return;
-        }
+    const current =
+      projects.find((project) => project.workspaceState?.isOpen) ||
+      projects.find((project) => project.status === "active") ||
+      projects[0] ||
+      null;
 
-        setHasProjects(true);
-        router.replace(`/projects/${current.id}/canvas`);
-      })
-      .catch((error) => {
-        console.error(error);
-        setHasProjects(false);
-        setReady(true);
-      });
-  }, [router]);
+    if (current) {
+      router.replace(`/projects/${current.id}/canvas`);
+    }
+  }, [isLoading, projects, router]);
 
-  if (!ready && hasProjects) {
-    return null;
-  }
-
-  if (!ready) {
+  if (isLoading) {
     return (
       <main
         style={{
@@ -54,6 +45,10 @@ export function RootRouter() {
         Loading workspace...
       </main>
     );
+  }
+
+  if (projects.length > 0) {
+    return null;
   }
 
   return <ProjectLauncher />;

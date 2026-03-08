@@ -303,7 +303,7 @@ async function downloadTopazOutput(downloadUrl: string, apiKey: string, processI
     const buffer = Buffer.from(await response.arrayBuffer());
     const mimeType = mimeTypeFromResponse(response.headers.get("content-type"), fallbackMimeType);
     const contentDisposition = response.headers.get("content-disposition") || "";
-    const filenameMatch = contentDisposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+    const filenameMatch = contentDisposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
     const filename = filenameMatch
       ? decodeURIComponent(filenameMatch[1].replace(/"/g, ""))
       : getFilenameFromUrl(response.url || activeUrl);
