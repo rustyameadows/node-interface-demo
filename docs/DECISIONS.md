@@ -39,3 +39,18 @@
 - Decision: use TanStack Router for routing and TanStack Query for persisted app data.
 - Rationale: the Electron renderer still needs a modern client-side application foundation after leaving Next.js.
 - Consequence: renderer navigation is code-routed and desktop events invalidate query-backed data caches.
+
+## 2026-03-07 - Mac Packaging Uses Electron Builder
+- Decision: package the local mac app with `electron-builder`, targeting unsigned Apple Silicon `.app` and `.zip` artifacts first.
+- Rationale: it produces a repeatable local packaging pipeline with app metadata, icons, native-module handling, and stable artifact paths.
+- Consequence: packaged builds are generated under `release/`, and packaging verification is part of the desktop lifecycle.
+
+## 2026-03-07 - Provider Credentials Are Keychain-First
+- Decision: provider credentials resolve from macOS Keychain first, then fall back to environment variables.
+- Rationale: packaged apps need to be configurable from Finder without editing repo-local env files, while source-run development should keep working.
+- Consequence: Project Settings now exposes credential status plus save/clear actions, and provider readiness reflects Keychain-backed state.
+
+## 2026-03-07 - Packaged Mac Smoke Uses Selenium and ChromeDriver
+- Decision: automate the packaged `.app` verification path with Selenium plus `electron-chromedriver`.
+- Rationale: the packaged app is more stable to drive through WebDriver than Playwright's Electron attachment path in this environment.
+- Consequence: `npm run smoke:packaged:mac` launches the bundled `.app` through ChromeDriver and verifies the packaged lifecycle against a temporary app-data root.

@@ -46,6 +46,7 @@ export function AppEventBridge() {
 
     const unsubscribeProviders = subscribeToAppEvent("providers.changed", () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.providerCredentials });
     });
 
     return () => {

@@ -2,12 +2,21 @@ import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { providerModels } from "@/lib/db/schema";
 import { getAllProviderModels } from "@/lib/providers/registry";
-import type { ProviderModel } from "@/components/workspace/types";
+import {
+  clearProviderCredential as clearStoredProviderCredential,
+  listProviderCredentials as listStoredProviderCredentials,
+  saveProviderCredential as saveStoredProviderCredential,
+} from "@/lib/runtime/provider-credentials";
+import type {
+  ProviderCredentialKey,
+  ProviderCredentialStatus,
+  ProviderModel,
+} from "@/components/workspace/types";
 import { nowIso } from "@/lib/services/common";
 
 export async function syncProviderModels() {
   const db = getDb();
-  const models = getAllProviderModels();
+  const models = await getAllProviderModels();
   const activeKeys = new Set(models.map((model) => `${model.providerId}:${model.modelId}`));
   const existing = db.select().from(providerModels).all();
 
@@ -60,4 +69,18 @@ export async function listProviders(): Promise<ProviderModel[]> {
       displayName: model.displayName,
       capabilities: model.capabilities,
     }));
+}
+
+export async function listProviderCredentials(): Promise<ProviderCredentialStatus[]> {
+  return listStoredProviderCredentials();
+}
+
+export async function saveProviderCredential(key: ProviderCredentialKey, value: string) {
+  await saveStoredProviderCredential(key, value);
+  await syncProviderModels();
+}
+
+export async function clearProviderCredential(key: ProviderCredentialKey) {
+  await clearStoredProviderCredential(key);
+  await syncProviderModels();
 }

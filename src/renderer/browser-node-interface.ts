@@ -1,4 +1,13 @@
-import { defaultCanvasDocument, type Asset, type CanvasDocument, type Job, type Project, type ProviderModel } from "@/components/workspace/types";
+import {
+  defaultCanvasDocument,
+  type Asset,
+  type CanvasDocument,
+  type Job,
+  type Project,
+  type ProviderCredentialKey,
+  type ProviderCredentialStatus,
+  type ProviderModel,
+} from "@/components/workspace/types";
 import type { AppEventName, AppEventPayload, NodeInterface, WorkspaceSnapshotResponse } from "@/lib/ipc-contract";
 
 const STORAGE_KEY = "node-interface-browser-fallback";
@@ -18,6 +27,7 @@ type StoredProject = {
 
 type BrowserStore = {
   projects: StoredProject[];
+  providerCredentials?: Partial<Record<ProviderCredentialKey, string>>;
 };
 
 function nowIso() {
@@ -42,6 +52,10 @@ function readStore(): BrowserStore {
     const parsed = JSON.parse(raw) as BrowserStore;
     return {
       projects: Array.isArray(parsed.projects) ? parsed.projects : [],
+      providerCredentials:
+        parsed.providerCredentials && typeof parsed.providerCredentials === "object"
+          ? parsed.providerCredentials
+          : {},
     };
   } catch {
     return { projects: [] };
@@ -88,6 +102,17 @@ function updateProjectInStore(projectId: string, updater: (project: StoredProjec
   store.projects = store.projects.map((project) => (project.id === projectId ? updater(project) : project));
   writeStore(store);
   return store;
+}
+
+function listStoredProviderCredentials(): ProviderCredentialStatus[] {
+  const store = readStore();
+  const stored = store.providerCredentials || {};
+
+  return ["OPENAI_API_KEY", "GOOGLE_API_KEY", "TOPAZ_API_KEY"].map((key) => ({
+    key: key as ProviderCredentialKey,
+    configured: Boolean(stored[key as ProviderCredentialKey]?.trim()),
+    source: stored[key as ProviderCredentialKey]?.trim() ? "environment" : "none",
+  }));
 }
 
 export function installBrowserNodeInterface() {
@@ -201,6 +226,30 @@ export function installBrowserNodeInterface() {
     },
     async listProviders(): Promise<ProviderModel[]> {
       return [];
+    },
+    async listProviderCredentials(): Promise<ProviderCredentialStatus[]> {
+      return listStoredProviderCredentials();
+    },
+    async saveProviderCredential(key, value) {
+      const normalized = value.trim();
+      if (!normalized) {
+        throw new Error(`Enter a value for ${key}.`);
+      }
+
+      const store = readStore();
+      store.providerCredentials = {
+        ...(store.providerCredentials || {}),
+        [key]: normalized,
+      };
+      writeStore(store);
+      broadcast("providers.changed");
+    },
+    async clearProviderCredential(key) {
+      const store = readStore();
+      store.providerCredentials = { ...(store.providerCredentials || {}) };
+      delete store.providerCredentials[key];
+      writeStore(store);
+      broadcast("providers.changed");
     },
     subscribe(eventName, listener) {
       const handler = (event: Event) => {

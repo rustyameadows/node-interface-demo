@@ -5,6 +5,8 @@ import type {
   Job,
   JobDebugResponse,
   OpenAIImageMode,
+  ProviderCredentialKey,
+  ProviderCredentialStatus,
   Project,
   ProviderId,
   ProviderModel,
@@ -83,5 +85,8 @@ export type NodeInterface = {
   createJob: (projectId: string, payload: CreateJobRequest) => Promise<Job>;
   getJobDebug: (projectId: string, jobId: string) => Promise<JobDebugResponse>;
   listProviders: () => Promise<ProviderModel[]>;
+  listProviderCredentials: () => Promise<ProviderCredentialStatus[]>;
+  saveProviderCredential: (key: ProviderCredentialKey, value: string) => Promise<void>;
+  clearProviderCredential: (key: ProviderCredentialKey) => Promise<void>;
   subscribe: (event: AppEventName, listener: (payload: AppEventPayload) => void) => () => void;
 };

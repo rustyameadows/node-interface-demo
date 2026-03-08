@@ -1,7 +1,5 @@
 import { nativeImage } from "electron";
 
-export const APP_NAME = "Nodes Node Nodes";
-
 export function createAppIcon() {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">

@@ -35,8 +35,14 @@
 - SQLite-backed durable queue
 - native file import and `app-asset://` delivery
 
+## Milestone 7: Mac Packaging and Credentials (Completed)
+- unsigned Apple Silicon `.app` and `.zip` packaging via `electron-builder`
+- packaged-app icon and branding metadata
+- macOS Keychain-backed provider credentials with env fallback
+- packaged-app verification commands and lifecycle documentation
+
 ## Next
-- packaged app distribution
 - broader automated test coverage for desktop flows
 - queue cancellation / richer controls
 - additional node types and execution surfaces
+- signed / distributable mac release artifacts

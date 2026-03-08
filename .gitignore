@@ -20,6 +20,7 @@
 # production
 /build
 /dist
+/release
 
 # misc
 .DS_Store
@@ -48,3 +49,5 @@ next-env.d.ts
 scaffoldapp/
 .tmp-mcp/
 tsup.config.bundled_*.mjs
+/build-resources/icon.iconset/
+/build-resources/icon.png

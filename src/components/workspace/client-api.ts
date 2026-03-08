@@ -12,6 +12,8 @@ import type {
   CanvasDocument,
   Job,
   OpenAIImageMode,
+  ProviderCredentialKey,
+  ProviderCredentialStatus,
   ProviderId,
   RunnableWorkflowNodeType,
   WorkflowNode,
@@ -39,6 +41,18 @@ export async function removeProject(projectId: string) {
 
 export async function getProviders() {
   return window.nodeInterface.listProviders();
+}
+
+export async function getProviderCredentials(): Promise<ProviderCredentialStatus[]> {
+  return window.nodeInterface.listProviderCredentials();
+}
+
+export async function saveProviderCredential(key: ProviderCredentialKey, value: string) {
+  await window.nodeInterface.saveProviderCredential(key, value);
+}
+
+export async function clearProviderCredential(key: ProviderCredentialKey) {
+  await window.nodeInterface.clearProviderCredential(key);
 }
 
 export async function getCanvasWorkspace(projectId: string) {

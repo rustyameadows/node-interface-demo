@@ -61,8 +61,8 @@ const createJobSchema = z.object({
   }),
 });
 
-function getSubmissionError(input: z.infer<typeof createJobSchema>) {
-  const model = getProviderModel(input.providerId, input.modelId);
+async function getSubmissionError(input: z.infer<typeof createJobSchema>) {
+  const model = await getProviderModel(input.providerId, input.modelId);
   if (!model) {
     return "Unknown provider/model selection.";
   }
@@ -276,7 +276,7 @@ export async function getJobDebug(projectId: string, jobId: string): Promise<Job
 export async function createJob(projectId: string, input: CreateJobRequest) {
   const parsed = createJobSchema.parse(input);
   await syncProviderModels();
-  const submissionError = getSubmissionError(parsed);
+  const submissionError = await getSubmissionError(parsed);
   if (submissionError) {
     throw new Error(submissionError);
   }

@@ -1,6 +1,8 @@
 import type { ModelParameterDefinition } from "@/lib/model-parameters";
 
 export type ProviderId = "openai" | "google-gemini" | "topaz";
+export type ProviderCredentialKey = "OPENAI_API_KEY" | "GOOGLE_API_KEY" | "TOPAZ_API_KEY";
+export type ProviderCredentialSource = "keychain" | "environment" | "none";
 export type ProviderExecutionMode = "generate" | "edit";
 export type OpenAIImageMode = ProviderExecutionMode;
 export type ImageBackground = "auto" | "opaque" | "transparent";
@@ -39,6 +41,12 @@ export type ProviderModel = {
   modelId: string;
   displayName: string;
   capabilities: ProviderModelCapabilities;
+};
+
+export type ProviderCredentialStatus = {
+  key: ProviderCredentialKey;
+  configured: boolean;
+  source: ProviderCredentialSource;
 };
 
 export type WorkflowNodeKind = "model" | "asset-source" | "text-note" | "list" | "text-template";

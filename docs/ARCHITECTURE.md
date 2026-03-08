@@ -51,6 +51,7 @@ Available methods:
 - `listAssets`, `getAsset`, `updateAsset`, `importAssets`
 - `listJobs`, `createJob`, `getJobDebug`
 - `listProviders`
+- `listProviderCredentials`, `saveProviderCredential`, `clearProviderCredential`
 - `subscribe(eventName, listener)`
 
 Available events:
@@ -99,6 +100,10 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 7. Renderer window is created and routed to the last-open project or launcher.
 
 ## Configuration
+Provider credentials resolve in this order:
+1. macOS Keychain values saved from Settings
+2. environment variables from `.env` / `.env.local`
+
 Required only when running real providers:
 
 ```bash
@@ -106,6 +111,8 @@ OPENAI_API_KEY=...
 GOOGLE_API_KEY=...
 TOPAZ_API_KEY=...
 ```
+
+The renderer never receives raw credential values. It only receives provider readiness metadata and credential source/status.
 
 There is no runtime dependency on `DATABASE_URL`, Prisma, or Postgres.
 

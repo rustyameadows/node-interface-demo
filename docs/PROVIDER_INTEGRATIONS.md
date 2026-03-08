@@ -61,12 +61,25 @@ GOOGLE_API_KEY=...
 TOPAZ_API_KEY=...
 ```
 
-The desktop runtime loads `.env` and `.env.local` from the repo root on startup, then reads provider keys from `process.env`.
+Credential resolution order:
+1. macOS Keychain values saved from Project Settings
+2. `.env` / `.env.local` values loaded into `process.env`
 
 Read locations:
 - main process
 - worker process
 - provider adapters
+
+Renderer-facing credential APIs:
+- `listProviderCredentials()`
+- `saveProviderCredential(key, value)`
+- `clearProviderCredential(key)`
+
+Renderer credential state includes:
+- `configured`
+- `source`: `keychain`, `environment`, or `none`
+
+The packaged app can be fully configured from Finder without editing repo env files. In source-run development, `.env.local` remains supported.
 
 ## OpenAI Image Jobs
 - support prompt-only `generate` and reference-image `edit`

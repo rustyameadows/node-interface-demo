@@ -5,8 +5,9 @@ Verify the desktop app in layers so failures are isolated quickly:
 1. static correctness
 2. build correctness
 3. Electron app boot
-4. automated desktop smoke flow
-5. optional manual provider checks
+4. automated unpackaged desktop smoke flow
+5. automated packaged mac smoke flow
+6. optional manual provider checks
 
 ## Baseline Commands
 Run these from the repo root:
@@ -63,6 +64,63 @@ Expected output:
   - `assetCount`
   - `storedAssetFiles`
 
+Important:
+- `npm run smoke:electron` launches the unpackaged Electron runtime from `dist/electron/main.cjs`
+- it is expected to look like a generic Electron app in macOS process chrome
+- it always uses a temporary `NODE_INTERFACE_APP_DATA` directory
+
+## Packaged Mac Smoke Test
+Use the packaged mac smoke flow:
+
+```bash
+npm run smoke:packaged:mac
+```
+
+What it does:
+- builds the app
+- packages the unsigned Apple Silicon `.app` and `.zip`
+- validates the packaged bundle metadata and unpacked native modules
+- launches the packaged `.app` executable through Selenium + `electron-chromedriver`
+- uses a temporary `NODE_INTERFACE_APP_DATA` directory so it does not touch your manual packaged-app data
+- verifies:
+  - branded bundle metadata and icon wiring
+  - preload bridge availability
+  - launcher render
+  - project creation
+  - canvas round-trip
+  - asset import and assets view render
+  - queue view render
+  - provider credentials section render
+  - packaged SQLite and on-disk asset persistence
+
+Expected output:
+- JSON summary printed to stdout with:
+  - `appPath`
+  - `executablePath`
+  - `zipPath`
+  - `appDataRoot`
+  - `projectId`
+  - screenshot paths
+  - `providerSummary`
+
+Important:
+- `npm run smoke:packaged:mac` targets the packaged `.app`, not the unpackaged dev runtime
+- it may briefly open a second packaged-app window while it runs
+- it does not reuse your manual packaged-app data root
+
+## Full Lifecycle Verification
+Use the end-to-end mac lifecycle command:
+
+```bash
+npm run verify:mac-lifecycle
+```
+
+It runs:
+1. `npm run smoke:packaged:mac`
+2. `node --import tsx scripts/print-mac-artifacts.ts`
+
+The final artifact summary prints the `.app`, executable, and `.zip` paths.
+
 ## Dev-App Verification
 For interactive testing:
 
@@ -74,6 +132,11 @@ This should:
 - start Vite on `http://localhost:5173`
 - watch-build Electron main/preload/worker bundles
 - launch Electron against the dev server
+
+Important:
+- `npm run dev` is the unpackaged source-run app
+- it is separate from the packaged `.app`
+- if both are open at once, they are different processes and may use different data roots
 
 If `npm run dev` fails with `Port 5173 is already in use`, clear the stale dev server first:
 
@@ -111,6 +174,20 @@ Run this when touching workflow or asset UX:
    - state changes visible
    - output lands on canvas or in assets as appropriate
 
+## Manual Packaged-App Checklist
+Run this against the packaged `.app` after `npm run package:mac`:
+
+1. Open `release/mac-arm64/Nodes Node Nodes.app` from Finder.
+2. Confirm the app name and pink icon appear in macOS chrome.
+3. Open Project Settings.
+4. Save an OpenAI or Topaz key to Keychain.
+5. Confirm provider readiness updates without editing `.env.local`.
+6. Create or open a project.
+7. Run a real node.
+8. Confirm queue progress and final output persistence.
+9. Quit and relaunch the packaged app.
+10. Confirm the project reopens and Keychain-backed readiness persists.
+
 ## Troubleshooting
 
 ### Blank Electron window
@@ -144,4 +221,5 @@ Update this protocol when any of these change:
 - build commands
 - smoke-test command or coverage
 - Electron boot path
+- mac packaging or packaged-app verification flow
 - required verification steps for canvas/assets/queue flows

@@ -4,14 +4,21 @@ import { eq } from "drizzle-orm";
 import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
 import type { AppEventPayload, CreateJobRequest, ImportAssetInput } from "@/lib/ipc-contract";
 import type { AssetFilterState } from "@/components/workspace/types";
-import { APP_NAME, createAppIcon } from "@/electron/brand";
+import { createAppIcon } from "@/electron/brand";
+import { APP_ID, APP_NAME } from "@/lib/runtime/app-meta";
 import { getDb } from "@/lib/db/client";
 import { jobPreviewFrames } from "@/lib/db/schema";
 import { readAssetContent } from "@/lib/storage/local-storage";
 import { getAsset, importAssets, importAssetsFromPaths, listAssets, readAssetFile, updateAsset } from "@/lib/services/assets";
 import { createJob, getJobDebug, listJobs } from "@/lib/services/jobs";
 import { createProject, deleteProject, listProjects, openProject, updateProject } from "@/lib/services/projects";
-import { listProviders, syncProviderModels } from "@/lib/services/providers";
+import {
+  clearProviderCredential,
+  listProviderCredentials,
+  listProviders,
+  saveProviderCredential,
+  syncProviderModels,
+} from "@/lib/services/providers";
 import { getWorkspaceSnapshot, saveWorkspaceSnapshot } from "@/lib/services/workspace";
 
 const APP_EVENT_CHANNEL = "node-interface:event";
@@ -39,6 +46,7 @@ function applyAppBranding() {
 
   app.setAboutPanelOptions({
     applicationName: APP_NAME,
+    applicationIdentifier: APP_ID,
     applicationVersion: app.getVersion(),
   });
 
@@ -260,6 +268,15 @@ function registerIpc() {
     },
     getJobDebug: async (projectId: string, jobId: string) => getJobDebug(projectId, jobId),
     listProviders: async () => listProviders(),
+    listProviderCredentials: async () => listProviderCredentials(),
+    saveProviderCredential: async (key: "OPENAI_API_KEY" | "GOOGLE_API_KEY" | "TOPAZ_API_KEY", value: string) => {
+      await saveProviderCredential(key, value);
+      broadcastEvent({ event: "providers.changed" });
+    },
+    clearProviderCredential: async (key: "OPENAI_API_KEY" | "GOOGLE_API_KEY" | "TOPAZ_API_KEY") => {
+      await clearProviderCredential(key);
+      broadcastEvent({ event: "providers.changed" });
+    },
   } as const;
 
   ipcMain.handle(APP_INVOKE_CHANNEL, async (_event, method: keyof typeof handlers, ...args: unknown[]) => {

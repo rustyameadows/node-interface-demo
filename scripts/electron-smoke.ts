@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { access, mkdtemp, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { _electron as electron, type Page } from "playwright";
+import { _electron as electron, chromium, type Browser, type Page } from "playwright";
 
+const APP_NAME = "Nodes Node Nodes";
+const PACKAGED_REMOTE_DEBUGGING_PORT = 9339;
 const FILTERS = {
   type: "all" as const,
   ratingAtLeast: 0,
@@ -13,7 +16,17 @@ const FILTERS = {
   sort: "newest" as const,
 };
 
-function projectRoutePattern(projectId?: string, view?: "canvas" | "assets") {
+type RuntimeController = {
+  getPage: () => Promise<Page>;
+  getMetadata: () => Promise<{ name: string; version: string; exePath: string }>;
+  close: () => Promise<void>;
+};
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function projectRoutePattern(projectId?: string, view?: "canvas" | "assets" | "queue" | "settings") {
   if (projectId && view) {
     return new RegExp(`#?/projects/${projectId}/${view}$`);
   }
@@ -23,6 +36,14 @@ function projectRoutePattern(projectId?: string, view?: "canvas" | "assets") {
   }
 
   return /#?\/projects\/[^/]+$/;
+}
+
+function getPackagedExecutablePath() {
+  return path.resolve("release", "mac-arm64", `${APP_NAME}.app`, "Contents", "MacOS", APP_NAME);
+}
+
+function isPackagedMacMode() {
+  return process.argv.includes("--packaged-mac");
 }
 
 async function withTimeout<T>(label: string, promise: Promise<T>, timeoutMs = 15_000): Promise<T> {
@@ -68,33 +89,170 @@ async function openMenuItem(window: Page, itemName: string) {
   await window.getByRole("button", { name: itemName }).click();
 }
 
-async function main() {
-  const appDataRoot = await mkdtemp(path.join(os.tmpdir(), "node-interface-smoke-"));
-  const canvasScreenshotPath = path.join(appDataRoot, "canvas-smoke.png");
-  const assetsScreenshotPath = path.join(appDataRoot, "assets-smoke.png");
-  const queueScreenshotPath = path.join(appDataRoot, "queue-smoke.png");
-  const settingsScreenshotPath = path.join(appDataRoot, "settings-smoke.png");
+async function readPackageVersion() {
+  const pkg = JSON.parse(await readFile(path.resolve("package.json"), "utf8")) as { version?: string };
+  return pkg.version || "0.0.0";
+}
 
-  console.log("Smoke app data root:", appDataRoot);
+async function waitForElectronPage(browser: Browser) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const page = browser
+      .contexts()
+      .flatMap((context) => context.pages())
+      .find((candidate) => !candidate.url().startsWith("devtools://"));
 
-  const electronApp = await withTimeout("electron.launch", electron.launch({
-    args: [path.resolve("dist/electron/main.cjs")],
+    if (page) {
+      return page;
+    }
+
+    await sleep(500);
+  }
+
+  throw new Error("Timed out waiting for the packaged Electron window.");
+}
+
+async function launchPackagedRuntime(launchTarget: string, appDataRoot: string): Promise<RuntimeController> {
+  const packageVersion = await readPackageVersion();
+  const child = spawn(launchTarget, [`--remote-debugging-port=${PACKAGED_REMOTE_DEBUGGING_PORT}`], {
     env: {
       ...process.env,
       NODE_ENV: "production",
       NODE_INTERFACE_APP_DATA: appDataRoot,
     },
-  }));
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
+  let stderr = "";
+  let stdout = "";
+
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const browser = await withTimeout(
+    "chromium.connectOverCDP",
+    (async () => {
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        if (child.exitCode !== null) {
+          throw new Error(`Packaged app exited before CDP attach.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+        }
+
+        try {
+          return await chromium.connectOverCDP(`http://127.0.0.1:${PACKAGED_REMOTE_DEBUGGING_PORT}`);
+        } catch {
+          await sleep(500);
+        }
+      }
+
+      throw new Error(`Timed out connecting to the packaged app over CDP.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+    })(),
+    35_000
+  );
+
+  return {
+    getPage: async () => waitForElectronPage(browser),
+    getMetadata: async () => ({
+      name: APP_NAME,
+      version: packageVersion,
+      exePath: launchTarget,
+    }),
+    close: async () => {
+      await browser.close();
+      if (child.exitCode === null) {
+        child.kill("SIGTERM");
+        await withTimeout(
+          "packaged child exit",
+          new Promise<void>((resolve) => {
+            child.once("exit", () => resolve());
+            setTimeout(() => resolve(), 5_000);
+          }),
+          6_000
+        );
+      }
+    },
+  };
+}
+
+async function launchUnpackagedRuntime(launchTarget: string, appDataRoot: string): Promise<RuntimeController> {
+  const electronApp = await withTimeout(
+    "electron.launch",
+    electron.launch({
+      args: [launchTarget],
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        NODE_INTERFACE_APP_DATA: appDataRoot,
+      },
+    }),
+    30_000
+  );
+
+  return {
+    getPage: async () => electronApp.firstWindow(),
+    getMetadata: async () =>
+      withTimeout(
+        "electron.appMetadata",
+        electronApp.evaluate(({ app }) => ({
+          name: app.getName(),
+          version: app.getVersion(),
+          exePath: app.getPath("exe"),
+        })),
+        15_000
+      ),
+    close: async () => {
+      await electronApp.close();
+    },
+  };
+}
+
+async function launchRuntime(launchTarget: string, appDataRoot: string) {
+  if (isPackagedMacMode()) {
+    return launchPackagedRuntime(launchTarget, appDataRoot);
+  }
+
+  return launchUnpackagedRuntime(launchTarget, appDataRoot);
+}
+
+async function main() {
+  const runtimeMode = isPackagedMacMode() ? "packaged-mac" : "unpackaged";
+  const appDataRoot = await mkdtemp(path.join(os.tmpdir(), `node-interface-smoke-${runtimeMode}-`));
+  const canvasScreenshotPath = path.join(appDataRoot, "canvas-smoke.png");
+  const assetsScreenshotPath = path.join(appDataRoot, "assets-smoke.png");
+  const queueScreenshotPath = path.join(appDataRoot, "queue-smoke.png");
+  const settingsScreenshotPath = path.join(appDataRoot, "settings-smoke.png");
+  const launchTarget = isPackagedMacMode() ? getPackagedExecutablePath() : path.resolve("dist/electron/main.cjs");
+
+  await access(launchTarget);
+  console.log("Smoke runtime mode:", runtimeMode);
+  console.log("Smoke app data root:", appDataRoot);
+  console.log("Smoke launch target:", launchTarget);
+
+  const runtime = await launchRuntime(launchTarget, appDataRoot);
   let window: Page | null = null;
+
   try {
     console.log("Electron launched");
-    window = await withTimeout("electron.firstWindow", electronApp.firstWindow());
+    const appMetadata = await runtime.getMetadata();
+    assert.equal(appMetadata.name, APP_NAME, "Expected branded app name.");
+    if (isPackagedMacMode()) {
+      assert.match(
+        appMetadata.exePath,
+        /Nodes Node Nodes\.app\/Contents\/MacOS\/Nodes Node Nodes$/,
+        "Expected packaged executable path."
+      );
+    }
+    console.log("App metadata:", JSON.stringify(appMetadata, null, 2));
+
+    window = await withTimeout("runtime.firstWindow", runtime.getPage(), 30_000);
     window.on("console", (message) => {
       console.log(`[window:${message.type()}]`, message.text());
     });
 
-    await withTimeout("window.domcontentloaded", window.waitForLoadState("domcontentloaded"));
+    await withTimeout("window.domcontentloaded", window.waitForLoadState("domcontentloaded"), 30_000);
+    assert.equal(await window.title(), APP_NAME, "Expected branded window title.");
     console.log("Window loaded:", await window.title(), window.url());
 
     await withTimeout(
@@ -267,7 +425,11 @@ async function main() {
       "settings heading",
       window.getByRole("heading", { name: "Project Settings" }).waitFor({ state: "visible", timeout: 15_000 })
     );
-    const projectNameValue = await window.getByRole("textbox").inputValue();
+    await withTimeout(
+      "provider credentials heading",
+      window.getByRole("heading", { name: "Provider Credentials" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    const projectNameValue = await window.getByRole("textbox").first().inputValue();
     assert.ok(projectNameValue.trim().length > 0, "Expected a project name in settings.");
     await window.screenshot({ path: settingsScreenshotPath, fullPage: true });
     console.log("Settings screenshot:", settingsScreenshotPath);
@@ -280,8 +442,11 @@ async function main() {
     console.log(
       JSON.stringify(
         {
+          runtimeMode,
+          launchTarget,
           projectId,
           appDataRoot,
+          appMetadata,
           canvasScreenshotPath,
           assetsScreenshotPath,
           queueScreenshotPath,
@@ -299,7 +464,7 @@ async function main() {
     await captureFailureState(window, appDataRoot);
     throw error;
   } finally {
-    await electronApp.close();
+    await runtime.close();
   }
 }
 

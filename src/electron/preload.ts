@@ -24,6 +24,9 @@ const nodeInterface: NodeInterface = {
   createJob: (projectId, payload) => invoke("createJob", projectId, payload),
   getJobDebug: (projectId, jobId) => invoke("getJobDebug", projectId, jobId),
   listProviders: () => invoke("listProviders"),
+  listProviderCredentials: () => invoke("listProviderCredentials"),
+  saveProviderCredential: (key, value) => invoke("saveProviderCredential", key, value),
+  clearProviderCredential: (key) => invoke("clearProviderCredential", key),
   subscribe: (eventName: AppEventName, listener: (payload: AppEventPayload) => void) => {
     const handler = (_event: unknown, payload: AppEventPayload) => {
       if (payload.event === eventName) {
