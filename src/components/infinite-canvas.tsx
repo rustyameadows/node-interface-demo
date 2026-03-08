@@ -2,6 +2,7 @@
 
 import {
   type CSSProperties,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -12,7 +13,16 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { getAssetFileUrl } from "@/components/workspace/client-api";
-import type { CanvasConnectionSelection } from "@/components/workspace/types";
+import type { WorkflowNodeSize } from "@/components/workspace/types";
+import type {
+  CanvasAccentType,
+  CanvasConnection,
+  CanvasInsertRequest,
+  CanvasPhantomPreview,
+  CanvasRenderNode,
+  CanvasSelectionAction,
+} from "@/components/canvas-node-types";
+import { clampWorkflowNodeSize } from "@/lib/canvas-node-presentation";
 import { isRunnableOpenAiImageModel, parseImageSize } from "@/lib/openai-image-settings";
 import { isRunnableTopazGigapixelModel } from "@/lib/topaz-gigapixel-settings";
 import styles from "./infinite-canvas.module.css";
@@ -23,72 +33,26 @@ type CanvasViewport = {
   zoom: number;
 };
 
-type CanvasNode = {
-  id: string;
-  label: string;
-  kind: "model" | "asset-source" | "text-note" | "list" | "text-template";
-  providerId: "openai" | "google-gemini" | "topaz";
-  modelId: string;
-  nodeType: "text-gen" | "image-gen" | "video-gen" | "transform" | "text-note" | "list" | "text-template";
-  outputType: "image" | "video" | "text";
-  prompt: string;
-  settings: Record<string, unknown>;
-  sourceAssetId: string | null;
-  sourceAssetMimeType: string | null;
-  sourceJobId: string | null;
-  sourceOutputIndex: number | null;
-  processingState: "queued" | "running" | "failed" | null;
-  promptSourceNodeId: string | null;
-  upstreamNodeIds: string[];
-  upstreamAssetIds: string[];
-  assetOrigin?: "generated" | "uploaded" | null;
-  sourceModelNodeId?: string | null;
-  displayModelName?: string | null;
-  displaySourceLabel?: string | null;
-  inputSemanticTypes?: Array<CanvasAccentType>;
-  outputSemanticType?: CanvasAccentType;
-  previewImageUrl?: string | null;
-  hasStartedJob?: boolean;
-  listPreviewColumns?: string[];
-  listPreviewRows?: string[][];
-  listRowCount?: number;
-  listColumnCount?: number;
-  templateRegisteredColumnCount?: number;
-  templateUnresolvedCount?: number;
-  templateReady?: boolean;
-  x: number;
-  y: number;
-};
-
-export type CanvasInsertRequest = {
-  x: number;
-  y: number;
-  clientX: number;
-  clientY: number;
-  connectionNodeId?: string;
-  connectionPort?: "input" | "output";
-};
-
-type CanvasAccentType = CanvasConnectionSelection["semanticType"];
-
-export type CanvasConnection = CanvasConnectionSelection;
-
 type Props = {
-  nodes: CanvasNode[];
+  nodes: CanvasRenderNode[];
   selectedNodeIds: string[];
   selectedConnectionId: string | null;
   viewport: CanvasViewport;
   onSelectSingleNode: (nodeId: string | null) => void;
   onToggleNodeSelection: (nodeId: string) => void;
   onMarqueeSelectNodes: (nodeIds: string[]) => void;
-  onUpdateTextNote: (nodeId: string, prompt: string) => void;
   onRequestInsertMenu: (request: CanvasInsertRequest) => void;
   onDropFiles: (files: File[], position: { x: number; y: number }) => void;
   onViewportChange: (viewport: CanvasViewport) => void;
   onCommitNodePositions: (positions: Record<string, { x: number; y: number }>) => void;
+  onCommitNodeSize: (nodeId: string, size: WorkflowNodeSize) => void;
   onConnectNodes: (sourceNodeId: string, targetNodeId: string) => void;
   onSelectConnection: (connection: CanvasConnection | null) => void;
   onNodeDoubleClick: (nodeId: string) => void;
+  renderNodeContent: (node: CanvasRenderNode) => ReactNode;
+  activePhantomPreview?: CanvasPhantomPreview | null;
+  onRunActiveNode?: (nodeId: string) => void;
+  selectionActions?: CanvasSelectionAction[];
 };
 
 type InteractionState =
@@ -122,11 +86,18 @@ type InteractionState =
       startY: number;
       endX: number;
       endY: number;
+    }
+  | {
+      type: "resize";
+      nodeId: string;
+      startClientX: number;
+      startClientY: number;
+      startSize: { width: number; height: number };
+      aspectRatio: number | null;
     };
 
 const DEFAULT_NODE_WIDTH = 212;
 const DEFAULT_NODE_HEIGHT = 72;
-const IMAGE_NODE_LONG_EDGE = 260;
 const LINE_DELTA_PX = 16;
 const WHEEL_ZOOM_SENSITIVITY = 0.00125;
 const GESTURE_ZOOM_SENSITIVITY = 0.00165;
@@ -176,14 +147,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function getInputPortPoint(node: CanvasNode, size: { width: number; height: number }) {
+function getInputPortPoint(node: CanvasRenderNode, size: { width: number; height: number }) {
   return {
     x: node.x,
     y: node.y + size.height / 2,
   };
 }
 
-function getOutputPortPoint(node: CanvasNode, size: { width: number; height: number }) {
+function getOutputPortPoint(node: CanvasRenderNode, size: { width: number; height: number }) {
   return {
     x: node.x + size.width,
     y: node.y + size.height / 2,
@@ -205,26 +176,22 @@ function normalizeWheelDelta(deltaY: number, deltaMode: number) {
   return deltaY;
 }
 
-function getNodeOutputSemanticType(node: CanvasNode) {
+function getNodeOutputSemanticType(node: CanvasRenderNode) {
   return node.outputSemanticType || node.outputType;
 }
 
-function getNodeOutputAccentType(node: CanvasNode): CanvasAccentType {
+function getNodeOutputAccentType(node: CanvasRenderNode): CanvasAccentType {
   if (node.kind === "model") {
     return "citrus";
   }
   return getNodeOutputSemanticType(node);
 }
 
-function isGeneratedTextNoteNode(node: CanvasNode) {
+function isGeneratedTextNoteNode(node: CanvasRenderNode) {
   return (
     node.kind === "text-note" &&
     (node.settings.source === "generated-model-text" || node.settings.source === "template-output")
   );
-}
-
-function hasCustomModelTitle(label: string) {
-  return !/^Node \d+( Copy)?$/.test(label.trim());
 }
 
 function isEditableElement(target: EventTarget | null) {
@@ -237,13 +204,13 @@ function isEditableElement(target: EventTarget | null) {
   );
 }
 
-function isGeneratedAssetNode(node: CanvasNode) {
+function isGeneratedAssetNode(node: CanvasRenderNode) {
   return node.kind === "asset-source" && node.assetOrigin === "generated";
 }
 
 function getImageFrameAspectRatio(
-  node: CanvasNode,
-  nodesById: Record<string, CanvasNode>,
+  node: CanvasRenderNode,
+  nodesById: Record<string, CanvasRenderNode>,
   imageAspectRatios: Record<string, number>
 ) {
   const measuredRatio = imageAspectRatios[node.id];
@@ -299,22 +266,6 @@ function getImageFrameAspectRatio(
   }
 
   return 1;
-}
-
-function getImageNodeDisplaySize(aspectRatio: number) {
-  const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
-
-  if (safeAspectRatio >= 1) {
-    return {
-      width: IMAGE_NODE_LONG_EDGE,
-      height: Math.round(IMAGE_NODE_LONG_EDGE / safeAspectRatio),
-    };
-  }
-
-  return {
-    width: Math.round(IMAGE_NODE_LONG_EDGE * safeAspectRatio),
-    height: IMAGE_NODE_LONG_EDGE,
-  };
 }
 
 function getInputAccentGradient(inputSemanticTypes: CanvasAccentType[] | undefined) {
@@ -448,8 +399,8 @@ function getModelBorderLayers(leftAccentTypes: CanvasAccentType[], rightAccentTy
 function getSelectionHaloColors(
   leftAccentTypes: CanvasAccentType[],
   rightAccentType: CanvasAccentType,
-  kind: CanvasNode["kind"],
-  assetOrigin?: CanvasNode["assetOrigin"]
+  kind: CanvasRenderNode["kind"],
+  assetOrigin?: CanvasRenderNode["assetOrigin"]
 ) {
   if (kind === "list") {
     const color = semanticColor("text");
@@ -515,14 +466,18 @@ export function InfiniteCanvas({
   onSelectSingleNode,
   onToggleNodeSelection,
   onMarqueeSelectNodes,
-  onUpdateTextNote,
   onRequestInsertMenu,
   onDropFiles,
   onViewportChange,
   onCommitNodePositions,
+  onCommitNodeSize,
   onConnectNodes,
   onSelectConnection,
   onNodeDoubleClick,
+  renderNodeContent,
+  activePhantomPreview,
+  onRunActiveNode,
+  selectionActions = [],
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const nodeElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -558,6 +513,7 @@ export function InfiniteCanvas({
     targetY: number;
   } | null>(null);
   const [dragDraftPositions, setDragDraftPositions] = useState<Record<string, { x: number; y: number }> | null>(null);
+  const [resizeDraftSizes, setResizeDraftSizes] = useState<Record<string, { width: number; height: number }> | null>(null);
   const [marqueeDraft, setMarqueeDraft] = useState<{
     startX: number;
     startY: number;
@@ -582,7 +538,7 @@ export function InfiniteCanvas({
   }, [dragDraftPositions, nodes]);
 
   const nodesById = useMemo(() => {
-    return displayNodes.reduce<Record<string, CanvasNode>>((acc, node) => {
+    return displayNodes.reduce<Record<string, CanvasRenderNode>>((acc, node) => {
       acc[node.id] = node;
       return acc;
     }, {});
@@ -590,9 +546,24 @@ export function InfiniteCanvas({
 
   const getNodeSize = useCallback(
     (nodeId: string) => {
-      return nodeSizes[nodeId] || { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT };
+      const resized = resizeDraftSizes?.[nodeId];
+      if (resized) {
+        return resized;
+      }
+
+      const measured = nodeSizes[nodeId];
+      if (measured) {
+        return measured;
+      }
+
+      const node = nodesById[nodeId];
+      if (node) {
+        return node.resolvedSize;
+      }
+
+      return { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT };
     },
-    [nodeSizes]
+    [nodeSizes, nodesById, resizeDraftSizes]
   );
 
   useLayoutEffect(() => {
@@ -830,6 +801,38 @@ export function InfiniteCanvas({
         return;
       }
 
+      if (interaction.type === "resize") {
+        const node = nodesById[interaction.nodeId];
+        if (!node) {
+          return;
+        }
+
+        const nextWidth = interaction.startSize.width + (event.clientX - interaction.startClientX) / viewRef.current.zoom;
+        const nextHeight = interaction.startSize.height + (event.clientY - interaction.startClientY) / viewRef.current.zoom;
+        const unclamped =
+          interaction.aspectRatio && interaction.aspectRatio > 0
+            ? (() => {
+                const widthDelta = nextWidth - interaction.startSize.width;
+                const heightDelta = nextHeight - interaction.startSize.height;
+                const dominantDelta =
+                  Math.abs(widthDelta) >= Math.abs(heightDelta) * interaction.aspectRatio ? widthDelta : heightDelta * interaction.aspectRatio;
+                const width = interaction.startSize.width + dominantDelta;
+                return {
+                  width,
+                  height: width / interaction.aspectRatio,
+                };
+              })()
+            : {
+                width: nextWidth,
+                height: nextHeight,
+              };
+        const size = clampWorkflowNodeSize(node, unclamped, interaction.aspectRatio || undefined);
+        setResizeDraftSizes({
+          [node.id]: size,
+        });
+        return;
+      }
+
       if (interaction.type === "marquee") {
         event.preventDefault();
         window.getSelection()?.removeAllRanges();
@@ -856,7 +859,7 @@ export function InfiniteCanvas({
         targetY: point.y,
       });
     },
-    [scheduleViewportCommit, toWorldPoint]
+    [nodesById, scheduleViewportCommit, toWorldPoint]
   );
 
   const handlePointerUp = useCallback((event: PointerEvent) => {
@@ -880,6 +883,14 @@ export function InfiniteCanvas({
         onCommitNodePositions(dragDraftPositions);
       }
       setDragDraftPositions(null);
+    }
+
+    if (interaction.type === "resize") {
+      const nextSize = resizeDraftSizes?.[interaction.nodeId];
+      if (nextSize) {
+        onCommitNodeSize(interaction.nodeId, nextSize);
+      }
+      setResizeDraftSizes(null);
     }
 
     if (interaction.type === "marquee") {
@@ -915,9 +926,11 @@ export function InfiniteCanvas({
     isCanvasBackgroundTarget,
     nodes,
     onCommitNodePositions,
+    onCommitNodeSize,
     onMarqueeSelectNodes,
     onRequestInsertMenu,
     toWorldPoint,
+    resizeDraftSizes,
   ]);
 
   useEffect(() => {
@@ -1147,14 +1160,26 @@ export function InfiniteCanvas({
   );
 
   const onNodePointerDown = useCallback(
-    (node: CanvasNode, event: ReactPointerEvent<HTMLDivElement>) => {
+    (node: CanvasRenderNode, event: ReactPointerEvent<HTMLDivElement>) => {
       event.stopPropagation();
-      onSelectConnection(null);
 
       if (event.shiftKey || event.metaKey || event.ctrlKey) {
+        event.currentTarget.focus();
         onToggleNodeSelection(node.id);
         return;
       }
+
+      const target = event.target as HTMLElement | null;
+      const requiresDragHandle = node.renderMode === "full" || node.renderMode === "resized";
+      const hasDragHandle = Boolean(target?.closest("[data-node-drag-handle='true']"));
+      if (requiresDragHandle && !hasDragHandle) {
+        if (!(selectedNodeIds.length === 1 && selectedNodeIds[0] === node.id)) {
+          onSelectSingleNode(node.id);
+        }
+        return;
+      }
+
+      event.currentTarget.focus();
 
       const point = toWorldPoint(event.clientX, event.clientY);
       const draggingSelectedGroup = selectedNodeIds.includes(node.id) && selectedNodeIds.length > 1;
@@ -1184,11 +1209,29 @@ export function InfiniteCanvas({
         onSelectSingleNode(node.id);
       }
     },
-    [nodesById, onSelectConnection, onSelectSingleNode, onToggleNodeSelection, selectedNodeIds, toWorldPoint]
+    [nodesById, onSelectSingleNode, onToggleNodeSelection, selectedNodeIds, toWorldPoint]
+  );
+
+  const onResizeHandlePointerDown = useCallback(
+    (node: CanvasRenderNode, event: ReactPointerEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
+      const startSize = getNodeSize(node.id);
+      interactionRef.current = {
+        type: "resize",
+        nodeId: node.id,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startSize,
+        aspectRatio: node.lockAspectRatio ? startSize.width / Math.max(1, startSize.height) : null,
+      };
+      onSelectSingleNode(node.id);
+    },
+    [getNodeSize, onSelectSingleNode]
   );
 
   const onPortPointerDown = useCallback(
-    (node: CanvasNode, port: "input" | "output", event: ReactPointerEvent<HTMLButtonElement>) => {
+    (node: CanvasRenderNode, port: "input" | "output", event: ReactPointerEvent<HTMLButtonElement>) => {
       event.stopPropagation();
       event.preventDefault();
       onSelectConnection(null);
@@ -1276,6 +1319,65 @@ export function InfiniteCanvas({
     return ids;
   }, [connectionDraft?.nodeId, edges, selectedConnectionId]);
 
+  const floatingSelectionBounds = useMemo(() => {
+    if (selectedNodeIds.length < 2 || selectionActions.length === 0) {
+      return null;
+    }
+
+    const selectedNodes = displayNodes.filter((node) => selectedNodeIds.includes(node.id));
+    if (selectedNodes.length === 0) {
+      return null;
+    }
+
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+
+    for (const node of selectedNodes) {
+      const size = getNodeSize(node.id);
+      minX = Math.min(minX, node.x);
+      maxX = Math.max(maxX, node.x + size.width);
+      minY = Math.min(minY, node.y);
+    }
+
+    return {
+      x: Math.round((minX + maxX) / 2),
+      y: Math.round(minY - 24),
+    };
+  }, [displayNodes, getNodeSize, selectedNodeIds, selectionActions.length]);
+
+  const phantomLayout = useMemo(() => {
+    if (!activePhantomPreview) {
+      return null;
+    }
+
+    const sourceNode = nodesById[activePhantomPreview.sourceNodeId];
+    if (!sourceNode) {
+      return null;
+    }
+
+    const sourceSize = getNodeSize(sourceNode.id);
+    const startX = sourceNode.x + sourceSize.width + 84;
+    const startY = sourceNode.y;
+    const nodes = activePhantomPreview.nodes.map((phantomNode, index) => {
+      const width = phantomNode.width || 184;
+      const height = phantomNode.height || 108;
+      return {
+        ...phantomNode,
+        x: startX + Math.floor(index / 3) * 32,
+        y: startY + (index % 3) * (height + 18),
+        width,
+        height,
+      };
+    });
+
+    return {
+      sourceNode,
+      sourceSize,
+      nodes,
+    };
+  }, [activePhantomPreview, getNodeSize, nodesById]);
+
   return (
     <div
       ref={containerRef}
@@ -1354,6 +1456,20 @@ export function InfiniteCanvas({
               }
             />
           ) : null}
+          {phantomLayout
+            ? phantomLayout.nodes.map((phantomNode) => (
+                <path
+                  key={`phantom-edge-${phantomNode.id}`}
+                  className={styles.phantomConnection}
+                  d={curvePath(
+                    phantomLayout.sourceNode.x + phantomLayout.sourceSize.width,
+                    phantomLayout.sourceNode.y + phantomLayout.sourceSize.height / 2,
+                    phantomNode.x,
+                    phantomNode.y + phantomNode.height / 2
+                  )}
+                />
+              ))
+            : null}
         </svg>
 
         {displayNodes.map((node) => {
@@ -1364,10 +1480,6 @@ export function InfiniteCanvas({
           const isFunctionNode = node.kind === "text-template";
           const isGeneratedAsset = isGeneratedAssetNode(node);
           const isGeneratedTextNote = isGeneratedTextNoteNode(node);
-          const isPendingGeneratedText =
-            isTextNote &&
-            node.settings.source === "generated-model-text" &&
-            (node.processingState === "queued" || node.processingState === "running");
           const isUploadedAsset = node.kind === "asset-source" && node.assetOrigin === "uploaded";
           const imageSourceUrl =
             node.outputType === "image"
@@ -1400,7 +1512,6 @@ export function InfiniteCanvas({
           const imageFrameAspectRatio = shouldRenderImageFrame
             ? getImageFrameAspectRatio(node, nodesById, imageAspectRatios)
             : 1;
-          const imageNodeDisplaySize = shouldRenderImageFrame ? getImageNodeDisplaySize(imageFrameAspectRatio) : null;
           const generatedBorderGradient = getBorderGradient(["citrus"], semanticOutputType);
           const modelBorderLayers = getModelBorderLayers(
             (node.inputSemanticTypes && node.inputSemanticTypes.length > 0
@@ -1422,13 +1533,11 @@ export function InfiniteCanvas({
             node.kind,
             node.assetOrigin
           );
-          const showsCustomModelTitle = isModelNode && hasCustomModelTitle(node.label);
-          const displayFooterLabel =
-            node.displaySourceLabel ||
-            (isGeneratedAsset ? node.displayModelName || node.modelId : node.displayModelName || node.providerId);
           const nodeStyle: CSSProperties = {
             left: `${node.x}px`,
             top: `${node.y}px`,
+            width: `${getNodeSize(node.id).width}px`,
+            height: `${getNodeSize(node.id).height}px`,
             "--node-output-accent": outputColor,
             "--node-border-gradient": generatedBorderGradient,
             "--model-border-top": modelBorderLayers.top,
@@ -1443,12 +1552,6 @@ export function InfiniteCanvas({
             "--node-glow-left-bottom": selectionHaloColors.leftBottom,
             "--node-glow-right": selectionHaloColors.right,
             "--node-right-accent": semanticColor(isModelNode ? modelRightAccentType : isFunctionNode ? functionRightAccentType : outputAccentType),
-            ...(imageNodeDisplaySize
-              ? {
-                  width: `${imageNodeDisplaySize.width}px`,
-                  height: `${imageNodeDisplaySize.height}px`,
-                }
-              : {}),
           } as CSSProperties;
           const inputPortStyle = {
             "--port-fill": inputAccentGradient,
@@ -1470,7 +1573,7 @@ export function InfiniteCanvas({
               }}
               role="button"
               tabIndex={0}
-              className={`${styles.node} ${isSelected ? styles.nodeSelected : ""} ${shouldRenderImageFrame ? styles.nodeWithImage : ""} ${isGeneratedAsset ? styles.nodeGeneratedAsset : ""} ${isUploadedAsset ? styles.nodeUploadedAsset : ""} ${isTextNote ? styles.nodeTextNote : ""} ${isGeneratedTextNote ? styles.nodeGeneratedTextNote : ""} ${isListNode ? styles.nodeList : ""} ${isTextTemplateNode ? styles.nodeTextTemplate : ""} ${isModelNode || isFunctionNode ? styles.nodeModel : ""} ${activeConnectionNodeIds.has(node.id) ? styles.nodePortActive : ""} ${showsProcessingShell ? styles.nodeGeneratedProcessing : ""}`}
+              className={`${styles.node} ${isSelected ? styles.nodeSelected : ""} ${shouldRenderImageFrame ? styles.nodeWithImage : ""} ${isGeneratedAsset ? styles.nodeGeneratedAsset : ""} ${isUploadedAsset ? styles.nodeUploadedAsset : ""} ${isTextNote ? styles.nodeTextNote : ""} ${isGeneratedTextNote ? styles.nodeGeneratedTextNote : ""} ${isListNode ? styles.nodeList : ""} ${isTextTemplateNode ? styles.nodeTextTemplate : ""} ${isModelNode || isFunctionNode ? styles.nodeModel : ""} ${activeConnectionNodeIds.has(node.id) ? styles.nodePortActive : ""} ${showsProcessingShell ? styles.nodeGeneratedProcessing : ""} ${node.renderMode === "compact" ? styles.nodeCompactMode : ""} ${node.renderMode === "full" ? styles.nodeFullMode : ""} ${node.renderMode === "resized" ? styles.nodeResizedMode : ""}`}
               style={nodeStyle}
               onClick={(event) => {
                 event.stopPropagation();
@@ -1484,7 +1587,12 @@ export function InfiniteCanvas({
                 if (event.target !== event.currentTarget || isEditableElement(event.target)) {
                   return;
                 }
-                if (event.key === "Enter" || event.key === " ") {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  onNodeDoubleClick(node.id);
+                  return;
+                }
+                if (event.key === " ") {
                   event.preventDefault();
                   onSelectSingleNode(node.id);
                 }
@@ -1515,158 +1623,144 @@ export function InfiniteCanvas({
               ) : null}
 
               {shouldRenderImageFrame ? (
-                <div
-                  className={`${styles.sourcePreviewFrame} ${isGeneratedAsset ? styles.sourcePreviewFrameGenerated : ""} ${isUploadedAsset ? styles.sourcePreviewFrameUploaded : ""} ${showsProcessingShell ? styles.sourcePreviewFrameProcessing : ""} ${
-                    !hasImageSource ? styles.sourcePreviewFramePlaceholder : ""
-                  }`}
-                  style={{
-                    aspectRatio: String(imageFrameAspectRatio),
-                  }}
-                >
-                  {hasImageSource ? (
-                    <img
-                      className={styles.sourcePreviewImage}
-                      src={imageSourceUrl || undefined}
-                      alt={`${node.label} source`}
-                      draggable={false}
-                      onLoad={(event) => {
-                        const target = event.currentTarget;
-                        if (!target.naturalWidth || !target.naturalHeight) {
-                          return;
-                        }
-                        const nextRatio = target.naturalWidth / target.naturalHeight;
-                        if (!Number.isFinite(nextRatio) || nextRatio <= 0) {
-                          return;
-                        }
-
-                        setImageAspectRatios((prev) => {
-                          const currentRatio = prev[node.id];
-                          if (currentRatio && Math.abs(currentRatio - nextRatio) < 0.005) {
-                            return prev;
-                          }
-                          return {
-                            ...prev,
-                            [node.id]: nextRatio,
-                          };
-                        });
-                      }}
-                    />
-                  ) : (
-                    <div className={styles.imagePlaceholderSurface} />
-                  )}
-                  {showProcessingState ? (
-                    <div className={styles.imageNodeStatus}>
-                      <span className={styles.statusBubble} data-state={node.processingState || undefined}>
-                        {node.processingState}
-                      </span>
-                    </div>
-                  ) : null}
-                  <div className={styles.imageNodeFooter}>
-                    <span>{displayFooterLabel}</span>
-                    <span>{node.outputType}</span>
-                  </div>
-                </div>
-              ) : isTextNote ? (
-                <>
-                  {isSelected ? (
-                    <textarea
-                      className={styles.textNoteEditor}
-                      value={node.prompt}
-                      spellCheck={false}
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      readOnly={isPendingGeneratedText}
-                      onPointerDown={(event) => {
-                        event.stopPropagation();
-                      }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                      }}
-                      onKeyDown={(event) => {
-                        event.stopPropagation();
-                      }}
-                      onChange={(event) => onUpdateTextNote(node.id, event.target.value)}
-                      placeholder={isPendingGeneratedText ? "Generating text…" : "Write prompt notes here"}
-                    />
-                  ) : (
-                    <div className={styles.textNotePreview}>
-                      {node.prompt.trim() || (isPendingGeneratedText ? "Generating text…" : "Empty note")}
-                    </div>
-                  )}
-                </>
-              ) : isListNode ? (
-                <div className={styles.listNodeBody}>
-                  <div className={styles.listNodeHeader}>
-                    <span>{node.label}</span>
-                    <span>{`${node.listColumnCount || 0} × ${node.listRowCount || 0}`}</span>
-                  </div>
-                  <div className={styles.listNodeTable}>
-                    <div className={styles.listNodeColumns}>
-                      {(node.listPreviewColumns && node.listPreviewColumns.length > 0
-                        ? node.listPreviewColumns
-                        : ["No columns"]
-                      ).map((columnLabel, index) => (
-                        <span key={`${node.id}-column-${index}`}>{columnLabel}</span>
-                      ))}
-                    </div>
-                    <div className={styles.listNodeRows}>
-                      {(node.listPreviewRows && node.listPreviewRows.length > 0 ? node.listPreviewRows : [["Add values"]]).map(
-                        (row, rowIndex) => (
-                          <div key={`${node.id}-row-${rowIndex}`} className={styles.listNodeRow}>
-                            {row.map((cell, cellIndex) => (
-                              <span key={`${node.id}-cell-${rowIndex}-${cellIndex}`}>{cell}</span>
-                            ))}
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : isTextTemplateNode ? (
-                <div
-                  className={`${styles.modelPill} ${
-                    hasCustomModelTitle(node.label) ? styles.modelPillWithTitle : styles.modelPillSolo
-                  }`}
-                >
-                  {hasCustomModelTitle(node.label) ? <div className={styles.modelPillTitle}>{node.label}</div> : null}
-                  <div className={styles.modelPillName}>{node.displayModelName || "Template"}</div>
-                </div>
-              ) : (
-                isModelNode ? (
+                <div className={styles.assetNodeLayout}>
                   <div
-                    className={`${styles.modelPill} ${
-                      showsCustomModelTitle ? styles.modelPillWithTitle : styles.modelPillSolo
+                    className={`${styles.sourcePreviewFrame} ${isGeneratedAsset ? styles.sourcePreviewFrameGenerated : ""} ${isUploadedAsset ? styles.sourcePreviewFrameUploaded : ""} ${showsProcessingShell ? styles.sourcePreviewFrameProcessing : ""} ${
+                      !hasImageSource ? styles.sourcePreviewFramePlaceholder : ""
                     }`}
+                    style={{
+                      aspectRatio: String(imageFrameAspectRatio),
+                    }}
                   >
-                    {showsCustomModelTitle ? (
-                      <div className={styles.modelPillTitle}>{node.label}</div>
-                    ) : null}
-                    <div className={styles.modelPillName}>{node.displayModelName || node.modelId}</div>
-                  </div>
-                ) : (
-                  <>
-                    <div className={styles.nodeTitle}>
-                      <span>{node.label}</span>
-                      {showProcessingState ? (
+                    {hasImageSource ? (
+                      <img
+                        className={styles.sourcePreviewImage}
+                        src={imageSourceUrl || undefined}
+                        alt={`${node.label} source`}
+                        draggable={false}
+                        onLoad={(event) => {
+                          const target = event.currentTarget;
+                          if (!target.naturalWidth || !target.naturalHeight) {
+                            return;
+                          }
+                          const nextRatio = target.naturalWidth / target.naturalHeight;
+                          if (!Number.isFinite(nextRatio) || nextRatio <= 0) {
+                            return;
+                          }
+
+                          setImageAspectRatios((prev) => {
+                            const currentRatio = prev[node.id];
+                            if (currentRatio && Math.abs(currentRatio - nextRatio) < 0.005) {
+                              return prev;
+                            }
+                            return {
+                              ...prev,
+                              [node.id]: nextRatio,
+                            };
+                          });
+                        }}
+                      />
+                    ) : (
+                      <div className={styles.imagePlaceholderSurface} />
+                    )}
+                    {showProcessingState ? (
+                      <div className={styles.imageNodeStatus}>
                         <span className={styles.statusBubble} data-state={node.processingState || undefined}>
                           {node.processingState}
                         </span>
-                      ) : null}
-                    </div>
-                    <div className={styles.nodeBody}>
-                      <span>{node.displayModelName || node.modelId}</span>
-                      <span>{node.outputType}</span>
-                    </div>
-                  </>
-                )
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className={styles.inlineNodeContentWrap}>{renderNodeContent(node)}</div>
+                </div>
+              ) : (
+                <div className={styles.inlineNodeContentWrap}>{renderNodeContent(node)}</div>
               )}
 
               {hasNonImageSource ? (
                 <div className={styles.sourceBadge}>{`${node.outputType.toUpperCase()} source`}</div>
               ) : null}
+              {node.canResize && (node.renderMode === "full" || node.renderMode === "resized") ? (
+                <button
+                  type="button"
+                  className={styles.resizeHandle}
+                  onPointerDown={(event) => onResizeHandlePointerDown(node, event)}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={`Resize ${node.label}`}
+                />
+              ) : null}
             </div>
           );
         })}
+
+        {phantomLayout
+          ? phantomLayout.nodes.map((phantomNode, index) => (
+              <div
+                key={phantomNode.id}
+                className={styles.phantomNode}
+                data-kind={phantomNode.kind}
+                style={{
+                  left: `${phantomNode.x}px`,
+                  top: `${phantomNode.y}px`,
+                  width: `${phantomNode.width}px`,
+                  height: `${phantomNode.height}px`,
+                  aspectRatio: phantomNode.aspectRatio ? String(phantomNode.aspectRatio) : undefined,
+                }}
+              >
+                <strong>{phantomNode.label}</strong>
+                {index === phantomLayout.nodes.length - 1 && activePhantomPreview && activePhantomPreview.overflowCount > 0 ? (
+                  <span>{`+${activePhantomPreview.overflowCount}`}</span>
+                ) : null}
+              </div>
+            ))
+          : null}
+
+        {phantomLayout && onRunActiveNode ? (
+          <button
+            type="button"
+            className={styles.edgeRunButton}
+            style={{
+              left: `${phantomLayout.sourceNode.x + phantomLayout.sourceSize.width + 18}px`,
+              top: `${phantomLayout.sourceNode.y + phantomLayout.sourceSize.height / 2 - 16}px`,
+            }}
+            disabled={Boolean(activePhantomPreview?.runDisabledReason)}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRunActiveNode(phantomLayout.sourceNode.id);
+            }}
+            title={activePhantomPreview?.runDisabledReason || "Run"}
+          >
+            Run
+          </button>
+        ) : null}
+
+        {floatingSelectionBounds ? (
+          <div
+            className={styles.selectionActionStrip}
+            style={{
+              left: `${floatingSelectionBounds.x}px`,
+              top: `${floatingSelectionBounds.y}px`,
+            }}
+          >
+            {selectionActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                disabled={action.disabled}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  action.onClick();
+                }}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {marqueeDraft ? (
           <div

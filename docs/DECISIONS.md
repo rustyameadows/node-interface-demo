@@ -58,7 +58,7 @@
 ## 2026-03-08 - Canvas Undo/Redo Stays Local and Scoped
 - Decision: keep undo/redo as renderer-local canvas history instead of a persisted app-wide history system.
 - Rationale: the first pass needs reliable canvas editing recovery without coupling async worker hydration, queue changes, or viewport movement into a global command log.
-- Consequence: undo/redo covers user-initiated canvas graph edits and bottom-bar node edits only, and resets when the canvas view is reloaded or the session changes.
+- Consequence: undo/redo covers user-initiated canvas graph edits and inline node edits only, and resets when the canvas view is reloaded or the session changes.
 
 ## 2026-03-08 - Desktop Data Path Is Pinned Independently From Branding
 - Decision: pin Electron `userData` to a stable on-disk directory instead of letting it follow the display name.
@@ -79,3 +79,8 @@
 - Decision: move canvas keyboard shortcuts off manual `window` listeners and onto TanStack Hotkeys with input ignoring enabled.
 - Rationale: the canvas needs keyboard shortcuts to stay active on the route while reliably shutting off inside text inputs, list editors, and other editable surfaces.
 - Consequence: canvas hotkeys are declarative, route-scoped through `CanvasView`, and no longer rely on custom editable-target detection to avoid stealing typed characters.
+
+## 2026-03-08 - Canvas Nodes Edit Inline
+- Decision: move node editing out of the old bottom-bar flow and into adaptive inline node surfaces with `preview`, `compact`, transient `full`, and persisted `resized` presentation states.
+- Rationale: issue `#44` needs the canvas to feel flexible and customizable, and issue `#24` needs templates/list pairing to be inspectable and editable directly where the node lives.
+- Consequence: `CanvasView` now persists node-local presentation metadata inside the canvas document, full-node editing uses header-only drag chrome, template compatibility/merge preview lives inline, and phantom output previews plus the edge-mounted run launcher are renderer-only affordances instead of persisted nodes.

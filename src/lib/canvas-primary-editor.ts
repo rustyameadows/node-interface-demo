@@ -1,6 +1,6 @@
 import type { WorkflowNode } from "@/components/workspace/types";
 
-export type CanvasBottomBarPopoverId =
+export type CanvasPrimaryEditorId =
   | "provider"
   | "model"
   | "prompt"
@@ -15,6 +15,8 @@ export type CanvasBottomBarPopoverId =
   | "asset-details"
   | "source-call";
 
+export type CanvasBottomBarPopoverId = CanvasPrimaryEditorId;
+
 type ResolvePrimaryCanvasEditorOptions = {
   hasSourceJob: boolean;
 };
@@ -22,7 +24,7 @@ type ResolvePrimaryCanvasEditorOptions = {
 export function resolvePrimaryCanvasEditorId(
   node: Pick<WorkflowNode, "kind"> | null,
   options: ResolvePrimaryCanvasEditorOptions
-): CanvasBottomBarPopoverId | null {
+): CanvasPrimaryEditorId | null {
   if (!node) {
     return null;
   }

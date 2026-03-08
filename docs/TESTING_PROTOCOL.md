@@ -46,9 +46,10 @@ What it does:
   - `A` opens the insert menu
   - multi-selected nodes move as one batch
   - `C` connects exactly two selected nodes
-  - `Enter` opens the selected node's primary bottom-bar editor
-  - node double-click opens the same primary editor mapping
-  - `Cmd/Ctrl+Z` and `Cmd/Ctrl+Shift+Z` undo/redo batch move, connection, bottom-bar edit, and node insertion
+  - `Enter` opens the selected node's inline full editor
+  - node double-click opens the same primary inline editor mapping
+  - `Cmd/Ctrl+Z` and `Cmd/Ctrl+Shift+Z` undo/redo batch move, connection, inline edit, and node insertion
+  - typing inside inline editors does not trigger canvas shortcuts
 - imports an SVG asset through the live preload bridge
 - navigates through assets, queue, project settings, and app settings through native menu commands
 - verifies:
@@ -194,21 +195,25 @@ Run this when touching workflow or asset UX:
 8. Add or restore at least one text note and one model node.
 9. Multi-select two nodes and drag them together.
 10. Press `C` with exactly two selected nodes and confirm a connection is created.
-11. Press `Enter` on a single selected node and confirm the expected bottom-bar tray opens.
-12. Double-click a node and confirm it opens the same primary tray as `Enter`.
-13. Use `Cmd/Ctrl+Z` and `Cmd/Ctrl+Shift+Z` to undo/redo one move, one connection, and one bottom-bar edit.
-14. Import an asset.
-15. Open the Assets view and confirm the imported asset appears.
-16. Open Project Settings and confirm the project metadata renders and provider credentials do not appear there.
-17. Open App Settings and confirm provider credentials render there.
-18. If testing on macOS, confirm:
+11. Press `Enter` on a single selected node and confirm the expected inline full editor opens.
+12. Double-click a node and confirm it opens the same primary inline editor as `Enter`.
+13. Click into a prompt, note, list cell, or template textarea and confirm canvas shortcuts do not fire while typing.
+14. Resize a text/list/template/asset node and confirm the size persists after deselecting or reloading.
+15. Open a template node with a connected list and confirm variable chips, compatibility state, and merge preview render inline.
+16. Confirm phantom output previews appear only for the active node and disappear when you deselect or change selection.
+17. Use `Cmd/Ctrl+Z` and `Cmd/Ctrl+Shift+Z` to undo/redo one move, one connection, and one inline edit.
+18. Import an asset.
+19. Open the Assets view and confirm the imported asset appears.
+20. Open Project Settings and confirm the project metadata renders and provider credentials do not appear there.
+21. Open App Settings and confirm provider credentials render there.
+22. If testing on macOS, confirm:
    - `File`, `Project`, `Canvas`, `Edit`, `View`, and `Window` menus appear
    - `Cmd+,` opens App Settings
    - `File > New Project` opens a new project
    - `Project > Home` returns to app home
    - `Project > Assets` / `Queue` / `Project Settings` match the in-app menu behavior
    - `Canvas > Add Node…`, `Connect Selected Nodes`, `Duplicate Selected Node`, `Undo Canvas Change`, and `Redo Canvas Change` enable or disable correctly on canvas
-19. If API keys are configured, run at least one real provider job and verify:
+23. If API keys are configured, run at least one real provider job and verify:
    - queue row created
    - state changes visible
    - output lands on canvas or in assets as appropriate

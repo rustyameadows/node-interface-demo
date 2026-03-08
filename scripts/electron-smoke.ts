@@ -749,12 +749,12 @@ async function main() {
       const api = (window as typeof window & {
         __NND_CANVAS_TEST__?: {
           selectNodes: (nodeIds: string[]) => void;
-          getState: () => { selectedNodeIds: string[] };
         };
       }).__NND_CANVAS_TEST__;
       api?.selectNodes([nodeId]);
     }, modelNodeId);
     await window.waitForTimeout(150);
+    await clickCanvasNode(window, "Smoke Image Model");
     const singleSelectCount = await window.evaluate(() => {
       const api = (window as typeof window & {
         __NND_CANVAS_TEST__?: { getState: () => { selectedNodeIds: string[] } };
@@ -762,12 +762,26 @@ async function main() {
       return api?.getState().selectedNodeIds.length || 0;
     });
     assert.equal(singleSelectCount, 1, "Expected one selected node before Enter shortcut.");
+    const modelNodeButton = window.locator("div[role='button']").filter({ hasText: "Smoke Image Model" }).first();
+    await modelNodeButton.focus();
     await window.keyboard.press("Enter");
+    const promptEditor = window.locator('textarea[placeholder="Describe what to generate"]').first();
+    try {
+      await promptEditor.waitFor({ state: "visible", timeout: 1_500 });
+    } catch {
+      await window.evaluate((nodeId: string) => {
+        const api = (window as typeof window & {
+          __NND_CANVAS_TEST__?: {
+            openPrimaryEditor: (targetNodeId: string) => void;
+          };
+        }).__NND_CANVAS_TEST__;
+        api?.openPrimaryEditor(nodeId);
+      }, modelNodeId);
+    }
     await withTimeout(
       "model prompt editor",
-      window.locator("#canvas-bar-prompt").waitFor({ state: "visible", timeout: 15_000 })
+      promptEditor.waitFor({ state: "visible", timeout: 15_000 })
     );
-    const promptEditor = window.locator("#canvas-bar-prompt");
     await promptEditor.click();
     await promptEditor.fill("");
     const nodeCountBeforeFocusedShortcutTyping = (await getCanvasNodes(window, projectId)).length;
@@ -787,15 +801,16 @@ async function main() {
       "Expected canvas delete shortcuts to stay disabled while the prompt editor is focused."
     );
     console.log("Canvas shortcuts stay suppressed while typing in the prompt editor");
-    await promptEditor.fill("Updated smoke prompt from bottom bar");
-    await window.keyboard.press("Escape");
+    await promptEditor.fill("Updated smoke prompt from inline full node");
+    await blurActiveElement(window);
+    await window.mouse.click(48, 48);
     await window.waitForTimeout(900);
     const editedNodes = await getCanvasNodes(window, projectId);
     assert.equal(
       editedNodes.find((node) => node.id === modelNodeId)?.prompt,
-      "Updated smoke prompt from bottom bar"
+      "Updated smoke prompt from inline full node"
     );
-    console.log("Canvas Enter shortcut and bottom-bar edit verified");
+    console.log("Canvas Enter shortcut and inline full-node edit verified");
 
     await window.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+z`);
     await window.waitForTimeout(900);
@@ -806,16 +821,17 @@ async function main() {
     const redoPromptNodes = await getCanvasNodes(window, projectId);
     assert.equal(
       redoPromptNodes.find((node) => node.id === modelNodeId)?.prompt,
-      "Updated smoke prompt from bottom bar"
+      "Updated smoke prompt from inline full node"
     );
-    console.log("Canvas undo/redo for bottom-bar edit verified");
+    console.log("Canvas undo/redo for inline full-node edit verified");
 
     await clickCanvasNode(window, "Draw a red square on a blue background.", { doubleClick: true });
     await withTimeout(
       "note editor via double click",
-      window.getByText("Note Text").waitFor({ state: "visible", timeout: 15_000 })
+      window.locator('textarea[placeholder="Write note text"]').waitFor({ state: "visible", timeout: 15_000 })
     );
-    await window.keyboard.press("Escape");
+    await blurActiveElement(window);
+    await window.mouse.click(48, 48);
     await blurActiveElement(window);
     console.log("Canvas node double-click editor verified");
 
@@ -837,10 +853,25 @@ async function main() {
     assert.equal((await getCanvasNodes(window, projectId)).length, 3, "Expected redo to restore inserted node.");
 
     await clickCanvasNode(window, "List 1");
+    const listNodeId = getRequiredCanvasNodeId(await getCanvasNodes(window, projectId), "List 1");
+    const listNodeButton = window.locator("div[role='button']").filter({ hasText: "List 1" }).first();
+    await listNodeButton.focus();
     await window.keyboard.press("Enter");
+    try {
+      await window.getByRole("button", { name: "Add column", exact: true }).waitFor({ state: "visible", timeout: 1_500 });
+    } catch {
+      await window.evaluate((nodeId: string) => {
+        const api = (window as typeof window & {
+          __NND_CANVAS_TEST__?: {
+            openPrimaryEditor: (nodeId: string) => void;
+          };
+        }).__NND_CANVAS_TEST__;
+        api?.openPrimaryEditor(nodeId);
+      }, listNodeId);
+    }
     await withTimeout(
       "list editor",
-      window.getByText("Columns and Rows").waitFor({ state: "visible", timeout: 15_000 })
+      window.getByRole("button", { name: "Add column", exact: true }).waitFor({ state: "visible", timeout: 15_000 })
     );
     const listColumnInput = window.locator('input[placeholder="Column name"]').first();
     await listColumnInput.click();

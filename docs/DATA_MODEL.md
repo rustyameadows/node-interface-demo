@@ -41,6 +41,24 @@ type Canvas = {
   updatedAt: string;
 };
 
+type WorkflowNodeDisplayMode = "preview" | "compact" | "resized";
+
+type WorkflowNodeSize = {
+  width: number;
+  height: number;
+};
+
+type WorkflowNode = {
+  id: string;
+  kind: string;
+  label: string;
+  x: number;
+  y: number;
+  displayMode: WorkflowNodeDisplayMode;
+  size: WorkflowNodeSize | null;
+  // ...existing provider, prompt, source, and connection fields
+};
+
 type Job = {
   id: string;
   projectId: string;
@@ -105,6 +123,10 @@ type JobPreviewFrame = {
 ### `canvases`
 - one row per project
 - stores the full canvas JSON document plus a version counter
+- the canvas JSON now persists node-local presentation metadata:
+  - `displayMode`
+  - `size`
+- transient full-mode state and phantom previews remain renderer-only and are not stored in SQLite
 
 ### `jobs`
 - one row per submitted provider run
@@ -176,6 +198,17 @@ The renderer never sees absolute paths; those refs are resolved only in main/wor
 - Parse failure falls back to one generated text-note descriptor instead of failing the job.
 - Those outputs do not create `assets` rows.
 - Queue debug data stores both the returned text and the parsed structured-output metadata inline in `job_attempts.provider_response`.
+
+## Canvas Presentation Metadata
+- `WorkflowNode.displayMode`
+  - `preview`: default persisted surface
+  - `compact`: persisted pill/tiny-node surface
+  - `resized`: persisted custom width/height
+- `WorkflowNode.size`
+  - stored only when the node is in `resized`
+  - used for text notes, lists, templates, and asset nodes
+- model-node `full` is intentionally not persisted; it is derived from active selection at render time
+- renderer-only phantom previews are never written into `canvasDocument`
 
 ## Integrity Rules
 - Project deletion cascades through workspace state, canvas, jobs, attempts, assets, feedback, tags, and preview metadata.

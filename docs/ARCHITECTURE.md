@@ -78,16 +78,20 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 ## Canvas Interaction Model
 - `CanvasView` owns a local canvas command layer for native menu commands and canvas-scoped keyboard shortcuts.
 - Canvas keyboard shortcuts are registered through TanStack Hotkeys with input ignoring enabled, so canvas commands do not fire while editable controls are focused.
-- `InfiniteCanvas` renders live drag previews, but committed node movement is written back once per drag through `onCommitNodePositions`.
+- `CanvasView` derives node presentation from persisted node-local metadata (`displayMode`, `size`) plus transient active-node state (`activeFullNodeId`).
+- `CanvasNodeContent` renders mode-aware inline node surfaces for model, text note, list, template, and asset nodes.
+- `InfiniteCanvas` renders live drag previews, resize handles, phantom previews, and the edge-mounted run launcher, but committed node movement is written back once per drag through `onCommitNodePositions`.
 - Multi-node drag uses the current selection as a batch and preserves relative spacing across the moved nodes.
-- `CanvasBottomBar` is partially controlled by `CanvasView` so `Enter` and node double-click can open deterministic primary editor trays.
-- Primary editor routing is resolved by node type:
+- Full/resized nodes switch drag to a header/chrome handle so clicking into inline controls does not collapse the editor or start dragging.
+- Primary inline editor routing is resolved by node type:
   - model -> `prompt`
   - text note -> `note`
   - list -> `list`
   - text template -> `template`
   - uploaded asset source -> `asset-details`
   - generated asset / generated model-spawned nodes -> `source-call`
+- Phantom output previews are renderer-only derived state. They appear only for the active node, never persist to the canvas document, and never participate in selection/history.
+- Template/list compatibility and merge preview are computed in `CanvasView` from the existing template preview engine and rendered inline inside the template node.
 
 ## Canvas History Model
 - Undo/redo is renderer-local and scoped to the active canvas document.
@@ -96,7 +100,7 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
   - `selectedNodeIds`
   - `selectedConnection`
 - Structural graph changes push immediate history entries.
-- Typing-like bottom-bar edits are coalesced by field and committed on blur, tray close, selection change, or a short idle timeout.
+- Typing-like inline node edits are coalesced by field and committed on blur, full-mode exit, selection change, or a short idle timeout.
 - Undo/redo intentionally excludes:
   - viewport pan/zoom
   - worker-driven queue updates

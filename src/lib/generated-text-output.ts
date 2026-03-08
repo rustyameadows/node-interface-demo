@@ -377,6 +377,8 @@ export function createGeneratedModelNode(input: CreateGeneratedModelNodeInput): 
     upstreamAssetIds: connectToSourceModel ? [`node:${input.modelNodeId}`] : [],
     x: input.position.x,
     y: input.position.y,
+    displayMode: "preview" as const,
+    size: null,
   } satisfies Omit<
     WorkflowNode,
     "kind" | "nodeType" | "outputType" | "prompt" | "settings"

@@ -44,10 +44,14 @@
   - undo canvas change
   - redo canvas change
 - native canvas insertions land at the current viewport center with a small stagger and use the same save/selection path as the insert popup
-- bottom settings bar remains the main node-configuration surface
-- primary editor entry points:
-  - `Enter` opens the selected node's primary bottom-bar tray
-  - node double-click opens the same primary tray for the clicked node
+- node presentation states:
+  - `preview` is the default persisted state
+  - `compact` is a persisted pill/tiny-node state
+  - `full` is transient and applies only to the active single-selected node
+  - `resized` is a persisted custom size for text notes, lists, templates, and asset nodes
+- inline full-mode entry points:
+  - `Enter` opens the selected node's inline full editor
+  - node double-click opens the same inline full editor for the clicked node
 - primary editor mapping:
   - model -> `Prompt`
   - text note -> `Note`
@@ -55,16 +59,30 @@
   - text template -> `Template`
   - uploaded asset source -> `Details`
   - generated asset / generated model-spawned nodes -> `Source`
+- full/resized nodes use a header/chrome drag handle so text areas, table cells, and inline controls stay editable without dragging the node
+- model full mode follows the issue `#44` direction: wide horizontal layout with inputs on the left, prompt/settings in the middle, and output/run controls aligned toward the output edge
+- template full mode includes:
+  - textarea editing
+  - detected placeholder chips
+  - connected-list column chips that insert `[[Column Name]]`
+  - inline compatibility warnings
+  - live merge preview rows
+- active-node phantom previews:
+  - appear only when exactly one source node is active
+  - show likely downstream outputs without persisting real nodes
+  - use dotted/low-opacity output connections
+  - pin the run launcher near the source output edge
+- multi-selection compare/download actions live in a floating selection strip near the current selection instead of the old bottom bar
 - canvas keyboard shortcuts when focus is not inside an input, textarea, select, or contenteditable surface:
   - `A` opens the add-to-canvas insert menu at viewport center
   - `C` connects exactly two selected nodes from oldest selected -> newest selected
-  - `Enter` opens the primary editor tray for a single selected node
+  - `Enter` opens inline full mode for a single selected node
   - `Cmd/Ctrl+D` duplicates the single selected node
   - `Delete` / `Backspace` removes the selected node(s) or selected connection
   - `Cmd/Ctrl+Z` and `Cmd/Ctrl+Shift+Z` undo/redo scoped canvas changes
   - `Escape` closes insert menus, popovers, and connection selection
 - undo/redo scope:
-  - included: add, delete, duplicate, connect/disconnect, batch move, clear inputs, bottom-bar text/settings edits, list edits, template text edits, generate-template-rows
+  - included: add, delete, duplicate, connect/disconnect, batch move, clear inputs, inline text/settings edits, mode changes, resize commits, list edits, template text edits, generate-template-rows
   - excluded: viewport pan/zoom, queue state changes, polling-driven generated output hydration, and async placeholder reconciliation
 
 ## Queue Feedback
@@ -77,6 +95,7 @@
   - `Template` -> generated template node
   - `Smart Output` -> one or more unconnected generated nodes
 - model-spawned list/template/note nodes keep source-job provenance but remain editable after hydration
+- template/list pairs show live inline merge preview before generation; those previews do not create real output nodes until run
 
 ## Asset Viewer
 - Grid view

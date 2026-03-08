@@ -54,6 +54,11 @@ export type ProviderCredentialStatus = {
 export type WorkflowNodeKind = "model" | "asset-source" | "text-note" | "list" | "text-template";
 export type WorkflowNodeType = "text-gen" | "image-gen" | "video-gen" | "transform" | "text-note" | "list" | "text-template";
 export type RunnableWorkflowNodeType = "text-gen" | "image-gen" | "video-gen" | "transform";
+export type WorkflowNodeDisplayMode = "preview" | "compact" | "resized";
+export type WorkflowNodeSize = {
+  width: number;
+  height: number;
+};
 
 export type ListColumn = {
   id: string;
@@ -158,6 +163,8 @@ export type WorkflowNode = {
   upstreamAssetIds: string[];
   x: number;
   y: number;
+  displayMode: WorkflowNodeDisplayMode;
+  size: WorkflowNodeSize | null;
 };
 
 export type WorkflowNodeSelectionState = {

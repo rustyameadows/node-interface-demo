@@ -6,6 +6,10 @@ import {
   normalizeTextNoteSettings,
   getTextTemplateNodeSettings,
 } from "@/lib/list-template";
+import {
+  normalizeWorkflowNodeDisplayMode,
+  normalizeWorkflowNodeSize,
+} from "@/lib/canvas-node-presentation";
 import type { AppEventName, MenuCommand, MenuContext } from "@/lib/ipc-contract";
 import type {
   AssetFilterState,
@@ -331,5 +335,7 @@ export function normalizeNode(raw: Record<string, unknown>, index: number): Work
     settings: normalizedSettings,
     x: typeof raw.x === "number" ? raw.x : 120 + (index % 4) * 260,
     y: typeof raw.y === "number" ? raw.y : 120 + Math.floor(index / 4) * 160,
+    displayMode: normalizeWorkflowNodeDisplayMode(raw.displayMode),
+    size: normalizeWorkflowNodeSize(raw.size),
   };
 }
