@@ -1,6 +1,7 @@
 import type {
   Asset,
   AssetFilterState,
+  AppRouteView,
   CanvasDocument,
   Job,
   JobDebugResponse,
@@ -27,6 +28,7 @@ export type CanvasMenuNodeType = "model" | "text-note" | "list" | "text-template
 export type MenuCommand =
   | { type: "project.new" }
   | { type: "project.open"; projectId: string }
+  | { type: "app.settings" }
   | { type: "project.settings" }
   | { type: "view.open"; view: WorkspaceView }
   | { type: "assets.import" }
@@ -34,7 +36,7 @@ export type MenuCommand =
 
 export type MenuContext = {
   projectId: string | null;
-  view: WorkspaceView | null;
+  view: AppRouteView | null;
   hasProjects: boolean;
 };
 

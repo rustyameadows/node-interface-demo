@@ -3,11 +3,14 @@
 ## Workspace Views
 - `/`
   - launcher or redirect to the current project
+- `/settings/app`
+  - app-wide provider credentials and readiness
 - `/projects/$projectId/canvas`
 - `/projects/$projectId/assets`
 - `/projects/$projectId/assets/$assetId`
 - `/projects/$projectId/queue`
 - `/projects/$projectId/settings`
+  - project-only metadata and lifecycle actions
 
 ## Visual Direction
 - Preserve the existing dark palette and glass/text tokens.

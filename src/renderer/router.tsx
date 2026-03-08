@@ -1,5 +1,6 @@
 import { Navigate, Outlet, createHashHistory, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { AssetDetailView } from "@/components/workspace/views/asset-detail-view";
+import { AppSettingsView } from "@/components/workspace/views/app-settings-view";
 import { AssetsView } from "@/components/workspace/views/assets-view";
 import { CanvasView } from "@/components/workspace/views/canvas-view";
 import { RootRouter } from "@/components/workspace/root-router";
@@ -24,6 +25,12 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: RootRouter,
+});
+
+const appSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/app",
+  component: AppSettingsView,
 });
 
 const projectCanvasRoute = createRoute({
@@ -82,6 +89,7 @@ const projectRootRedirectRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  appSettingsRoute,
   projectCanvasRoute,
   projectAssetsRoute,
   projectAssetDetailRoute,

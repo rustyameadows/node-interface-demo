@@ -68,6 +68,7 @@ Native menu flow:
 - main rebuilds the macOS app menu with project-aware enabled states and dynamic project submenus
 - main emits native menu commands back to renderer through `subscribeMenuCommand`
 - canvas-specific native menu commands are forwarded inside the renderer to `CanvasView`, which reuses the same insert helpers as the in-canvas insert popup
+- `App Settings` is a dedicated global route at `/settings/app`, separate from project-scoped settings
 
 TanStack Query owns persisted app data in the renderer and is invalidated from those desktop events.
 
@@ -109,7 +110,7 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 
 ## Configuration
 Provider credentials resolve in this order:
-1. macOS Keychain values saved from Settings
+1. macOS Keychain values saved from App Settings
 2. environment variables from `.env` / `.env.local`
 
 Required only when running real providers:

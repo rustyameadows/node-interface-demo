@@ -44,10 +44,12 @@ test("builds project and canvas menu items with context-aware enabled states", (
   });
 
   assert.equal(findMenuItem(template, "file.import-assets")?.enabled, true);
+  assert.equal(findMenuItem(template, "app.settings")?.accelerator, "CommandOrControl+,");
   assert.equal(findMenuItem(template, "project.view.canvas")?.checked, true);
   assert.equal(findMenuItem(template, "canvas.add.model")?.enabled, true);
   assert.equal(findMenuItem(template, "project.open.project-1")?.checked, true);
   assert.equal(findMenuItem(template, "project.open.project-2")?.checked, false);
+  assert.equal(findMenuItem(template, "project.settings")?.accelerator, undefined);
 });
 
 test("disables canvas insertion when no canvas project is active", () => {
@@ -74,4 +76,47 @@ test("disables canvas insertion when no canvas project is active", () => {
   assert.equal(findMenuItem(template, "canvas.add.text-note")?.enabled, false);
   assert.equal(findMenuItem(template, "project.view.settings")?.checked, undefined);
   assert.equal(findMenuItem(template, "project.settings")?.checked, true);
+});
+
+test("keeps project-scoped actions separate from app settings", () => {
+  const template = buildNativeMenuTemplate({
+    appName: "Nodes Node Nodes",
+    isMac: true,
+    isDev: false,
+    context: {
+      projectId: "project-1",
+      view: "app-settings",
+      hasProjects: true,
+    },
+    projects: [
+      {
+        id: "project-1",
+        name: "Alpha",
+        status: "active",
+        isOpen: true,
+      },
+    ],
+  });
+
+  assert.equal(findMenuItem(template, "canvas.add.model")?.enabled, false);
+  assert.equal(findMenuItem(template, "project.settings")?.checked, false);
+  assert.equal(findMenuItem(template, "app.settings")?.enabled, true);
+});
+
+test("keeps app settings available when no projects exist", () => {
+  const template = buildNativeMenuTemplate({
+    appName: "Nodes Node Nodes",
+    isMac: true,
+    isDev: false,
+    context: {
+      projectId: null,
+      view: "app-settings",
+      hasProjects: false,
+    },
+    projects: [],
+  });
+
+  assert.equal(findMenuItem(template, "app.settings")?.enabled, true);
+  assert.equal(findMenuItem(template, "file.import-assets")?.enabled, false);
+  assert.equal(findMenuItem(template, "project.settings")?.enabled, false);
 });

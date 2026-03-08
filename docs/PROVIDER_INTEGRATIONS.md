@@ -62,7 +62,7 @@ TOPAZ_API_KEY=...
 ```
 
 Credential resolution order:
-1. macOS Keychain values saved from Project Settings
+1. macOS Keychain values saved from App Settings
 2. `.env` / `.env.local` values loaded into `process.env`
 
 Read locations:

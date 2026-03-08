@@ -96,7 +96,8 @@ async function main() {
   const canvasScreenshotPath = path.join(appDataRoot, "packaged-canvas-smoke.png");
   const assetsScreenshotPath = path.join(appDataRoot, "packaged-assets-smoke.png");
   const queueScreenshotPath = path.join(appDataRoot, "packaged-queue-smoke.png");
-  const settingsScreenshotPath = path.join(appDataRoot, "packaged-settings-smoke.png");
+  const projectSettingsScreenshotPath = path.join(appDataRoot, "packaged-project-settings-smoke.png");
+  const appSettingsScreenshotPath = path.join(appDataRoot, "packaged-app-settings-smoke.png");
 
   await Promise.all([
     access(appPath),
@@ -155,6 +156,12 @@ async function main() {
         }));
     });
 
+    await waitForHeading(driver, "Start a Project");
+    await clickButton(driver, "App Settings");
+    await waitForUrl(driver, /#?\/settings\/app$/);
+    await waitForHeading(driver, "App Settings");
+    await waitForHeading(driver, "Provider Credentials");
+    await clickButton(driver, "Back to Launcher");
     await waitForHeading(driver, "Start a Project");
     await clickButton(driver, "Create Project");
     await waitForUrl(driver, /#\/projects\/[^/]+\/canvas$/);
@@ -284,10 +291,18 @@ async function main() {
     await clickButton(driver, "Project Settings");
     await waitForUrl(driver, new RegExp(`#?/projects/${projectId}/settings$`));
     await waitForHeading(driver, "Project Settings");
-    await waitForHeading(driver, "Provider Credentials");
     const projectNameValue = await driver.findElement(By.css("input")).getAttribute("value");
     assert.ok(projectNameValue.trim().length > 0, "Expected a project name in settings.");
-    await saveScreenshot(driver, settingsScreenshotPath);
+    const settingsText = await driver.findElement(By.css("body")).getText();
+    assert.ok(!settingsText.includes("Provider Credentials"), "Project settings should not include provider credentials.");
+    await saveScreenshot(driver, projectSettingsScreenshotPath);
+
+    await clickButton(driver, "Menu");
+    await clickButton(driver, "App Settings");
+    await waitForUrl(driver, /#?\/settings\/app$/);
+    await waitForHeading(driver, "App Settings");
+    await waitForHeading(driver, "Provider Credentials");
+    await saveScreenshot(driver, appSettingsScreenshotPath);
 
     await access(path.join(appDataRoot, "app.sqlite"));
     const storedAssetFiles = await readdir(path.join(appDataRoot, "assets", projectId));
@@ -317,7 +332,8 @@ async function main() {
           canvasScreenshotPath,
           assetsScreenshotPath,
           queueScreenshotPath,
-          settingsScreenshotPath,
+          projectSettingsScreenshotPath,
+          appSettingsScreenshotPath,
           unpackedNativeModules: [unpackedBetterSqlitePath, unpackedKeytarPath],
         },
         null,

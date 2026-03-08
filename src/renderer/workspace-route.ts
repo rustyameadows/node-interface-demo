@@ -1,10 +1,21 @@
-import type { WorkspaceView } from "@/components/workspace/types";
+import type { AppRouteView, WorkspaceView } from "@/components/workspace/types";
 
 export function buildWorkspaceRoute(projectId: string, view: WorkspaceView) {
   return `/projects/${projectId}/${view}`;
 }
 
+export function buildAppSettingsRoute() {
+  return "/settings/app";
+}
+
 export function inferWorkspaceRoute(pathname: string) {
+  if (pathname === buildAppSettingsRoute()) {
+    return {
+      projectId: null,
+      view: "app-settings" as AppRouteView,
+    } as const;
+  }
+
   const match = pathname.match(/^\/projects\/([^/]+)(?:\/(canvas|assets|queue|settings))?(?:\/.*)?$/);
   if (!match) {
     return {
@@ -16,6 +27,6 @@ export function inferWorkspaceRoute(pathname: string) {
   const [, projectId, view] = match;
   return {
     projectId,
-    view: (view || "canvas") as WorkspaceView,
+    view: (view || "canvas") as AppRouteView,
   } as const;
 }

@@ -71,6 +71,14 @@ export function buildNativeMenuTemplate({
       submenu: [
         { role: "about" },
         { type: "separator" },
+        {
+          id: "app.settings",
+          label: "App Settings…",
+          accelerator: "CommandOrControl+,",
+          enabled: true,
+          command: { type: "app.settings" },
+        },
+        { type: "separator" },
         { role: "hide" },
         { role: "hideOthers" },
         { role: "unhide" },
@@ -133,7 +141,6 @@ export function buildNativeMenuTemplate({
           label: "Project Settings",
           type: "checkbox",
           checked: context.view === "settings",
-          accelerator: "CommandOrControl+,",
           enabled: context.hasProjects,
           command: { type: "project.settings" },
         },

@@ -40,6 +40,10 @@ function projectRoutePattern(projectId?: string, view?: "canvas" | "assets" | "q
   return /#?\/projects\/[^/]+$/;
 }
 
+function appSettingsRoutePattern() {
+  return /#?\/settings\/app$/;
+}
+
 function getPackagedExecutablePath() {
   return path.resolve("release", "mac-arm64", `${APP_NAME}.app`, "Contents", "MacOS", APP_NAME);
 }
@@ -95,7 +99,7 @@ async function triggerWorkspaceView(
   runtime: RuntimeController,
   window: Page,
   itemId: string,
-  itemName: "Assets" | "Queue" | "Project Settings"
+  itemName: "Assets" | "Queue" | "Project Settings" | "App Settings"
 ) {
   if (runtime.triggerNativeMenuItem) {
     await runtime.triggerNativeMenuItem(itemId);
@@ -302,7 +306,8 @@ async function main() {
   const canvasScreenshotPath = path.join(appDataRoot, "canvas-smoke.png");
   const assetsScreenshotPath = path.join(appDataRoot, "assets-smoke.png");
   const queueScreenshotPath = path.join(appDataRoot, "queue-smoke.png");
-  const settingsScreenshotPath = path.join(appDataRoot, "settings-smoke.png");
+  const projectSettingsScreenshotPath = path.join(appDataRoot, "project-settings-smoke.png");
+  const appSettingsScreenshotPath = path.join(appDataRoot, "app-settings-smoke.png");
   const launchTarget = isPackagedMacMode() ? getPackagedExecutablePath() : path.resolve("dist/electron/main.cjs");
 
   await access(launchTarget);
@@ -369,6 +374,29 @@ async function main() {
       window.getByRole("heading", { name: "Start a Project" }).waitFor({ state: "visible", timeout: 15_000 })
     );
     console.log("Launcher rendered");
+
+    await withTimeout(
+      "launcher app settings button",
+      window.getByRole("button", { name: "App Settings" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await window.getByRole("button", { name: "App Settings" }).click();
+    await withTimeout("app settings route", window.waitForURL(appSettingsRoutePattern()));
+    await withTimeout(
+      "app settings heading",
+      window.getByRole("heading", { name: "App Settings" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await withTimeout(
+      "provider credentials heading",
+      window.getByRole("heading", { name: "Provider Credentials" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    console.log("Launcher app settings entry point verified");
+
+    await window.getByRole("button", { name: "Back to Launcher" }).click();
+    await withTimeout(
+      "launcher return",
+      window.getByRole("heading", { name: "Start a Project" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    console.log("Returned to launcher from app settings");
 
     if (runtime.triggerNativeMenuItem) {
       await runtime.triggerNativeMenuItem("file.new-project");
@@ -537,14 +565,35 @@ async function main() {
       "settings heading",
       window.getByRole("heading", { name: "Project Settings" }).waitFor({ state: "visible", timeout: 15_000 })
     );
-    await withTimeout(
-      "provider credentials heading",
-      window.getByRole("heading", { name: "Provider Credentials" }).waitFor({ state: "visible", timeout: 15_000 })
-    );
     const projectNameValue = await window.getByRole("textbox").first().inputValue();
     assert.ok(projectNameValue.trim().length > 0, "Expected a project name in settings.");
-    await window.screenshot({ path: settingsScreenshotPath, fullPage: true });
-    console.log("Settings screenshot:", settingsScreenshotPath);
+    await withTimeout(
+      "provider credentials removed from project settings",
+      window.waitForFunction(
+        () => !Array.from(document.querySelectorAll("h1, h2")).some((element) => element.textContent?.trim() === "Provider Credentials"),
+        undefined,
+        { timeout: 15_000 }
+      )
+    );
+    await window.screenshot({ path: projectSettingsScreenshotPath, fullPage: true });
+    console.log("Project settings screenshot:", projectSettingsScreenshotPath);
+
+    if (runtime.triggerNativeMenuItem) {
+      await runtime.triggerNativeMenuItem("app.settings");
+    } else {
+      await openMenuItem(window, "App Settings");
+    }
+    await withTimeout("app settings route from menu", window.waitForURL(appSettingsRoutePattern()));
+    await withTimeout(
+      "app settings heading from menu",
+      window.getByRole("heading", { name: "App Settings" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await withTimeout(
+      "provider credentials heading in app settings",
+      window.getByRole("heading", { name: "Provider Credentials" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await window.screenshot({ path: appSettingsScreenshotPath, fullPage: true });
+    console.log("App settings screenshot:", appSettingsScreenshotPath);
 
     await access(path.join(appDataRoot, "app.sqlite"));
     const storedAssetFiles = await readdir(path.join(appDataRoot, "assets", projectId));
@@ -562,7 +611,8 @@ async function main() {
           canvasScreenshotPath,
           assetsScreenshotPath,
           queueScreenshotPath,
-          settingsScreenshotPath,
+          projectSettingsScreenshotPath,
+          appSettingsScreenshotPath,
           providerSummary,
           nodeLabels,
           assetCount,

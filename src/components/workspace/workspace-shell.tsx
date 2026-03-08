@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "@/renderer/navigation";
+import { buildAppSettingsRoute } from "@/renderer/workspace-route";
 import styles from "./workspace-shell.module.css";
 import { getProjects, openProject, summarizeQueue } from "@/components/workspace/client-api";
 import type { Job, MenuFlyoutState, Project, QueueSummary, WorkspaceView } from "@/components/workspace/types";
@@ -135,6 +136,11 @@ export function WorkspaceShell({
     [router, view]
   );
 
+  const openAppSettings = useCallback(() => {
+    router.push(buildAppSettingsRoute());
+    setMenuState({ open: false, projectsOpen: false });
+  }, [router]);
+
   return (
     <div
       className={styles.workspaceRoot}
@@ -196,6 +202,13 @@ export function WorkspaceShell({
               onClick={() => navigateView("settings")}
             >
               Project Settings
+            </button>
+            <button
+              type="button"
+              className={styles.menuItem}
+              onClick={openAppSettings}
+            >
+              App Settings
             </button>
 
             <div

@@ -55,7 +55,27 @@
   cursor: pointer;
 }
 
+.actionRow {
+  display: flex;
+  gap: 10px;
+}
+
+.actionRow button {
+  flex: 1;
+}
+
+.secondaryButton {
+  color: #b7cee6;
+  background: rgba(20, 24, 36, 0.24);
+}
+
 .error {
   color: #ffadcc;
   font-size: 0.86rem;
+}
+
+@media (max-width: 560px) {
+  .actionRow {
+    flex-direction: column;
+  }
 }

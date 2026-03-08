@@ -16,7 +16,7 @@ GOOGLE_API_KEY=...
 TOPAZ_API_KEY=...
 ```
 
-For the packaged app, those keys can also be entered from Project Settings and stored in the macOS Keychain.
+For the packaged app, those keys can also be entered from App Settings and stored in the macOS Keychain.
 
 ## Build And Package
 Create the local unsigned `.app` and `.zip`:
@@ -41,11 +41,13 @@ This packages the app, launches the bundled `.app` with Selenium + `electron-chr
 - bundle metadata and icon wiring
 - preload bridge availability
 - launcher render
+- app settings render with provider credentials before any project exists
 - project creation
 - canvas save/reload
 - asset import and render
 - queue screen render
-- settings and provider credentials render
+- project settings render without provider credentials
+- app settings render with provider credentials
 - packaged SQLite and asset persistence
 
 Run the full lifecycle helper:
@@ -63,7 +65,7 @@ That prints the final artifact paths after the packaged smoke passes.
 4. Create a project or open an existing packaged-app project.
 
 ## Provider Credentials
-Open `Project Settings` and use the `Provider Credentials` section.
+Open `App Settings` and use the `Provider Credentials` section.
 
 Behavior:
 - `Save to Keychain` writes the value into the macOS Keychain.
@@ -88,9 +90,9 @@ Packaged app runtime data lives under:
 - `~/Library/Application Support/Nodes Node Nodes`
 
 Key packaged-app paths:
-- SQLite: `~/Library/Application Support/Nodes Node Nodes/app.sqlite`
-- assets: `~/Library/Application Support/Nodes Node Nodes/assets/<projectId>/...`
-- previews: `~/Library/Application Support/Nodes Node Nodes/previews/<jobId>/...`
+- SQLite: `~/Library/Application Support/Nodes Node Nodes/node-interface-demo/app.sqlite`
+- assets: `~/Library/Application Support/Nodes Node Nodes/node-interface-demo/assets/<projectId>/...`
+- previews: `~/Library/Application Support/Nodes Node Nodes/node-interface-demo/previews/<jobId>/...`
 
 Credentials are stored in the macOS Keychain under service:
 - `com.rustymeadows.nodesnodenodes`
@@ -106,7 +108,7 @@ To reset packaged-app local data:
 2. Remove `~/Library/Application Support/Nodes Node Nodes`.
 
 To clear packaged-app credentials:
-1. Open the app and clear them from Project Settings, or
+1. Open the app and clear them from App Settings, or
 2. remove the matching Keychain entries for service `com.rustymeadows.nodesnodenodes`
 
 ## Source-Run vs Packaged App

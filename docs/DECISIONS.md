@@ -48,7 +48,7 @@
 ## 2026-03-07 - Provider Credentials Are Keychain-First
 - Decision: provider credentials resolve from macOS Keychain first, then fall back to environment variables.
 - Rationale: packaged apps need to be configurable from Finder without editing repo-local env files, while source-run development should keep working.
-- Consequence: Project Settings now exposes credential status plus save/clear actions, and provider readiness reflects Keychain-backed state.
+- Consequence: App Settings now exposes credential status plus save/clear actions, and provider readiness reflects Keychain-backed state.
 
 ## 2026-03-07 - Packaged Mac Smoke Uses Selenium and ChromeDriver
 - Decision: automate the packaged `.app` verification path with Selenium plus `electron-chromedriver`.

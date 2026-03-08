@@ -38,21 +38,24 @@ What it does:
 - uses a temporary `NODE_INTERFACE_APP_DATA` directory
 - inspects the native application menu from Electron main
 - waits for the launcher
+- opens app settings from the launcher before any project exists
 - creates a project from the native `File > New Project` menu
 - triggers one native `Canvas > Add Model Node` command on canvas
 - writes a canvas snapshot with two nodes through the live preload bridge
 - imports an SVG asset through the live preload bridge
-- navigates through assets, queue, and project settings through native menu commands
+- navigates through assets, queue, project settings, and app settings through native menu commands
 - verifies:
   - preload bridge exists
   - native `File`, `Project`, `Canvas`, `View`, and `Window` menus exist
+  - launcher app settings works without a project
   - SQLite file is created
   - native new-project and add-node commands round-trip into the renderer
   - canvas data round-trips
   - asset metadata exists
   - asset file exists on disk
   - queue screen renders
-  - project settings render with project metadata
+  - project settings render with project metadata only
+  - provider credentials render in app settings
 - writes screenshots into the temp app-data directory
 
 Expected output:
@@ -62,7 +65,8 @@ Expected output:
   - `canvasScreenshotPath`
   - `assetsScreenshotPath`
   - `queueScreenshotPath`
-  - `settingsScreenshotPath`
+  - `projectSettingsScreenshotPath`
+  - `appSettingsScreenshotPath`
   - `providerSummary`
   - `nodeLabels`
   - `assetCount`
@@ -90,11 +94,13 @@ What it does:
   - branded bundle metadata and icon wiring
   - preload bridge availability
   - launcher render
+  - app settings render with provider credentials before any project exists
   - project creation
   - canvas round-trip
   - asset import and assets view render
   - queue view render
-  - provider credentials section render
+  - project settings render without provider credentials
+  - app settings render with provider credentials
   - packaged SQLite and on-disk asset persistence
 
 Expected output:
@@ -172,13 +178,15 @@ Run this when touching workflow or asset UX:
 4. Add or restore at least one text note and one model node.
 5. Import an asset.
 6. Open the Assets view and confirm the imported asset appears.
-7. Open Project Settings and confirm the project metadata renders.
-8. If testing on macOS, confirm:
+7. Open Project Settings and confirm the project metadata renders and provider credentials do not appear there.
+8. Open App Settings and confirm provider credentials render there.
+9. If testing on macOS, confirm:
    - `File`, `Project`, `Canvas`, `Edit`, `View`, and `Window` menus appear
+   - `Cmd+,` opens App Settings
    - `File > New Project` opens a new project
    - `Project > Assets` / `Queue` / `Project Settings` match the in-app menu behavior
    - `Canvas` add-node items work on canvas and are disabled off-canvas
-9. If API keys are configured, run at least one real provider job and verify:
+10. If API keys are configured, run at least one real provider job and verify:
    - queue row created
    - state changes visible
    - output lands on canvas or in assets as appropriate
@@ -188,7 +196,7 @@ Run this against the packaged `.app` after `npm run package:mac`:
 
 1. Open `release/mac-arm64/Nodes Node Nodes.app` from Finder.
 2. Confirm the app name and pink icon appear in macOS chrome.
-3. Open Project Settings.
+3. Open App Settings.
 4. Save an OpenAI or Topaz key to Keychain.
 5. Confirm provider readiness updates without editing `.env.local`.
 6. Create or open a project.

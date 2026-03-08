@@ -31,6 +31,7 @@ Support multiple local projects with strict isolation and exactly one open works
 - Asset viewer layout
 - Asset viewer filters
 - Open-project marker
+- Provider credentials are not project data; they are app-level settings shared across projects
 
 Current selection is treated as local UI state, not durable cross-restart state.
 

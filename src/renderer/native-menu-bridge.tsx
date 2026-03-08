@@ -11,7 +11,7 @@ import {
 import type { Project, WorkspaceView } from "@/components/workspace/types";
 import { queryKeys } from "@/renderer/query";
 import { useRouter } from "@/renderer/navigation";
-import { buildWorkspaceRoute, inferWorkspaceRoute } from "@/renderer/workspace-route";
+import { buildAppSettingsRoute, buildWorkspaceRoute, inferWorkspaceRoute } from "@/renderer/workspace-route";
 import { publishCanvasMenuCommand } from "@/renderer/canvas-menu-command-bus";
 import { useLocation } from "@tanstack/react-router";
 
@@ -57,7 +57,10 @@ export function NativeMenuBridge() {
     });
   }, [menuContext]);
 
-  const resolveCurrentView = useCallback((): WorkspaceView => routeState.view || "canvas", [routeState.view]);
+  const resolveCurrentView = useCallback(
+    (): WorkspaceView => (routeState.view && routeState.view !== "app-settings" ? routeState.view : "canvas"),
+    [routeState.view]
+  );
 
   const resolveTargetProjectId = useCallback(() => targetProject?.id || null, [targetProject?.id]);
 
@@ -98,6 +101,10 @@ export function NativeMenuBridge() {
     router.push(buildWorkspaceRoute(projectId, "settings"));
   }, [resolveTargetProjectId, router]);
 
+  const handleOpenAppSettings = useCallback(() => {
+    router.push(buildAppSettingsRoute());
+  }, [router]);
+
   const handleImportAssets = useCallback(async () => {
     const projectId = resolveTargetProjectId();
     if (!projectId) {
@@ -123,6 +130,11 @@ export function NativeMenuBridge() {
         return;
       }
 
+      if (command.type === "app.settings") {
+        handleOpenAppSettings();
+        return;
+      }
+
       if (command.type === "project.settings") {
         handleOpenSettings();
         return;
@@ -144,7 +156,7 @@ export function NativeMenuBridge() {
     });
 
     return unsubscribe;
-  }, [handleImportAssets, handleNewProject, handleOpenProject, handleOpenSettings, handleOpenView]);
+  }, [handleImportAssets, handleNewProject, handleOpenAppSettings, handleOpenProject, handleOpenSettings, handleOpenView]);
 
   return null;
 }
