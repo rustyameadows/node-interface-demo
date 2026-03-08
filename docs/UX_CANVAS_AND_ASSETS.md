@@ -100,13 +100,16 @@
 ## Queue Feedback
 - running jobs show queue state in the queue view and on generated output nodes
 - OpenAI image jobs can show persisted preview frames before final completion
-- successful image jobs hydrate output nodes with final assets
+- successful image jobs spawn final output nodes once from the completed job output
 - successful GPT text jobs hydrate generated nodes by output target:
   - `Text Note` -> generated text note
   - `List` -> generated list node
   - `Template` -> generated template node
   - `Smart Output` -> one or more unconnected generated nodes
-- model-spawned list/template/note nodes keep source-job provenance but remain editable after hydration
+- model-spawned list/template/note nodes keep source-job provenance but are otherwise normal editable child nodes after insertion
+- pending generated-output placeholders/previews may appear while a job is queued, running, or failed, but they are separate from the final spawned child nodes
+- rerunning a model node appends a fresh set of generated child nodes instead of replacing older ones
+- deleting a generated child node keeps it deleted; completed outputs do not respawn automatically on later reloads or job polls
 - template/list pairs show live inline merge preview before generation; those previews do not create real output nodes until run
 
 ## Asset Viewer

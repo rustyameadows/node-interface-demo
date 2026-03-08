@@ -984,6 +984,49 @@ async function main() {
     );
     console.log("Canvas add-node menu and list sheet editor verified");
 
+    await window.evaluate(
+      ({ nodeId }) => {
+        const api = (window as typeof window & {
+          __NND_CANVAS_TEST__?: {
+            resizeNode: (nodeId: string, size: { width: number; height: number }) => void;
+          };
+        }).__NND_CANVAS_TEST__;
+        api?.resizeNode(nodeId, { width: 640, height: 360 });
+      },
+      { nodeId: listNodeId }
+    );
+    await window.waitForTimeout(900);
+    await clickCanvasNode(window, "Smoke Prompt");
+    await window.waitForTimeout(900);
+    const resizedListNodes = await getCanvasNodes(window, projectId);
+    const resizedListNode = resizedListNodes.find((node) => node.id === listNodeId);
+    assert.equal(resizedListNode?.displayMode, "resized", "Expected list node to persist resized mode.");
+    await withTimeout(
+      "resized list keeps sheet layout after deselect",
+      getCanvasNodeLocator(window, "Smoke List").getByText("Editable table").waitFor({ state: "visible", timeout: 15_000 })
+    );
+
+    await window.reload();
+    await withTimeout("canvas reload after resized list", window.waitForLoadState("domcontentloaded"));
+    await withTimeout(
+      "canvas hook after resized list reload",
+      window.waitForFunction(
+        () =>
+          Boolean(
+            (window as typeof window & {
+              __NND_CANVAS_TEST__?: unknown;
+            }).__NND_CANVAS_TEST__
+          ),
+        undefined,
+        { timeout: 15_000 }
+      )
+    );
+    await withTimeout(
+      "resized list keeps sheet layout after reload",
+      getCanvasNodeLocator(window, "Smoke List").getByText("Editable table").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    console.log("Resized list persistence verified");
+
     await window.evaluate((nodeId: string) => {
       const api = (window as typeof window & {
         __NND_CANVAS_TEST__?: {
@@ -998,6 +1041,194 @@ async function main() {
     );
     await screenshotCanvasNode(window, "Smoke Template", templateFullScreenshotPath);
     console.log("Template full screenshot:", templateFullScreenshotPath);
+    await window.evaluate(
+      ({ nodeId }) => {
+        const api = (window as typeof window & {
+          __NND_CANVAS_TEST__?: {
+            resizeNode: (nodeId: string, size: { width: number; height: number }) => void;
+          };
+        }).__NND_CANVAS_TEST__;
+        api?.resizeNode(nodeId, { width: 700, height: 380 });
+      },
+      { nodeId: templateNodeId }
+    );
+    await window.waitForTimeout(900);
+    await clickCanvasNode(window, "Smoke Prompt");
+    await window.waitForTimeout(900);
+    const resizedTemplateNodes = await getCanvasNodes(window, projectId);
+    const resizedTemplateNode = resizedTemplateNodes.find((node) => node.id === templateNodeId);
+    assert.equal(resizedTemplateNode?.displayMode, "resized", "Expected template node to persist resized mode.");
+    await withTimeout(
+      "resized template keeps merge preview after deselect",
+      getCanvasNodeLocator(window, "Smoke Template").getByText("Merge preview").waitFor({ state: "visible", timeout: 15_000 })
+    );
+
+    await window.reload();
+    await withTimeout("canvas reload after resized template", window.waitForLoadState("domcontentloaded"));
+    await withTimeout(
+      "canvas hook after resized template reload",
+      window.waitForFunction(
+        () =>
+          Boolean(
+            (window as typeof window & {
+              __NND_CANVAS_TEST__?: unknown;
+            }).__NND_CANVAS_TEST__
+          ),
+        undefined,
+        { timeout: 15_000 }
+      )
+    );
+    await withTimeout(
+      "resized template keeps merge preview after reload",
+      getCanvasNodeLocator(window, "Smoke Template").getByText("Merge preview").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    console.log("Resized template persistence verified");
+
+    await window.evaluate(async ({ activeProjectId }) => {
+      const snapshot = await window.nodeInterface.getWorkspaceSnapshot(activeProjectId);
+      const canvasDocument = (snapshot.canvas?.canvasDocument || {
+        canvasViewport: { x: 0, y: 0, zoom: 1 },
+        generatedOutputReceiptKeys: [],
+        workflow: { nodes: [] },
+      }) as {
+        canvasViewport: { x: number; y: number; zoom: number };
+        generatedOutputReceiptKeys?: string[];
+        workflow: { nodes: Record<string, unknown>[] };
+      };
+
+      const nodes = [...canvasDocument.workflow.nodes].filter((node) => {
+        const label = typeof node.label === "string" ? node.label : "";
+        return label !== "Legacy Generated List" && label !== "Legacy Generated Template";
+      });
+
+      nodes.push(
+        {
+          id: "legacy-generated-list",
+          label: "Legacy Generated List",
+          providerId: "openai",
+          modelId: "gpt-4.1-mini",
+          kind: "list",
+          nodeType: "list",
+          outputType: "text",
+          prompt: "",
+          settings: {
+            source: "generated-model-list",
+            sourceJobId: "legacy-job-list",
+            sourceModelNodeId: "smoke-model-node",
+            outputIndex: 0,
+            descriptorIndex: 0,
+            columns: [
+              { id: "legacy-col-1", label: "Animal" },
+              { id: "legacy-col-2", label: "Region" },
+            ],
+            rows: [
+              {
+                id: "legacy-row-1",
+                values: {
+                  "legacy-col-1": "Otter",
+                  "legacy-col-2": "Coast",
+                },
+              },
+            ],
+          },
+          sourceAssetId: null,
+          sourceAssetMimeType: null,
+          sourceJobId: "legacy-job-list",
+          sourceOutputIndex: 0,
+          processingState: null,
+          promptSourceNodeId: null,
+          upstreamNodeIds: ["smoke-model-node"],
+          upstreamAssetIds: ["node:smoke-model-node"],
+          x: 1180,
+          y: 120,
+          displayMode: "resized",
+          size: { width: 640, height: 360 },
+        },
+        {
+          id: "legacy-generated-template",
+          label: "Legacy Generated Template",
+          providerId: "openai",
+          modelId: "gpt-4.1-mini",
+          kind: "text-template",
+          nodeType: "text-template",
+          outputType: "text",
+          prompt: "Illustrate a [[Animal]] in [[Region]].",
+          settings: {
+            source: "generated-model-template",
+            sourceJobId: "legacy-job-template",
+            sourceModelNodeId: "smoke-model-node",
+            outputIndex: 0,
+            descriptorIndex: 0,
+          },
+          sourceAssetId: null,
+          sourceAssetMimeType: null,
+          sourceJobId: "legacy-job-template",
+          sourceOutputIndex: 0,
+          processingState: null,
+          promptSourceNodeId: null,
+          upstreamNodeIds: ["smoke-list-node"],
+          upstreamAssetIds: ["node:smoke-list-node"],
+          x: 1180,
+          y: 560,
+          displayMode: "resized",
+          size: { width: 700, height: 380 },
+        }
+      );
+
+      await window.nodeInterface.saveWorkspaceSnapshot(activeProjectId, {
+        canvasDocument: {
+          ...canvasDocument,
+          generatedOutputReceiptKeys: [],
+          workflow: {
+            nodes,
+          },
+        },
+      });
+    }, { activeProjectId: projectId });
+
+    await window.reload();
+    await withTimeout("canvas reload after legacy generated migration seed", window.waitForLoadState("domcontentloaded"));
+    await withTimeout(
+      "canvas hook after legacy generated migration seed reload",
+      window.waitForFunction(
+        () =>
+          Boolean(
+            (window as typeof window & {
+              __NND_CANVAS_TEST__?: unknown;
+            }).__NND_CANVAS_TEST__
+          ),
+        undefined,
+        { timeout: 15_000 }
+      )
+    );
+    const migratedGeneratedSnapshot = await window.evaluate(async (activeProjectId) => {
+      const snapshot = await window.nodeInterface.getWorkspaceSnapshot(activeProjectId);
+      return (snapshot.canvas?.canvasDocument || null) as {
+        generatedOutputReceiptKeys?: string[];
+        workflow?: { nodes?: Array<{ id: string; label: string; displayMode?: string }> };
+      } | null;
+    }, projectId);
+    assert.ok(migratedGeneratedSnapshot, "Expected a canvas document after legacy generated migration.");
+    assert.ok(
+      migratedGeneratedSnapshot.generatedOutputReceiptKeys?.includes("legacy-job-list:0:0"),
+      "Expected legacy generated list output receipt to be persisted."
+    );
+    assert.ok(
+      migratedGeneratedSnapshot.generatedOutputReceiptKeys?.includes("legacy-job-template:0:0"),
+      "Expected legacy generated template output receipt to be persisted."
+    );
+    const migratedGeneratedNodes = migratedGeneratedSnapshot.workflow?.nodes || [];
+    assert.equal(
+      migratedGeneratedNodes.find((node) => node.id === "legacy-generated-list")?.displayMode,
+      "resized",
+      "Expected legacy generated list node to stay resized after migration."
+    );
+    assert.equal(
+      migratedGeneratedNodes.find((node) => node.id === "legacy-generated-template")?.displayMode,
+      "resized",
+      "Expected legacy generated template node to stay resized after migration."
+    );
+    console.log("Legacy generated output receipt migration verified");
 
     await window.screenshot({ path: canvasScreenshotPath, fullPage: true });
     console.log("Canvas screenshot:", canvasScreenshotPath);

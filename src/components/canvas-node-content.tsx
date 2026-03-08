@@ -15,6 +15,7 @@ import type {
   WorkflowNode,
 } from "@/components/workspace/types";
 import type { ModelParameterDefinition } from "@/lib/model-parameters";
+import { getListNodeSettings } from "@/lib/list-template";
 import type { TextTemplatePreview } from "@/lib/list-template";
 import styles from "@/components/infinite-canvas.module.css";
 
@@ -189,6 +190,28 @@ function ModeSwitch({
   );
 }
 
+function StaticNodeHeader({
+  node,
+  showPreviewButton,
+  onCompact,
+  onPreview,
+}: {
+  node: CanvasRenderNode;
+  showPreviewButton: boolean;
+  onCompact: () => void;
+  onPreview: () => void;
+}) {
+  return (
+    <header className={styles.inlineNodeHeader} data-node-drag-handle="true">
+      <div className={styles.inlineNodeHeaderMeta}>
+        <strong>{node.label}</strong>
+        <span>{node.kind === "model" ? node.displayModelName || node.modelId : node.kind}</span>
+      </div>
+      <ModeSwitch showPreviewButton={showPreviewButton} onCompact={onCompact} onPreview={onPreview} />
+    </header>
+  );
+}
+
 function PreviewModelNode({ node }: { node: CanvasRenderNode }) {
   const secondaryLine = node.promptSourceNodeId
     ? "Prompt note connected"
@@ -293,6 +316,7 @@ function ListSheetEditor({
   onAddListRow,
   onRemoveListRow,
   onCommitTextEdits,
+  editable = true,
 }: {
   settings: ListNodeSettings;
   onUpdateListColumnLabel: (columnId: string, label: string) => void;
@@ -302,6 +326,7 @@ function ListSheetEditor({
   onAddListRow: () => void;
   onRemoveListRow: (rowId: string) => void;
   onCommitTextEdits: () => void;
+  editable?: boolean;
 }) {
   const rows = useMemo<ListSheetRow[]>(
     () =>
@@ -328,37 +353,49 @@ function ListSheetEditor({
         header: () => (
           <div className={styles.inlineSheetHeaderCellInner}>
             <span className={styles.inlineSheetLetter}>{spreadsheetColumnLabel(index)}</span>
-            <input
-              className={styles.inlineSheetHeaderInput}
-              value={column.label}
-              onChange={(event) => onUpdateListColumnLabel(column.id, event.target.value)}
-              onBlur={onCommitTextEdits}
-              onPointerDown={stopPointer}
-              placeholder={`Column ${index + 1}`}
-            />
-            <button
-              type="button"
-              className={styles.inlineSheetRemoveColumn}
-              onClick={() => onRemoveListColumn(column.id)}
-              onPointerDown={stopPointer}
-              aria-label={`Remove ${column.label || `column ${index + 1}`}`}
-            >
-              ×
-            </button>
+            {editable ? (
+              <>
+                <input
+                  className={styles.inlineSheetHeaderInput}
+                  value={column.label}
+                  onChange={(event) => onUpdateListColumnLabel(column.id, event.target.value)}
+                  onBlur={onCommitTextEdits}
+                  onPointerDown={stopPointer}
+                  placeholder={`Column ${index + 1}`}
+                />
+                <button
+                  type="button"
+                  className={styles.inlineSheetRemoveColumn}
+                  onClick={() => onRemoveListColumn(column.id)}
+                  onPointerDown={stopPointer}
+                  aria-label={`Remove ${column.label || `column ${index + 1}`}`}
+                >
+                  ×
+                </button>
+              </>
+            ) : (
+              <span className={styles.inlineSheetHeaderInput}>{column.label || `Column ${index + 1}`}</span>
+            )}
           </div>
         ),
         cell: ({ row }) => (
-          <input
-            className={styles.inlineSheetCellInput}
-            value={row.original.values[column.id] || ""}
-            onChange={(event) => onUpdateListCell(row.original.id, column.id, event.target.value)}
-            onBlur={onCommitTextEdits}
-            onPointerDown={stopPointer}
-            placeholder="Value"
-          />
+          editable ? (
+            <input
+              className={styles.inlineSheetCellInput}
+              value={row.original.values[column.id] || ""}
+              onChange={(event) => onUpdateListCell(row.original.id, column.id, event.target.value)}
+              onBlur={onCommitTextEdits}
+              onPointerDown={stopPointer}
+              placeholder="Value"
+            />
+          ) : (
+            <span className={styles.inlineSheetCellInput}>{row.original.values[column.id] || ""}</span>
+          )
         ),
       })),
-      {
+      ...(editable
+        ? [
+            {
         id: "rowActions",
         header: () => <span className={styles.inlineSheetActionLabel}>Actions</span>,
         cell: ({ row }) => (
@@ -374,9 +411,12 @@ function ListSheetEditor({
         meta: {
           className: styles.inlineSheetActionColumn,
         },
-      },
+            } satisfies ColumnDef<ListSheetRow>,
+          ]
+        : []),
     ],
     [
+      editable,
       onCommitTextEdits,
       onRemoveListColumn,
       onRemoveListRow,
@@ -399,14 +439,16 @@ function ListSheetEditor({
           <strong>Sheet</strong>
           <span>{`${settings.columns.length} columns · ${settings.rows.length} rows`}</span>
         </div>
-        <div className={styles.inlineSheetChromeActions}>
-          <button type="button" onClick={onAddColumn} onPointerDown={stopPointer}>
-            Add column
-          </button>
-          <button type="button" onClick={onAddRow} onPointerDown={stopPointer}>
-            Add row
-          </button>
-        </div>
+        {editable ? (
+          <div className={styles.inlineSheetChromeActions}>
+            <button type="button" onClick={onAddColumn} onPointerDown={stopPointer}>
+              Add column
+            </button>
+            <button type="button" onClick={onAddRow} onPointerDown={stopPointer}>
+              Add row
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className={styles.inlineSheetTitleRow}>
         <span>Editable table</span>
@@ -479,6 +521,8 @@ export function CanvasNodeContent({
   const isActive = activeEditor?.nodeId === node.id;
   const templateTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const showPreviewButton = node.displayMode !== "preview";
+  const inactiveListSettings = node.kind === "list" && !isActive ? getListNodeSettings(node.settings) : null;
+  const isStaticResized = !isActive && node.renderMode === "resized";
 
   const insertTemplateToken = (label: string) => {
     if (!templateTextareaRef.current || !activeEditor) {
@@ -498,7 +542,10 @@ export function CanvasNodeContent({
     return <CompactNode node={node} />;
   }
 
-  if (!isActive || node.renderMode === "preview") {
+  if (
+    node.renderMode === "preview" ||
+    (!isActive && node.renderMode !== "resized")
+  ) {
     if (node.kind === "model") {
       return <PreviewModelNode node={node} />;
     }
@@ -512,6 +559,111 @@ export function CanvasNodeContent({
       return <PreviewTemplateNode node={node} />;
     }
     return <PreviewAssetNode node={node} />;
+  }
+
+  if (isStaticResized && node.kind === "list" && inactiveListSettings) {
+    return (
+      <div className={styles.inlineNodeSurface}>
+        <StaticNodeHeader
+          node={node}
+          showPreviewButton={showPreviewButton}
+          onCompact={() => onSetDisplayMode("compact")}
+          onPreview={() => onSetDisplayMode("preview")}
+        />
+        <div className={styles.inlineListFullShell}>
+          <ListSheetEditor
+            settings={inactiveListSettings}
+            onUpdateListColumnLabel={() => undefined}
+            onUpdateListCell={() => undefined}
+            onAddListColumn={() => undefined}
+            onRemoveListColumn={() => undefined}
+            onAddListRow={() => undefined}
+            onRemoveListRow={() => undefined}
+            onCommitTextEdits={() => undefined}
+            editable={false}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (isStaticResized) {
+    if (node.kind === "text-note") {
+      return (
+        <div className={styles.inlineNodeSurface}>
+          <StaticNodeHeader
+            node={node}
+            showPreviewButton={showPreviewButton}
+            onCompact={() => onSetDisplayMode("compact")}
+            onPreview={() => onSetDisplayMode("preview")}
+          />
+          <div className={styles.inlineNodeBodyShell}>
+            <div className={styles.inlineNoteEditor}>{node.prompt.trim() || "Empty note"}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (node.kind === "text-template") {
+      return (
+        <div className={styles.inlineNodeSurface}>
+          <StaticNodeHeader
+            node={node}
+            showPreviewButton={showPreviewButton}
+            onCompact={() => onSetDisplayMode("compact")}
+            onPreview={() => onSetDisplayMode("preview")}
+          />
+          <div className={styles.inlineTemplateFullShell}>
+            <section className={styles.inlineTemplateMainColumn}>
+              <div className={styles.inlineNodeSectionHeading}>
+                <strong>Template</strong>
+                <span>Use `[[variables]]` for list-backed placeholders.</span>
+              </div>
+              <div className={styles.inlineVariableShelf}>
+                {(node.templateTokens || []).map((token) => (
+                  <span key={`${node.id}-${token}`} className={styles.inlineVariableChip}>
+                    {`[[${token}]]`}
+                  </span>
+                ))}
+              </div>
+              <div className={styles.inlineTemplateEditor}>{node.prompt.trim() || "Empty template"}</div>
+            </section>
+            <aside className={styles.inlineTemplateSideRail}>
+              <div className={styles.inlineTemplateStatusCard}>
+                <strong>Compatibility</strong>
+                <span>{node.templateStatusMessage || "Ready"}</span>
+              </div>
+              <div className={styles.inlineTemplateStatusCard}>
+                <strong>Merge preview</strong>
+                <div className={styles.inlineTemplatePreviewRows}>
+                  {(node.templatePreviewRows || []).length > 0 ? (
+                    (node.templatePreviewRows || []).map((row, index) => (
+                      <span key={`${node.id}-preview-row-${index}`}>{row}</span>
+                    ))
+                  ) : (
+                    <span>No preview rows yet.</span>
+                  )}
+                </div>
+                <span>{`${node.templateRegisteredColumnCount || 0} columns · ${node.listRowCount || 0} rows`}</span>
+              </div>
+            </aside>
+          </div>
+        </div>
+      );
+    }
+
+    if (node.kind === "asset-source") {
+      return (
+        <div className={styles.inlineNodeSurface}>
+          <StaticNodeHeader
+            node={node}
+            showPreviewButton={showPreviewButton}
+            onCompact={() => onSetDisplayMode("compact")}
+            onPreview={() => onSetDisplayMode("preview")}
+          />
+        </div>
+      );
+    }
   }
 
   if (!activeEditor) {

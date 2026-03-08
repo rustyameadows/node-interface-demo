@@ -53,6 +53,7 @@ What it does:
   - resized asset nodes can still be dragged after resize
   - list full mode renders as a real editable sheet
   - template full mode keeps chips, editor, and merge preview contained
+  - legacy generated nodes are auto-migrated onto one-time spawned-child behavior on reload
 - imports an SVG asset through the live preload bridge
 - navigates through assets, queue, project settings, and app settings through native menu commands
 - verifies:
@@ -69,6 +70,7 @@ What it does:
   - canvas shortcuts stay canvas-scoped and do not fire while a prompt editor or other editable control is focused
   - asset metadata exists
   - asset file exists on disk
+  - generated-output receipt keys persist in the saved canvas document
   - queue screen renders
   - project settings render with project metadata only
   - provider credentials render in app settings
@@ -215,21 +217,24 @@ Run this when touching workflow or asset UX:
 17. Resize an asset node, then drag it directly from the media surface and confirm it still moves cleanly.
 18. Confirm phantom output previews appear only for the active node and disappear when you deselect or change selection.
 19. Use `Cmd/Ctrl+Z` and `Cmd/Ctrl+Shift+Z` to undo/redo one move, one connection, and one inline edit.
-20. Import an asset.
-21. Open the Assets view and confirm the imported asset appears.
-22. Open Project Settings and confirm the project metadata renders and provider credentials do not appear there.
-23. Open App Settings and confirm provider credentials render there.
-24. If testing on macOS, confirm:
+20. If a generated child node exists, resize or edit it, wait through at least one jobs poll, reload, and confirm it does not revert.
+21. Delete a generated child node, reload, and confirm it does not respawn.
+22. Import an asset.
+23. Open the Assets view and confirm the imported asset appears.
+24. Open Project Settings and confirm the project metadata renders and provider credentials do not appear there.
+25. Open App Settings and confirm provider credentials render there.
+26. If testing on macOS, confirm:
    - `File`, `Project`, `Canvas`, `Edit`, `View`, and `Window` menus appear
    - `Cmd+,` opens App Settings
    - `File > New Project` opens a new project
    - `Project > Home` returns to app home
    - `Project > Assets` / `Queue` / `Project Settings` match the in-app menu behavior
    - `Canvas > Add Node…`, `Connect Selected Nodes`, `Duplicate Selected Node`, `Undo Canvas Change`, and `Redo Canvas Change` enable or disable correctly on canvas
-25. If API keys are configured, run at least one real provider job and verify:
-   - queue row created
-   - state changes visible
-   - output lands on canvas or in assets as appropriate
+27. If API keys are configured, run at least one real provider job and verify:
+  - queue row created
+  - state changes visible
+  - output lands on canvas or in assets as appropriate
+  - rerunning appends a fresh set of generated child nodes instead of replacing earlier ones
 
 ## Manual Packaged-App Checklist
 Run this against the packaged `.app` after `npm run package:mac`:

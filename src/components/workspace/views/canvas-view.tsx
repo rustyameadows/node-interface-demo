@@ -28,11 +28,9 @@ import {
   resolveOpenAiImageSettings,
 } from "@/lib/openai-image-settings";
 import {
-  applyGeneratedDescriptorToNode,
   buildGeneratedNodePosition,
   createGeneratedModelNode,
   getGeneratedDescriptorDefaultLabel,
-  getGeneratedNodeDescriptorKey,
   type GeneratedNodeDescriptor,
   type GeneratedNodeKind,
 } from "@/lib/generated-text-output";
@@ -96,6 +94,13 @@ import {
 import {
   resolveCanvasNodePresentation,
 } from "@/lib/canvas-node-presentation";
+import {
+  getCanvasGeneratedOutputReceiptKeys,
+  getGeneratedOutputReceiptKey,
+  getGeneratedOutputReceiptKeyForNode,
+  getLegacyGeneratedOutputReceiptKeys,
+  setCanvasGeneratedOutputReceiptKeys,
+} from "@/lib/generated-output-receipts";
 import { subscribeToCanvasMenuCommand } from "@/renderer/canvas-menu-command-bus";
 import { publishCanvasMenuState, resetCanvasMenuState } from "@/renderer/canvas-menu-context-bus";
 import styles from "./canvas-view.module.css";
@@ -143,6 +148,8 @@ type PendingCoalescedCanvasHistory = {
   beforeState: CanvasHistoryState<CanvasConnection>;
   afterState: CanvasHistoryState<CanvasConnection>;
 };
+
+type GeneratedTextPlaceholderTarget = "note" | "list" | "template" | "smart";
 
 function isEditableKeyboardTarget(target: EventTarget | null) {
   return (
@@ -350,13 +357,6 @@ function getNodeSourceOutputIndex(node: WorkflowNode | null | undefined) {
   return typeof node.settings.outputIndex === "number" ? Number(node.settings.outputIndex) : null;
 }
 
-function getNodeSourceDescriptorIndex(node: WorkflowNode | null | undefined) {
-  if (!node) {
-    return 0;
-  }
-  return typeof node.settings.descriptorIndex === "number" ? Number(node.settings.descriptorIndex) : 0;
-}
-
 function getSourceModelNodeId(node: WorkflowNode | null | undefined) {
   if (!node) {
     return null;
@@ -504,7 +504,7 @@ function createGeneratedModelPlaceholderNode(
   modelNode: WorkflowNode,
   job: Job,
   sourceNodeId: string,
-  target: "note" | "list" | "template",
+  target: GeneratedTextPlaceholderTarget,
   visualIndex: number
 ): WorkflowNode {
   const descriptorKind: GeneratedNodeKind =
@@ -531,9 +531,12 @@ function createGeneratedModelPlaceholderNode(
             outputIndex: 0,
             descriptorIndex: 0,
           }
-        : {
+      : {
             kind: "text-note",
-            label: getGeneratedDescriptorDefaultLabel("text-note", visualIndex),
+            label:
+              target === "smart"
+                ? "Structured outputs"
+                : getGeneratedDescriptorDefaultLabel("text-note", visualIndex),
             text: "",
             sourceJobId: job.id,
             sourceModelNodeId: sourceNodeId,
@@ -556,16 +559,6 @@ function createGeneratedModelPlaceholderNode(
     processingState: job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null,
     descriptor,
   });
-}
-
-function getExpectedGeneratedTextNodeCount(job: Job) {
-  const textOutputTarget = getTextOutputTargetFromSettings(job.nodeRunPayload?.settings);
-
-  if (textOutputTarget === "smart") {
-    return (job.generatedNodeDescriptors || []).length;
-  }
-
-  return Math.max(1, (job.generatedNodeDescriptors || []).length);
 }
 
 function findMatchingGeneratedImageAsset(job: Job, sourceOutputIndex: number | null) {
@@ -596,23 +589,9 @@ function findMatchingGeneratedImageAsset(job: Job, sourceOutputIndex: number | n
   return null;
 }
 
-function findMatchingGeneratedNodeDescriptor(job: Job, node: WorkflowNode) {
-  const sourceJobId = getNodeSourceJobId(node);
-  if (!sourceJobId || sourceJobId !== job.id) {
-    return null;
-  }
-
-  const descriptorIndex = getNodeSourceDescriptorIndex(node);
-  const sourceOutputIndex = getNodeSourceOutputIndex(node) ?? 0;
-
-  return (
-    (job.generatedNodeDescriptors || []).find(
-      (descriptor) =>
-        descriptor.descriptorIndex === descriptorIndex &&
-        descriptor.outputIndex === sourceOutputIndex &&
-        descriptor.sourceJobId === sourceJobId
-    ) || null
-  );
+function isConsumedGeneratedOutputNode(node: WorkflowNode, receiptKeys: Set<string>) {
+  const receiptKey = getGeneratedOutputReceiptKeyForNode(node);
+  return Boolean(receiptKey && receiptKeys.has(receiptKey));
 }
 
 export function CanvasView({ projectId }: Props) {
@@ -1119,6 +1098,13 @@ export function CanvasView({ projectId }: Props) {
           templateRegisteredColumnCount: templatePreview?.columns.length || 0,
           templateUnresolvedCount: templatePreview?.unresolvedTokens.length || 0,
           templateReady: Boolean(templatePreview && !templatePreview.disabledReason),
+          templateTokens:
+            (templatePreview?.columns.length || 0) > 0
+              ? (templatePreview?.columns || []).map((column) => column.label)
+              : (templatePreview?.tokens || []).map((token) => token.label),
+          templatePreviewRows: (templatePreview?.rows || []).slice(0, 4).map((row) => row.text),
+          templateStatusMessage:
+            templatePreview?.disabledReason || templatePreview?.readyMessage || null,
         };
       }
 
@@ -1281,6 +1267,11 @@ export function CanvasView({ projectId }: Props) {
     const data = await getCanvasWorkspace(projectId);
     const raw = (data.canvas?.canvasDocument || {}) as Record<string, unknown>;
     const viewportRaw = (raw.canvasViewport as Record<string, unknown> | undefined) || {};
+    const savedGeneratedOutputReceiptKeys = Array.isArray(raw.generatedOutputReceiptKeys)
+      ? raw.generatedOutputReceiptKeys
+          .map((value) => (typeof value === "string" ? value : null))
+          .filter((value): value is string => Boolean(value))
+      : [];
     const nodesRaw = Array.isArray((raw.workflow as Record<string, unknown> | undefined)?.nodes)
       ? (((raw.workflow as Record<string, unknown>).nodes as unknown[]) || [])
       : [];
@@ -1288,6 +1279,12 @@ export function CanvasView({ projectId }: Props) {
     const nodes = nodesRaw
       .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
       .map((node, index) => normalizeNode(node, index));
+    const nextGeneratedOutputReceiptKeys = [
+      ...new Set([...savedGeneratedOutputReceiptKeys, ...getLegacyGeneratedOutputReceiptKeys(nodes)]),
+    ].sort();
+    const didMigrateGeneratedOutputReceipts =
+      JSON.stringify([...new Set(savedGeneratedOutputReceiptKeys)].sort()) !==
+      JSON.stringify(nextGeneratedOutputReceiptKeys);
 
     const nextDoc: CanvasDocument = {
       canvasViewport: {
@@ -1298,6 +1295,7 @@ export function CanvasView({ projectId }: Props) {
             ? viewportRaw.zoom
             : defaultCanvasDocument.canvasViewport.zoom,
       },
+      generatedOutputReceiptKeys: nextGeneratedOutputReceiptKeys,
       workflow: {
         nodes,
       },
@@ -1311,6 +1309,10 @@ export function CanvasView({ projectId }: Props) {
     resetCanvasHistory();
 
     hasLoadedCanvasRef.current = true;
+
+    if (didMigrateGeneratedOutputReceipts) {
+      await persistCanvas(nextDoc);
+    }
 
     if (pendingCanvasSaveRef.current) {
       const pendingDoc = pendingCanvasSaveRef.current;
@@ -1600,14 +1602,55 @@ export function CanvasView({ projectId }: Props) {
   }, [canvasDoc.workflow.nodes, selectedConnection, setTrackedSelectedConnection]);
 
   useEffect(() => {
-    if (jobs.length === 0) {
+    if (jobs.length === 0 || !hasLoadedCanvasRef.current) {
       return;
     }
 
     const prev = canvasDocRef.current;
-    const jobById = new Map(jobs.map((job) => [job.id, job]));
-    const workingNodes = [...prev.workflow.nodes];
+    let workingNodes = [...prev.workflow.nodes];
+    const nextGeneratedOutputReceiptKeys = getCanvasGeneratedOutputReceiptKeys(prev);
     let didChange = false;
+    let didReceiptChange = false;
+    let nextSelectedNodeIds = [...selectedNodeIdsRef.current];
+
+    const replaceSelectedNodeId = (nodeId: string, nextNodeId: string) => {
+      nextSelectedNodeIds = nextSelectedNodeIds.map((selectedNodeId) => (selectedNodeId === nodeId ? nextNodeId : selectedNodeId));
+    };
+
+    const filterWorkingNodes = (predicate: (node: WorkflowNode) => boolean) => {
+      const removedIds: string[] = [];
+      const nextNodes = workingNodes.filter((node) => {
+        if (!predicate(node)) {
+          removedIds.push(node.id);
+          return false;
+        }
+        return true;
+      });
+
+      if (removedIds.length === 0) {
+        return;
+      }
+
+      workingNodes = nextNodes;
+      nextSelectedNodeIds = nextSelectedNodeIds.filter((selectedNodeId) => !removedIds.includes(selectedNodeId));
+      didChange = true;
+    };
+
+    const upsertWorkingNode = (nextNode: WorkflowNode) => {
+      const currentIndex = workingNodes.findIndex((candidate) => candidate.id === nextNode.id);
+      if (currentIndex === -1) {
+        workingNodes = [...workingNodes, nextNode];
+        didChange = true;
+        return;
+      }
+
+      if (JSON.stringify(workingNodes[currentIndex]) === JSON.stringify(nextNode)) {
+        return;
+      }
+
+      workingNodes = workingNodes.map((candidate, index) => (index === currentIndex ? nextNode : candidate));
+      didChange = true;
+    };
 
     const existingGeneratedImageCountByModelNodeId = new Map<string, number>();
     const existingGeneratedTextCountByModelNodeId = new Map<string, number>();
@@ -1656,31 +1699,100 @@ export function CanvasView({ projectId }: Props) {
           continue;
         }
 
-        const jobNodes = workingNodes.filter(
-          (node) =>
-            getNodeSourceJobId(node) === job.id &&
-            (typeof node.settings.sourceModelNodeId === "string" || node.upstreamNodeIds.includes(sourceNodeId))
-        );
         for (let outputIndex = 0; outputIndex < expectedOutputCount; outputIndex += 1) {
-          const hasIndexedNode = jobNodes.some((node) => getNodeSourceOutputIndex(node) === outputIndex);
-          const hasLegacyPrimaryNode =
-            outputIndex === 0 && jobNodes.some((node) => getNodeSourceOutputIndex(node) === null);
+          const receiptKey = getGeneratedOutputReceiptKey({
+            sourceJobId: job.id,
+            outputIndex,
+            descriptorIndex: 0,
+          });
+          const matchingImageAsset = findMatchingGeneratedImageAsset(job, outputIndex);
+          const pendingNodes = workingNodes.filter(
+            (node) =>
+              getGeneratedOutputReceiptKeyForNode(node) === receiptKey &&
+              !isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys)
+          );
+          const pendingNode = pendingNodes[0] || null;
+          const nextProcessingState =
+            job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null;
 
-          if (hasIndexedNode || hasLegacyPrimaryNode) {
+          if (nextGeneratedOutputReceiptKeys.has(receiptKey)) {
+            if (pendingNodes.length > 0) {
+              filterWorkingNodes((node) => !pendingNodes.some((candidate) => candidate.id === node.id));
+            }
             continue;
           }
 
-          const visualIndex =
-            (existingGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) +
-            (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0);
-          const outputNode = createGeneratedOutputNode(modelNode, job, sourceNodeId, outputIndex, visualIndex);
+          if (job.state === "succeeded" && matchingImageAsset) {
+            const visualIndex =
+              (existingGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) +
+              (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0);
+            const baseNode = createGeneratedOutputNode(modelNode, job, sourceNodeId, outputIndex, visualIndex);
+            const finalNode: WorkflowNode = {
+              ...baseNode,
+              id: uid(),
+              label: pendingNode?.label || baseNode.label,
+              x: pendingNode?.x ?? baseNode.x,
+              y: pendingNode?.y ?? baseNode.y,
+              sourceAssetId: matchingImageAsset.id,
+              sourceAssetMimeType: matchingImageAsset.mimeType,
+              processingState: null,
+            };
 
-          workingNodes.push(outputNode);
-          insertedGeneratedImageCountByModelNodeId.set(
-            sourceNodeId,
-            (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) + 1
-          );
-          didChange = true;
+            if (pendingNode) {
+              filterWorkingNodes((node) => node.id !== pendingNode.id);
+              replaceSelectedNodeId(pendingNode.id, finalNode.id);
+            } else {
+              insertedGeneratedImageCountByModelNodeId.set(
+                sourceNodeId,
+                (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) + 1
+              );
+            }
+
+            upsertWorkingNode(finalNode);
+            nextGeneratedOutputReceiptKeys.add(receiptKey);
+            didReceiptChange = true;
+            continue;
+          }
+
+          if (job.state === "canceled") {
+            if (pendingNodes.length > 0) {
+              filterWorkingNodes((node) => !pendingNodes.some((candidate) => candidate.id === node.id));
+            }
+            continue;
+          }
+
+          if (!pendingNode) {
+            const visualIndex =
+              (existingGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) +
+              (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0);
+            const outputNode = createGeneratedOutputNode(modelNode, job, sourceNodeId, outputIndex, visualIndex);
+            upsertWorkingNode(outputNode);
+            insertedGeneratedImageCountByModelNodeId.set(
+              sourceNodeId,
+              (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) + 1
+            );
+            continue;
+          }
+
+          const nextPendingNode: WorkflowNode = {
+            ...pendingNode,
+            providerId: job.providerId as WorkflowNode["providerId"],
+            modelId: job.modelId,
+            processingState: nextProcessingState,
+            sourceAssetId: matchingImageAsset?.id || pendingNode.sourceAssetId,
+            sourceAssetMimeType: matchingImageAsset?.mimeType || pendingNode.sourceAssetMimeType,
+            settings: {
+              ...pendingNode.settings,
+              source: "generated",
+              sourceJobId: job.id,
+              outputIndex,
+              sourceModelNodeId:
+                typeof pendingNode.settings.sourceModelNodeId === "string"
+                  ? pendingNode.settings.sourceModelNodeId
+                  : sourceNodeId,
+            },
+          };
+          upsertWorkingNode(nextPendingNode);
         }
         continue;
       }
@@ -1691,196 +1803,150 @@ export function CanvasView({ projectId }: Props) {
 
       const textOutputTarget = getTextOutputTargetFromSettings(job.nodeRunPayload?.settings);
       const generatedNodeDescriptors = job.generatedNodeDescriptors || [];
-      const jobNodes = workingNodes.filter(
-        (node) => getNodeSourceJobId(node) === job.id && Boolean(getGeneratedModelNodeSource(node.settings))
-      );
-      const ensuredDescriptorKeys = new Set(
-        jobNodes.map((node) =>
-          getGeneratedNodeDescriptorKey({
-            sourceJobId: job.id,
-            outputIndex: getNodeSourceOutputIndex(node) ?? 0,
-            descriptorIndex: getNodeSourceDescriptorIndex(node),
-          })
-        )
-      );
+      if (job.state === "succeeded") {
+        const descriptorsToSpawn = textOutputTarget === "smart" ? generatedNodeDescriptors : generatedNodeDescriptors.slice(0, 1);
 
-      const descriptorsToEnsure =
-        textOutputTarget === "smart"
-          ? generatedNodeDescriptors
-          : generatedNodeDescriptors.length > 0
-            ? generatedNodeDescriptors.slice(0, 1)
-            : job.state === "queued" || job.state === "running" || job.state === "failed"
-              ? [null]
-              : [];
+        for (const descriptor of descriptorsToSpawn) {
+          const receiptKey = getGeneratedOutputReceiptKey(descriptor);
+          const pendingNodes = workingNodes.filter(
+            (node) =>
+              getGeneratedOutputReceiptKeyForNode(node) === receiptKey &&
+              !isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys)
+          );
+          const pendingNode = pendingNodes[0] || null;
 
-      if (getExpectedGeneratedTextNodeCount(job) <= 0) {
+          if (nextGeneratedOutputReceiptKeys.has(receiptKey)) {
+            if (pendingNodes.length > 0) {
+              filterWorkingNodes((node) => !pendingNodes.some((candidate) => candidate.id === node.id));
+            }
+            continue;
+          }
+
+          const visualIndex =
+            (existingGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) +
+            (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0);
+          const finalNode = createGeneratedModelNode({
+            id: uid(),
+            providerId: modelNode.providerId,
+            modelId: modelNode.modelId,
+            modelNodeId: sourceNodeId,
+            label: descriptor.label || getGeneratedDescriptorDefaultLabel(descriptor.kind, visualIndex),
+            position: pendingNode
+              ? {
+                  x: pendingNode.x,
+                  y: pendingNode.y,
+                }
+              : buildGeneratedNodePosition({
+                  modelNode,
+                  visualIndex,
+                  baseOffsetX: generatedTextNodeOffsetX,
+                  offsetY: generatedTextNodeOffsetY,
+                }),
+            processingState: null,
+            descriptor,
+            connectToSourceModel: textOutputTarget !== "smart",
+          });
+
+          if (pendingNode) {
+            filterWorkingNodes((node) => node.id !== pendingNode.id);
+            replaceSelectedNodeId(pendingNode.id, finalNode.id);
+          } else {
+            insertedGeneratedTextCountByModelNodeId.set(
+              sourceNodeId,
+              (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) + 1
+            );
+          }
+
+          upsertWorkingNode(finalNode);
+          nextGeneratedOutputReceiptKeys.add(receiptKey);
+          didReceiptChange = true;
+        }
         continue;
       }
 
-      for (const descriptor of descriptorsToEnsure) {
-        const descriptorKey = descriptor
-          ? getGeneratedNodeDescriptorKey(descriptor)
-          : getGeneratedNodeDescriptorKey({
-              sourceJobId: job.id,
-              outputIndex: 0,
-              descriptorIndex: 0,
-            });
-        if (ensuredDescriptorKeys.has(descriptorKey)) {
-          continue;
-        }
+      if (job.state === "canceled") {
+        filterWorkingNodes((node) => getNodeSourceJobId(node) !== job.id || isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys));
+        continue;
+      }
 
+      const placeholderTarget: GeneratedTextPlaceholderTarget =
+        textOutputTarget === "list"
+          ? "list"
+          : textOutputTarget === "template"
+            ? "template"
+            : textOutputTarget === "smart"
+              ? "smart"
+              : "note";
+      const placeholderReceiptKey = getGeneratedOutputReceiptKey({
+        sourceJobId: job.id,
+        outputIndex: 0,
+        descriptorIndex: 0,
+      });
+      const pendingNodes = workingNodes.filter(
+        (node) =>
+          getGeneratedOutputReceiptKeyForNode(node) === placeholderReceiptKey &&
+          !isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys)
+      );
+      const pendingNode = pendingNodes[0] || null;
+
+      if (nextGeneratedOutputReceiptKeys.has(placeholderReceiptKey)) {
+        if (pendingNodes.length > 0) {
+          filterWorkingNodes((node) => !pendingNodes.some((candidate) => candidate.id === node.id));
+        }
+        continue;
+      }
+
+      const nextProcessingState =
+        job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null;
+
+      if (!pendingNode) {
         const visualIndex =
           (existingGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) +
           (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0);
-        const outputNode = descriptor
-          ? createGeneratedModelNode({
-              id: uid(),
-              providerId: modelNode.providerId,
-              modelId: modelNode.modelId,
-              modelNodeId: sourceNodeId,
-              label: descriptor.label || getGeneratedDescriptorDefaultLabel(descriptor.kind, visualIndex),
-              position: buildGeneratedNodePosition({
-                modelNode,
-                visualIndex,
-                baseOffsetX: generatedTextNodeOffsetX,
-                offsetY: generatedTextNodeOffsetY,
-              }),
-              processingState:
-                job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null,
-              descriptor,
-              connectToSourceModel: textOutputTarget !== "smart",
-            })
-          : createGeneratedModelPlaceholderNode(
-              modelNode,
-              job,
-              sourceNodeId,
-              textOutputTarget === "list" ? "list" : textOutputTarget === "template" ? "template" : "note",
-              visualIndex
-            );
-
-        workingNodes.push(outputNode);
+        const outputNode = createGeneratedModelPlaceholderNode(
+          modelNode,
+          job,
+          sourceNodeId,
+          placeholderTarget,
+          visualIndex
+        );
+        upsertWorkingNode(outputNode);
         insertedGeneratedTextCountByModelNodeId.set(
           sourceNodeId,
           (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) + 1
         );
-        ensuredDescriptorKeys.add(descriptorKey);
-        didChange = true;
+        continue;
+      }
+
+      if (pendingNodes.length > 1) {
+        filterWorkingNodes((node) => node.id === pendingNode.id || !pendingNodes.some((candidate) => candidate.id === node.id));
+      }
+
+      if (pendingNode.processingState !== nextProcessingState) {
+        upsertWorkingNode({
+          ...pendingNode,
+          processingState: nextProcessingState,
+        });
       }
     }
 
-    const updatedNodes = workingNodes.map((node) => {
-        if (isGeneratedAssetNode(node)) {
-          const sourceJobId = getNodeSourceJobId(node);
-          if (!sourceJobId) {
-            return node;
-          }
-
-          const job = jobById.get(sourceJobId);
-          if (!job) {
-            return node;
-          }
-
-          const sourceOutputIndex = getNodeSourceOutputIndex(node);
-          const matchingImageAsset = findMatchingGeneratedImageAsset(job, sourceOutputIndex);
-
-          const nextProcessingState =
-            job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null;
-          const nextNode: WorkflowNode = {
-            ...node,
-            providerId: job.providerId as WorkflowNode["providerId"],
-            modelId: job.modelId,
-            sourceJobId,
-            sourceOutputIndex,
-          processingState: nextProcessingState,
-          sourceAssetId: matchingImageAsset?.id || node.sourceAssetId,
-          sourceAssetMimeType: matchingImageAsset?.mimeType || node.sourceAssetMimeType,
-          settings: {
-            ...node.settings,
-              source: "generated",
-              sourceJobId,
-              outputIndex: sourceOutputIndex,
-              sourceModelNodeId:
-                typeof node.settings.sourceModelNodeId === "string"
-                  ? node.settings.sourceModelNodeId
-                  : job.nodeRunPayload?.nodeId || null,
-            },
-          };
-
-          if (JSON.stringify(nextNode) === JSON.stringify(node)) {
-            return node;
-          }
-
-          didChange = true;
-          return nextNode;
-        }
-
-        const generatedModelSource = getGeneratedModelNodeSource(node.settings);
-        if (!generatedModelSource) {
-          return node;
-        }
-
-        const sourceJobId = getNodeSourceJobId(node);
-        if (!sourceJobId) {
-          return node;
-        }
-
-        const job = jobById.get(sourceJobId);
-        if (!job) {
-          return node;
-        }
-
-        const nextProcessingState =
-          job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null;
-        const matchingDescriptor = findMatchingGeneratedNodeDescriptor(job, node);
-
-        if (!matchingDescriptor) {
-          const nextNode =
-            nextProcessingState === node.processingState
-              ? node
-              : {
-                  ...node,
-                  processingState: nextProcessingState,
-                };
-          if (JSON.stringify(nextNode) === JSON.stringify(node)) {
-            return node;
-          }
-          didChange = true;
-          return nextNode;
-        }
-
-        const allowContentHydration =
-          node.processingState !== null ||
-          node.kind !== matchingDescriptor.kind ||
-          getNodeSourceDescriptorIndex(node) !== matchingDescriptor.descriptorIndex;
-        const nextNode = applyGeneratedDescriptorToNode(node, {
-          providerId: job.providerId as WorkflowNode["providerId"],
-          modelId: job.modelId,
-          processingState: nextProcessingState,
-          descriptor: matchingDescriptor,
-          allowContentHydration,
-          connectToSourceModel: getTextOutputTargetFromSettings(job.nodeRunPayload?.settings) !== "smart",
-        });
-
-        if (JSON.stringify(nextNode) === JSON.stringify(node)) {
-          return node;
-        }
-
-        didChange = true;
-        return nextNode;
-    });
-
-    if (!didChange) {
+    if (!didChange && !didReceiptChange) {
       return;
     }
 
-    const nextDoc: CanvasDocument = {
-      ...prev,
-      workflow: {
-        nodes: updatedNodes,
+    const nextDoc = setCanvasGeneratedOutputReceiptKeys(
+      {
+        ...prev,
+        workflow: {
+          nodes: workingNodes,
+        },
       },
-    };
+      nextGeneratedOutputReceiptKeys
+    );
 
-    applyCanvasDocWithoutHistory(nextDoc);
+    applyCanvasDocWithoutHistory(nextDoc, {
+      selectedNodeIds: nextSelectedNodeIds.filter((nodeId) => nextDoc.workflow.nodes.some((node) => node.id === nodeId)),
+    });
   }, [applyCanvasDocWithoutHistory, jobs]);
 
   useEffect(() => {

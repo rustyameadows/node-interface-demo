@@ -89,3 +89,8 @@
 - Decision: implement full/resized list nodes as an inline spreadsheet-like sheet backed by TanStack Table instead of reusing the old stacked form controls.
 - Rationale: issue `#19` needs list editing to feel like a real sheet on the canvas, and the adaptive-node cleanup pass showed that simply transplanting the old controls into full mode was not good enough.
 - Consequence: list preview stays lightweight, but full/resized list nodes now render a real editable grid with header edits, cell edits, row numbering, and node-chrome add/remove actions.
+
+## 2026-03-08 - Generated Outputs Spawn Once And Then Stop Syncing
+- Decision: treat generated text, list, template, and image outputs as one-time spawned child nodes instead of live-managed job outputs after insertion.
+- Rationale: users need generated child nodes to behave like normal canvas nodes once they exist, including keeping edits, size changes, and deletions without being rewritten by later job polls.
+- Consequence: the canvas document now records consumed generated-output receipt keys, pending placeholders/previews are limited to unresolved jobs, completed outputs append new children once, and provenance remains metadata only for source/debug UI.

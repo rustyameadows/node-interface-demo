@@ -108,8 +108,8 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 - Undo/redo intentionally excludes:
   - viewport pan/zoom
   - worker-driven queue updates
-  - polling-driven generated output hydration
-  - async placeholder reconciliation for generated nodes
+  - pending generated-output preview updates
+  - one-time generated-output insertion/receipt migration
 
 ## Asset Delivery
 - Assets and preview frames are served through the read-only `app-asset://` protocol.
@@ -133,8 +133,10 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 - `note` uses the user-selected text output format (`text`, `json_object`, or `json_schema`) and hydrates one generated text note.
 - `list`, `template`, and `smart` override the OpenAI text format with app-owned strict JSON schema plus system instructions.
 - Worker-side parsing validates those structured responses into generated-node descriptors before they reach the renderer.
-- `CanvasView` hydrates model-spawned notes, lists, and templates from `job.generatedNodeDescriptors` instead of parsing raw provider text in the renderer.
-- `smart` spawns multiple unconnected nodes in this pass; explicit `list` and `template` targets still use deterministic placeholders while queued/running.
+- `CanvasView` inserts model-spawned notes, lists, and templates once from `job.generatedNodeDescriptors` instead of parsing raw provider text in the renderer.
+- Pending generated-output placeholders/previews may exist while a job is unresolved, but once the final child nodes are inserted the polling loop no longer mutates them.
+- The canvas document stores `generatedOutputReceiptKeys` so completed outputs are materialized once, deleted generated nodes do not return, and reruns append fresh children instead of replacing older ones.
+- `smart` spawns multiple unconnected nodes in this pass; explicit `list` and `template` targets may still show deterministic placeholders while queued/running.
 
 ## Queue Recovery
 - Queue source of truth is the `jobs` table.

@@ -46,6 +46,9 @@ export type CanvasRenderNode = Pick<
   templateRegisteredColumnCount?: number;
   templateUnresolvedCount?: number;
   templateReady?: boolean;
+  templateTokens?: string[];
+  templatePreviewRows?: string[];
+  templateStatusMessage?: string | null;
   renderMode: CanvasNodeRenderMode;
   canResize: boolean;
   lockAspectRatio: boolean;

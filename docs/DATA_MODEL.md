@@ -126,6 +126,7 @@ type JobPreviewFrame = {
 - the canvas JSON now persists node-local presentation metadata:
   - `displayMode`
   - `size`
+- the canvas JSON also persists `generatedOutputReceiptKeys`, which record completed generated job outputs that have already been materialized onto the canvas
 - transient full-mode state and phantom previews remain renderer-only and are not stored in SQLite
 
 ### `jobs`
@@ -198,6 +199,8 @@ The renderer never sees absolute paths; those refs are resolved only in main/wor
 - Parse failure falls back to one generated text-note descriptor instead of failing the job.
 - Those outputs do not create `assets` rows.
 - Queue debug data stores both the returned text and the parsed structured-output metadata inline in `job_attempts.provider_response`.
+- Once a generated output is inserted onto the canvas, it becomes a normal user-owned node. Provenance remains for source/debug UI, but the polling loop no longer rewrites the node's content, layout, or connections.
+- `generatedOutputReceiptKeys` prevent already-inserted outputs from being re-created on reload and prevent deleted generated nodes from coming back automatically.
 
 ## Canvas Presentation Metadata
 - `WorkflowNode.displayMode`

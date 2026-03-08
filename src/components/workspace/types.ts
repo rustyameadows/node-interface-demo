@@ -187,6 +187,7 @@ export type CanvasDocument = {
     y: number;
     zoom: number;
   };
+  generatedOutputReceiptKeys?: string[];
   workflow: {
     nodes: WorkflowNode[];
   };
@@ -305,6 +306,7 @@ export const defaultCanvasDocument: CanvasDocument = {
     y: 180,
     zoom: 1,
   },
+  generatedOutputReceiptKeys: [],
   workflow: {
     nodes: [],
   },
