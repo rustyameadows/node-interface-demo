@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Input, PopoverSurface } from "@/components/ui";
 import type { NodeCatalogVariant } from "@/lib/node-catalog";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import { formatModelVariantLabel } from "@/lib/node-catalog";
 import styles from "./searchable-model-select.module.css";
 
@@ -105,9 +107,9 @@ export function SearchableModelSelect({ value, options, disabled = false, onChan
   }, [open]);
 
   return (
-    <div className={styles.root} ref={rootRef}>
-      <button
-        type="button"
+    <div {...buildUiDataAttributes("app", "comfortable")} className={styles.root} ref={rootRef}>
+      <Button
+        variant="secondary"
         className={styles.trigger}
         disabled={disabled}
         onPointerDown={(event) => {
@@ -122,11 +124,11 @@ export function SearchableModelSelect({ value, options, disabled = false, onChan
           <span>{selectedVariant ? `${selectedVariant.modelId} · ${selectedVariant.availabilityLabel}` : "No model available"}</span>
         </span>
         <span className={styles.triggerCaret}>{open ? "▴" : "▾"}</span>
-      </button>
+      </Button>
 
       {open ? (
-        <div className={styles.panel}>
-          <input
+        <PopoverSurface className={styles.panel}>
+          <Input
             ref={searchInputRef}
             className={styles.searchInput}
             value={query}
@@ -175,7 +177,7 @@ export function SearchableModelSelect({ value, options, disabled = false, onChan
               ))
             )}
           </div>
-        </div>
+        </PopoverSurface>
       ) : null}
     </div>
   );

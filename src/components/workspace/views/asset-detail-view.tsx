@@ -2,10 +2,12 @@
 
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Badge, Button, Panel, SectionHeader, ToolbarGroup } from "@/components/ui";
 import { useRouter } from "@/renderer/navigation";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { getAsset, getAssetFileUrl, openProject } from "@/components/workspace/client-api";
 import type { Asset } from "@/components/workspace/types";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import { queryKeys } from "@/renderer/query";
 import styles from "./asset-detail-view.module.css";
 
@@ -46,24 +48,29 @@ export function AssetDetailView({ projectId, assetId }: Props) {
 
   return (
     <WorkspaceShell projectId={projectId} view="assets">
-      <main className={styles.page}>
-        <section className={styles.panel}>
+      <main {...buildUiDataAttributes("app", "compact")} className={styles.page}>
+        <Panel variant="shell" density="compact" className={styles.panel}>
           <header className={styles.header}>
-            <div className={styles.headerActions}>
-              <button type="button" className={styles.backButton} onClick={() => router.push(`/projects/${projectId}/assets`)}>
+            <ToolbarGroup className={styles.headerActions}>
+              <Button size="sm" variant="secondary" onClick={() => router.push(`/projects/${projectId}/assets`)}>
                 Back to Grid
-              </button>
+              </Button>
               {asset?.jobId ? (
-                <button
-                  type="button"
-                  className={styles.backButton}
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={() => router.push(`/projects/${projectId}/queue?inspectJobId=${asset.jobId}`)}
                 >
                   View Source Call
-                </button>
+                </Button>
               ) : null}
-            </div>
-            <h1>Single Asset Viewer</h1>
+            </ToolbarGroup>
+            <SectionHeader
+              eyebrow="Asset Review"
+              title="Single Asset Viewer"
+              description="Inspect one persisted output in detail while keeping metadata and source call context close."
+              actions={asset ? <Badge variant="info">{asset.type}</Badge> : null}
+            />
           </header>
 
           <div className={styles.body}>
@@ -149,7 +156,7 @@ export function AssetDetailView({ projectId, assetId }: Props) {
               )}
             </aside>
           </div>
-        </section>
+        </Panel>
       </main>
     </WorkspaceShell>
   );

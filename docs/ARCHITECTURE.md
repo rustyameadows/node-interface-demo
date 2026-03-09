@@ -9,6 +9,27 @@
 - Asset storage: local filesystem under the Electron app-data root.
 - Canvas: custom React infinite canvas engine.
 
+## Design System and Surface Modes
+- The renderer uses a lightweight in-repo design system built from:
+  - `src/styles/design-system/` token/contracts files
+  - CSS custom properties imported globally
+  - shared primitives in `src/components/ui/`
+- The design system has two surface contexts:
+  - `app` for non-canvas routes and desktop shell views
+  - `canvas-overlay` for floating chrome above the canvas
+- The design system intentionally does **not** own the main canvas node or connection renderers.
+- Protected areas:
+  - `CanvasNodeContent` inline node surfaces
+  - graph connection visuals in `InfiniteCanvas`
+  - Node Library playground canvas internals
+- Allowed design-system ownership around protected areas:
+  - workspace menu shell
+  - queue pill
+  - insert picker and asset picker
+  - bottom-bar popovers
+  - selection compare/download strip
+  - Node Library detail framing around the playground canvas
+
 ## Process Boundaries
 1. `main`
    - owns app lifecycle, BrowserWindow creation, native dialogs, protocol registration, IPC registration, and worker supervision
@@ -97,7 +118,7 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 - `/nodes/$nodeId` is a design/debug detail page with:
   - left-rail node metadata and settings summary
   - a reusable searchable provider+model selector for model nodes
-  - an ephemeral interactive playground
+  - an ephemeral interactive playground framed by the app design system while the inner playground canvas remains protected
 - The playground intentionally reuses the real canvas node renderers and editing surfaces instead of a separate mock UI.
 
 ## Canvas Interaction Model
@@ -107,6 +128,7 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
   - the insert picker builds visible node rows from the node catalog
   - `Add Model Node` expands into provider-grouped model variants from the provider catalog
   - native macOS `Canvas` add menus use the same catalog/provider source
+- Canvas overlays use the `canvas-overlay` design-system surface, but the node bodies themselves keep their existing semantic node rendering.
 - `CanvasView` derives node presentation from persisted node-local metadata (`displayMode`, `size`) plus transient active-node state (`activeFullNodeId`).
 - `CanvasNodeContent` renders mode-aware inline node surfaces for model, text note, list, template, and asset nodes.
 - `InfiniteCanvas` renders live drag previews, resize handles, phantom previews, quick mode transitions, and the edge-mounted run launcher, but committed node movement is written back once per drag through `onCommitNodePositions`.

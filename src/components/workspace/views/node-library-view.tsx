@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Badge, Button, Input, Panel, SectionHeader, ToolbarGroup } from "@/components/ui";
 import { getProviders } from "@/components/workspace/client-api";
 import type { ProviderModel } from "@/components/workspace/types";
 import { getNodeCatalogEntries } from "@/lib/node-catalog";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import { useRouter } from "@/renderer/navigation";
 import { queryKeys } from "@/renderer/query";
 import {
@@ -47,9 +49,9 @@ export function NodeLibraryView() {
   const providerCount = new Set(providers.map((provider) => provider.providerId)).size;
 
   return (
-    <main className={styles.page}>
+    <main {...buildUiDataAttributes("app", "comfortable")} className={styles.page}>
       <section className={styles.hero}>
-        <div className={styles.heroCard}>
+        <Panel variant="hero" className={styles.heroCard}>
           <div className={styles.kicker}>Node Registry</div>
           <h1>Node Library</h1>
           <p>
@@ -57,35 +59,32 @@ export function NodeLibraryView() {
             design/debug playgrounds for every built-in node type.
           </p>
 
-          <div className={styles.heroActions}>
-            <button
-              type="button"
-              className={styles.primaryButton}
+          <ToolbarGroup className={styles.heroActions}>
+            <Button
               onClick={() => {
                 router.push(buildAppHomeRoute());
               }}
             >
               Back Home
-            </button>
-            <button
-              type="button"
-              className={styles.secondaryButton}
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => {
                 router.push(buildAppSettingsRoute());
               }}
             >
               App Settings
-            </button>
-          </div>
-        </div>
+            </Button>
+          </ToolbarGroup>
+        </Panel>
 
-        <div className={styles.searchCard}>
+        <Panel variant="raised" className={styles.searchCard}>
           <div className={styles.kicker}>Search</div>
           <p>
             The gallery, insert picker, native add menus, model chooser, and prompt harness all pull from
             the same catalog now.
           </p>
-          <input
+          <Input
             className={styles.searchField}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -93,33 +92,32 @@ export function NodeLibraryView() {
           />
 
           <div className={styles.metricGrid}>
-            <div className={styles.metric}>
+            <Panel variant="subtle" className={styles.metric}>
               <span>Built-ins</span>
               <strong>{entries.length}</strong>
-            </div>
-            <div className={styles.metric}>
+            </Panel>
+            <Panel variant="subtle" className={styles.metric}>
               <span>Providers</span>
               <strong>{providerCount || "…"}</strong>
-            </div>
-            <div className={styles.metric}>
+            </Panel>
+            <Panel variant="subtle" className={styles.metric}>
               <span>Model Variants</span>
               <strong>{providers.length || "…"}</strong>
-            </div>
-            <div className={styles.metric}>
+            </Panel>
+            <Panel variant="subtle" className={styles.metric}>
               <span>Insertable</span>
               <strong>{entries.filter((entry) => entry.insertableOnCanvas).length}</strong>
-            </div>
+            </Panel>
           </div>
-        </div>
+        </Panel>
       </section>
 
-      <section className={styles.gallerySection}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2>Built-In Nodes</h2>
-            <p>Every card opens a detail page with the real canvas renderer and an ephemeral playground.</p>
-          </div>
-        </div>
+      <Panel variant="panel" className={styles.gallerySection}>
+        <SectionHeader
+          eyebrow="Catalog"
+          title="Built-In Nodes"
+          description="Every card opens a detail page with the real canvas renderer and an ephemeral playground."
+        />
 
         {filteredEntries.length === 0 ? (
           <div className={styles.empty}>No node types match that search.</div>
@@ -134,32 +132,42 @@ export function NodeLibraryView() {
                   router.push(buildNodeLibraryDetailRoute(entry.id));
                 }}
               >
-                <div className={styles.cardHeader}>
-                  <div>
-                    <h3>{entry.label}</h3>
-                    <p>{entry.shortDescription}</p>
+                  <div className={styles.cardHeader}>
+                    <div>
+                      <h3>{entry.label}</h3>
+                      <p>{entry.shortDescription}</p>
+                    </div>
+                    <Badge variant="info" className={styles.category}>
+                      {entry.category}
+                    </Badge>
                   </div>
-                  <span className={styles.category}>{entry.category}</span>
-                </div>
 
-                <div className={styles.metaRow}>
-                  <span className={styles.metaPill}>{entry.inputSummary}</span>
-                  <span className={styles.metaPill}>{entry.outputSummary}</span>
-                  {entry.variantHint ? <span className={styles.metaPill}>{entry.variantHint}</span> : null}
-                </div>
+                  <div className={styles.metaRow}>
+                    <Badge variant="neutral" className={styles.metaPill}>
+                      {entry.inputSummary}
+                    </Badge>
+                    <Badge variant="neutral" className={styles.metaPill}>
+                      {entry.outputSummary}
+                    </Badge>
+                    {entry.variantHint ? (
+                      <Badge variant="accent" className={styles.metaPill}>
+                        {entry.variantHint}
+                      </Badge>
+                    ) : null}
+                  </div>
 
-                <div className={styles.metaRow}>
-                  {entry.supportedDisplayModes.map((mode) => (
-                    <span key={`${entry.id}-${mode}`} className={styles.metaPill}>
-                      {mode}
-                    </span>
-                  ))}
-                </div>
-              </button>
+                  <div className={styles.metaRow}>
+                    {entry.supportedDisplayModes.map((mode) => (
+                      <Badge key={`${entry.id}-${mode}`} variant="neutral" className={styles.metaPill}>
+                        {mode}
+                      </Badge>
+                    ))}
+                  </div>
+                </button>
             ))}
           </div>
         )}
-      </section>
+      </Panel>
     </main>
   );
 }

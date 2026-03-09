@@ -1,3 +1,5 @@
+@import "../styles/design-system/variables.css";
+
 * {
   box-sizing: border-box;
 }
@@ -11,20 +13,12 @@ body {
 }
 
 body {
-  --base-black-1: #060606;
-  --base-black-2: #060606;
-  --base-black-3: #060606;
-  --glass-bg-soft: rgba(255, 255, 255, 0.84);
-  --glass-bg-strong: rgba(255, 255, 255, 0.9);
-  --glass-border: rgba(255, 255, 255, 0.84);
-  --glass-highlight: rgba(255, 255, 255, 0.95);
-  --text-primary: #f8f8f8;
-  --text-muted: rgba(255, 255, 255, 0.68);
-
-  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  background: var(--base-black-1);
-  color: var(--text-primary);
+  font-family: var(--ds-font-family-body);
+  background: var(--ds-page-wash);
+  color: var(--ds-text-primary);
   line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -34,6 +28,44 @@ textarea {
   font: inherit;
 }
 
+button,
+input,
+select,
+textarea {
+  transition:
+    border-color var(--ds-motion-micro) var(--ds-ease-standard),
+    background var(--ds-motion-micro) var(--ds-ease-standard),
+    color var(--ds-motion-micro) var(--ds-ease-standard),
+    box-shadow var(--ds-motion-micro) var(--ds-ease-standard);
+}
+
 a {
   color: inherit;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.15em;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+
+::selection {
+  background: rgba(216, 255, 62, 0.42);
+  color: var(--ds-color-ink-950);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

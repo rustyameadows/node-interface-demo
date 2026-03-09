@@ -27,6 +27,7 @@ import type {
 import type { CanvasBottomBarPopoverId } from "@/lib/canvas-primary-editor";
 import type { ModelParameterDefinition } from "@/lib/model-parameters";
 import { isRunnableImageModel } from "@/lib/provider-model-helpers";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import type { TextTemplatePreview } from "@/lib/list-template";
 import styles from "./canvas-bottom-bar.module.css";
 
@@ -165,7 +166,12 @@ function CanvasBarPopover({ anchorEl, open, width, maxWidth, popoverRef, childre
   }
 
   return createPortal(
-    <div ref={popoverRef} className={styles.popover} style={style}>
+    <div
+      {...buildUiDataAttributes("canvas-overlay", "compact")}
+      ref={popoverRef}
+      className={styles.popover}
+      style={style}
+    >
       {children}
     </div>,
     document.body

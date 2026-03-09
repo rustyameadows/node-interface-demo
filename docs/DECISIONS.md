@@ -104,3 +104,8 @@
 - Decision: expose Gemini model availability through a hybrid of static billing hints, authenticated Gemini model discovery, and runtime error classification instead of asking the user to pick a free vs paid tier.
 - Rationale: Google exposes `models.list()` for authenticated discovery, but the app still needs runtime truth for billing, permission, quota, and rate-limit failures that can change independently of the saved key field.
 - Consequence: App Settings and the model picker show honest per-model Gemini access states, unavailable models stay visible but disabled, and worker-side Gemini failures can update cached provider access state without rewriting the saved node graph.
+
+## 2026-03-09 - The Design System Uses Light App Surfaces And Protected Dark Canvas Overlays
+- Decision: introduce a lightweight token/CSS-variable/component design system with two surface contexts: light `app` surfaces for non-canvas views and dark `canvas-overlay` chrome above the canvas.
+- Rationale: issue `#59` needs a coherent desktop shell without flattening the specialized node/canvas rendering language or repainting the protected black canvas.
+- Consequence: app home, Node Library wrappers, settings, assets, queue, shell menu, queue pill, insert picker, bottom-bar popovers, and selection action strip now share one tokenized system, while main canvas nodes/connections and the Node Library playground canvas internals stay visually and structurally protected.

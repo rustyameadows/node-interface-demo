@@ -15,6 +15,7 @@
     "package:mac": "npm run build && electron-builder --config electron-builder.json --mac dir zip --arm64",
     "smoke:packaged:mac": "npm run package:mac && node --import tsx scripts/packaged-mac-smoke.ts",
     "verify:mac-lifecycle": "npm run smoke:packaged:mac && node --import tsx scripts/print-mac-artifacts.ts",
+    "check:design-system": "node --import tsx scripts/check-design-system.ts",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "postinstall": "electron-rebuild -f -w better-sqlite3,keytar"

@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Badge, Button, Panel, SectionHeader, ToolbarGroup } from "@/components/ui";
 import { SearchableModelSelect } from "@/components/searchable-model-select";
 import { getProviders } from "@/components/workspace/client-api";
 import { NodePlaygroundCanvas } from "@/components/workspace/node-playground-canvas";
 import type { ProviderModel } from "@/components/workspace/types";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import { getDefaultModelCatalogVariant, getNodeCatalogEntry, getModelCatalogVariants } from "@/lib/node-catalog";
 import { useRouter } from "@/renderer/navigation";
 import { queryKeys } from "@/renderer/query";
@@ -43,18 +45,16 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
 
   if (!entry) {
     return (
-      <main className={styles.notFound}>
+      <main {...buildUiDataAttributes("app", "comfortable")} className={styles.notFound}>
         <div>
           <h1>Node not found</h1>
-          <button
-            type="button"
-            className={styles.primaryButton}
+          <Button
             onClick={() => {
               router.push(buildNodeLibraryRoute());
             }}
           >
             Back to Library
-          </button>
+          </Button>
         </div>
       </main>
     );
@@ -63,28 +63,26 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
   const fixture = entry.buildPlaygroundFixture(providers);
 
   return (
-    <main className={styles.page}>
-      <aside className={styles.sideRail}>
-        <div className={styles.navRow}>
-          <button
-            type="button"
-            className={styles.secondaryButton}
+    <main {...buildUiDataAttributes("app", "comfortable")} className={styles.page}>
+      <Panel as="aside" variant="hero" className={styles.sideRail}>
+        <ToolbarGroup className={styles.navRow}>
+          <Button
+            variant="secondary"
             onClick={() => {
               router.push(buildNodeLibraryRoute());
             }}
           >
             Node Library
-          </button>
-          <button
-            type="button"
-            className={styles.secondaryButton}
+          </Button>
+          <Button
+            variant="ghost"
             onClick={() => {
               router.push(buildAppHomeRoute());
             }}
           >
             Home
-          </button>
-        </div>
+          </Button>
+        </ToolbarGroup>
 
         <section className={styles.titleBlock}>
           <div className={styles.eyebrow}>{entry.category}</div>
@@ -95,8 +93,12 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
         <section className={styles.section}>
           <h2>I/O Contract</h2>
           <div className={styles.pillRow}>
-            <span className={styles.pill}>{entry.inputSummary}</span>
-            <span className={styles.pill}>{entry.outputSummary}</span>
+            <Badge variant="neutral" className={styles.pill}>
+              {entry.inputSummary}
+            </Badge>
+            <Badge variant="neutral" className={styles.pill}>
+              {entry.outputSummary}
+            </Badge>
           </div>
         </section>
 
@@ -104,9 +106,9 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
           <h2>Display Modes</h2>
           <div className={styles.pillRow}>
             {entry.supportedDisplayModes.map((mode) => (
-              <span key={`${entry.id}-${mode}`} className={styles.pill}>
+              <Badge key={`${entry.id}-${mode}`} variant="info" className={styles.pill}>
                 {mode}
-              </span>
+              </Badge>
             ))}
           </div>
         </section>
@@ -135,25 +137,22 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
         ) : null}
 
         <div className={styles.actionRow}>
-          <button
-            type="button"
-            className={styles.primaryButton}
+          <Button
             onClick={() => {
               setPlaygroundSeed((current) => current + 1);
             }}
           >
             Reset Playground
-          </button>
+          </Button>
         </div>
-      </aside>
+      </Panel>
 
-      <section className={styles.playgroundCard}>
-        <header className={styles.playgroundHeader}>
-          <div>
-            <h2>Interactive Playground</h2>
-            <p>The right side uses the actual canvas node renderers and editing surfaces.</p>
-          </div>
-        </header>
+      <Panel variant="panel" className={styles.playgroundCard}>
+        <SectionHeader
+          eyebrow="Protected Canvas"
+          title="Interactive Playground"
+          description="The right side uses the actual canvas node renderers and editing surfaces."
+        />
 
         <div className={styles.canvasFrame}>
           <NodePlaygroundCanvas
@@ -164,7 +163,7 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
             onModelVariantChange={setSelectedModelVariantId}
           />
         </div>
-      </section>
+      </Panel>
     </main>
   );
 }

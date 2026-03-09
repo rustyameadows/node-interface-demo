@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Button, Panel, SectionHeader, SelectField } from "@/components/ui";
 import { useSearchParams } from "@/renderer/navigation";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { getJobDebug, getJobs, openProject } from "@/components/workspace/client-api";
 import type { Job, JobAttemptDebug, JobDebugResponse } from "@/components/workspace/types";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import { queryKeys } from "@/renderer/query";
 import styles from "./queue-view.module.css";
 
@@ -96,18 +98,22 @@ export function QueueView({ projectId }: Props) {
 
   return (
     <WorkspaceShell projectId={projectId} view="queue" jobs={jobs}>
-      <main className={styles.page}>
-        <section className={styles.panel}>
+      <main {...buildUiDataAttributes("app", "compact")} className={styles.page}>
+        <Panel variant="shell" density="compact" className={styles.panel}>
           <header className={styles.header}>
-            <h1>Queue</h1>
+            <SectionHeader
+              eyebrow="Execution"
+              title="Queue"
+              description="Inspect provider calls, job timing, and retry state without leaving the active project."
+            />
 
-            <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as StateFilter)}>
+            <SelectField value={stateFilter} onChange={(event) => setStateFilter(event.target.value as StateFilter)}>
               {stateOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </header>
 
           {isLoading ? (
@@ -132,9 +138,14 @@ export function QueueView({ projectId }: Props) {
                     {visibleJobs.map((job) => (
                       <tr key={job.id} className={inspectJobId === job.id ? styles.jobActive : ""}>
                         <td>
-                          <button type="button" className={styles.inspectButton} onClick={() => setInspectJobId(job.id)}>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className={styles.inspectButton}
+                            onClick={() => setInspectJobId(job.id)}
+                          >
                             Inspect Call
-                          </button>
+                          </Button>
                         </td>
                         <td>
                           <span className={`${styles.state} ${styles[`state_${job.state}`] || ""}`}>{job.state}</span>
@@ -225,7 +236,7 @@ export function QueueView({ projectId }: Props) {
               </aside>
             </div>
           )}
-        </section>
+        </Panel>
       </main>
     </WorkspaceShell>
   );

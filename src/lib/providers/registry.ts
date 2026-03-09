@@ -1070,23 +1070,6 @@ async function submitTopazGigapixel(input: ProviderJobInput): Promise<Normalized
   ];
 }
 
-function buildComingSoonAdapter(providerId: ProviderId): ProviderAdapter {
-  return {
-    providerId,
-    getCapabilities: () => ({
-      supportsCancel: false,
-      supportsStreaming: false,
-      nodeKinds: ["text-gen", "image-gen", "video-gen", "transform"],
-    }),
-    getModels: () => buildProviderCatalog()[providerId],
-    submitJob: async (input) => {
-      const model = getProviderModelDescriptor(input.providerId, input.modelId);
-      const label = model?.displayName || `${input.providerId}/${input.modelId}`;
-      throw createProviderError("COMING_SOON", `${label} is coming soon.`);
-    },
-  };
-}
-
 async function submitOpenAiJob(input: ProviderJobInput): Promise<NormalizedOutput[]> {
   if (isRunnableOpenAiImageModel(input.providerId, input.modelId)) {
     return submitOpenAiImage(input);

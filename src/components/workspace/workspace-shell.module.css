@@ -4,9 +4,15 @@
   height: 100vh;
   overflow: hidden;
   overscroll-behavior-x: none;
-  --workspace-shell-corner-radius: 14px;
-  background: #060606;
-  color: #111;
+  --workspace-shell-corner-radius: var(--ds-menu-pill-radius);
+  background:
+    linear-gradient(180deg, var(--ds-page-fill) 0%, transparent 100%),
+    var(--ds-page-wash);
+  color: var(--ds-text-primary);
+}
+
+.workspaceRootCanvas {
+  background: var(--ds-page-wash);
 }
 
 .workspaceContent {
@@ -16,52 +22,68 @@
 
 .menuContainer {
   position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 40;
+  top: var(--ds-space-4);
+  left: var(--ds-space-4);
+  z-index: var(--ds-z-shell);
 }
 
 .menuPill,
 .queuePill,
 .menuPanel,
 .projectsFlyout {
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(14px);
-  box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.38),
-    0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+  border: 1px solid var(--ds-border-strong);
+  background:
+    linear-gradient(180deg, var(--ds-page-fill) 0%, transparent 100%),
+    var(--ds-surface-overlay);
+  backdrop-filter: blur(var(--ds-popover-blur));
+  box-shadow: var(--ds-shadow-floating);
 }
 
 .menuPill {
+  min-height: var(--ds-control-height-sm);
   border-radius: var(--workspace-shell-corner-radius);
-  color: #0f0f0f;
+  color: var(--ds-text-primary);
   font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 8px 14px;
+  font-size: var(--ds-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 var(--ds-space-4);
   cursor: pointer;
+  transition:
+    transform var(--ds-motion-micro) var(--ds-ease-standard),
+    border-color var(--ds-motion-micro) var(--ds-ease-standard),
+    background var(--ds-motion-micro) var(--ds-ease-standard);
+}
+
+.menuPill:hover,
+.menuPill:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--ds-border-contrast);
+  background:
+    linear-gradient(180deg, var(--ds-state-accent-bg) 0%, transparent 100%),
+    var(--ds-surface-overlay);
 }
 
 .menuPanel {
   position: absolute;
-  top: 42px;
+  top: calc(100% + var(--ds-space-2));
   left: 0;
-  width: 190px;
+  width: 240px;
   border-radius: var(--workspace-shell-corner-radius);
-  padding: 10px;
+  padding: var(--ds-space-3);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--ds-space-2);
 }
 
 .menuSectionLabel {
-  margin-top: 4px;
-  margin-bottom: 2px;
+  margin-top: var(--ds-space-1);
+  margin-bottom: 0;
   font-size: 0.68rem;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.56);
+  color: var(--ds-text-muted);
 }
 
 .menuItem,
@@ -70,88 +92,116 @@
 .menuProjectActive,
 .projectsRow {
   width: 100%;
-  border-radius: var(--workspace-shell-corner-radius);
-  border: 1px solid rgba(0, 0, 0, 0.16);
-  background: rgba(255, 255, 255, 0.76);
-  color: rgba(0, 0, 0, 0.84);
+  min-height: var(--ds-control-height-sm);
+  border-radius: calc(var(--workspace-shell-corner-radius) - 4px);
+  border: 1px solid var(--ds-control-border);
+  background: var(--ds-control-bg);
+  color: var(--ds-text-primary);
   font: inherit;
-  font-size: 0.84rem;
-  padding: 8px 10px;
+  font-size: var(--ds-font-size-sm);
+  font-weight: 600;
+  padding: 0 var(--ds-space-3);
   text-align: left;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition:
+    border-color var(--ds-motion-micro) var(--ds-ease-standard),
+    background var(--ds-motion-micro) var(--ds-ease-standard),
+    transform var(--ds-motion-micro) var(--ds-ease-standard);
 }
 
+.menuItem:hover,
+.menuProject:hover,
+.projectsRow:hover,
 .menuItemActive,
-.menuProjectActive {
-  border-color: rgba(0, 0, 0, 0.58);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.66) inset;
+.menuProjectActive,
+.menuItem:focus-visible,
+.menuProject:focus-visible,
+.projectsRow:focus-visible {
+  border-color: var(--ds-border-contrast);
+  background:
+    linear-gradient(135deg, var(--ds-state-accent-bg) 0%, var(--ds-state-info-bg) 100%),
+    var(--ds-control-bg-hover);
+  transform: translateY(-1px);
 }
 
 .projectsRow {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
 }
 
 .projectsFlyout {
   position: absolute;
   top: 0;
-  left: calc(100% + 8px);
-  width: 220px;
+  left: calc(100% + var(--ds-space-2));
+  width: 248px;
   border-radius: var(--workspace-shell-corner-radius);
-  padding: 10px;
+  padding: var(--ds-space-3);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--ds-space-2);
 }
 
 .projectsEmpty {
-  color: rgba(0, 0, 0, 0.52);
-  font-size: 0.8rem;
-  padding: 4px 2px 8px;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-font-size-xs);
+  padding: 0 var(--ds-space-1) var(--ds-space-2);
 }
 
 .queuePill {
   position: absolute;
-  z-index: 40;
-  border-radius: var(--workspace-shell-corner-radius);
-  padding: 10px 12px;
+  z-index: var(--ds-z-shell);
+  border-radius: var(--ds-queue-pill-radius);
+  padding: var(--ds-space-3) var(--ds-space-4);
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  color: #101010;
+  gap: var(--ds-space-1);
+  color: var(--ds-text-primary);
   font: inherit;
-  min-width: 136px;
+  min-width: 156px;
   text-align: left;
   cursor: pointer;
+  transition:
+    transform var(--ds-motion-micro) var(--ds-ease-standard),
+    border-color var(--ds-motion-micro) var(--ds-ease-standard),
+    background var(--ds-motion-micro) var(--ds-ease-standard);
+}
+
+.queuePill:hover,
+.queuePill:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--ds-border-contrast);
+  background:
+    linear-gradient(135deg, var(--ds-state-info-bg) 0%, var(--ds-state-accent-bg) 100%),
+    var(--ds-surface-overlay);
 }
 
 .queuePillBottomRight {
-  right: 14px;
-  bottom: 14px;
+  right: var(--ds-space-4);
+  bottom: var(--ds-space-4);
 }
 
 .queuePillTopRight {
-  top: 14px;
-  right: 14px;
+  top: var(--ds-space-4);
+  right: var(--ds-space-4);
 }
 
 .queuePill span {
-  font-size: 0.74rem;
-  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.52);
+  color: var(--ds-text-muted);
 }
 
 .queuePill strong {
-  font-size: 0.88rem;
-  font-weight: 600;
+  font-size: var(--ds-font-size-sm);
+  font-weight: 700;
 }
 
 .queuePill em {
-  font-size: 0.74rem;
+  font-size: var(--ds-font-size-xs);
   font-style: normal;
-  color: rgba(0, 0, 0, 0.56);
+  color: var(--ds-text-secondary);
 }
 
 .redirectHint {
@@ -159,18 +209,18 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 0.95rem;
+  color: var(--ds-text-primary);
+  font-size: var(--ds-font-size-md);
 }
 
 @media (max-width: 900px) {
   .projectsFlyout {
     position: static;
     width: 100%;
-    margin-top: 6px;
+    margin-top: var(--ds-space-2);
   }
 
   .menuPanel {
-    width: min(260px, calc(100vw - 28px));
+    width: min(280px, calc(100vw - (var(--ds-space-4) * 2)));
   }
 }

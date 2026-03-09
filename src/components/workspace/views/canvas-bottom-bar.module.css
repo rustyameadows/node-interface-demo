@@ -1,20 +1,21 @@
 .barRoot {
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 14px;
+  left: var(--ds-space-4);
+  right: var(--ds-space-4);
+  bottom: var(--ds-space-4);
   z-index: 39;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 50px;
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(14px);
-  box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.34),
-    0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+  gap: var(--ds-space-2);
+  min-height: 54px;
+  padding: var(--ds-space-2);
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-lg);
+  background:
+    linear-gradient(180deg, var(--ds-state-accent-bg) 0%, transparent 100%),
+    var(--ds-surface-overlay);
+  backdrop-filter: blur(var(--ds-popover-blur));
+  box-shadow: var(--ds-shadow-overlay);
 }
 
 .mainLane {
@@ -34,19 +35,19 @@
 .mainLaneScroll {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--ds-space-2);
   min-width: 100%;
   width: max-content;
-  min-height: 36px;
+  min-height: var(--ds-control-height-sm);
 }
 
 .actionLane {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-left: 10px;
-  border-left: 1px solid rgba(0, 0, 0, 0.1);
+  gap: var(--ds-space-2);
+  padding-left: var(--ds-space-3);
+  border-left: 1px solid var(--ds-border-subtle);
 }
 
 .chip,
@@ -55,37 +56,36 @@
 .textField,
 .numberField,
 .actionButton {
-  height: 36px;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  background: rgba(255, 255, 255, 0.82);
-  color: #101010;
-  border-radius: 0;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.52) inset;
+  min-height: var(--ds-control-height-sm);
+  border: 1px solid var(--ds-control-border);
+  background: var(--ds-control-bg);
+  color: var(--ds-text-primary);
+  border-radius: var(--ds-radius-sm);
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 var(--ds-space-3);
   white-space: nowrap;
   font-size: 0.64rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.72);
+  color: var(--ds-text-secondary);
 }
 
 .textField,
 .numberField {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  min-width: 148px;
+  gap: var(--ds-space-2);
+  padding: 0 var(--ds-space-2);
+  min-width: 156px;
 }
 
 .numberField {
-  min-width: 108px;
+  min-width: 112px;
 }
 
 .fieldLabel {
@@ -94,7 +94,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.46);
+  color: var(--ds-text-muted);
   white-space: nowrap;
 }
 
@@ -104,7 +104,7 @@
   min-width: 0;
   border: none;
   background: transparent;
-  color: #111;
+  color: var(--ds-text-primary);
   font: inherit;
   font-size: 0.7rem;
   font-weight: 600;
@@ -126,11 +126,26 @@
 .trayButton {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
+  gap: var(--ds-space-2);
+  padding: 0 var(--ds-space-3);
   font: inherit;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    border-color var(--ds-motion-micro) var(--ds-ease-standard),
+    background var(--ds-motion-micro) var(--ds-ease-standard),
+    transform var(--ds-motion-micro) var(--ds-ease-standard);
+}
+
+.selectButton:hover:not(:disabled),
+.trayButton:hover:not(:disabled),
+.selectButtonOpen,
+.trayButtonOpen {
+  border-color: var(--ds-border-contrast);
+  background:
+    linear-gradient(135deg, var(--ds-state-info-bg) 0%, transparent 100%),
+    var(--ds-control-bg-hover);
+  transform: translateY(-1px);
 }
 
 .selectButton:disabled,
@@ -141,16 +156,10 @@
   cursor: not-allowed;
 }
 
-.selectButtonOpen,
-.trayButtonOpen {
-  border-color: rgba(0, 0, 0, 0.4);
-  background: rgba(255, 255, 255, 0.96);
-}
-
 .controlText {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: var(--ds-space-1);
   min-width: 0;
 }
 
@@ -159,13 +168,13 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.46);
+  color: var(--ds-text-muted);
 }
 
 .controlValueGroup {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--ds-space-2);
   min-width: 0;
 }
 
@@ -176,28 +185,28 @@
   white-space: nowrap;
   font-size: 0.7rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.84);
+  color: var(--ds-text-primary);
 }
 
-.controlMeta {
+.controlMeta,
+.caret {
   flex: none;
   font-size: 0.56rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--ds-text-muted);
 }
 
 .caret {
   font-size: 0.72rem;
-  color: rgba(0, 0, 0, 0.5);
 }
 
 .actionButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 10px;
+  padding: 0 var(--ds-space-3);
   font: inherit;
   font-size: 0.7rem;
   font-weight: 700;
@@ -206,87 +215,94 @@
 }
 
 .actionButtonPrimary {
-  background: #101010;
-  color: rgba(255, 255, 255, 0.96);
-  border-color: #101010;
+  background: linear-gradient(135deg, var(--ds-accent-primary) 0%, var(--ds-accent-secondary) 100%);
+  color: var(--ds-text-inverse);
+  border-color: transparent;
   box-shadow: none;
 }
 
 .actionButtonDanger {
-  color: #631c1c;
+  background: var(--ds-state-danger-bg);
+  color: var(--ds-state-danger-fg);
+  border-color: var(--ds-state-danger-border);
 }
 
 .popover {
   position: fixed;
-  z-index: 44;
+  z-index: var(--ds-z-popover);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.86);
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 24px 56px rgba(0, 0, 0, 0.36),
-    0 0 0 1px rgba(255, 255, 255, 0.72) inset;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-4);
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-popover-radius);
+  background:
+    linear-gradient(180deg, var(--ds-state-accent-bg) 0%, transparent 100%),
+    var(--ds-surface-overlay);
+  box-shadow: var(--ds-shadow-overlay);
+  backdrop-filter: blur(var(--ds-popover-blur));
 }
 
 .popoverHeader {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--ds-space-3);
 }
 
 .popoverHeader strong {
   font-size: 0.72rem;
-  color: #101010;
+  color: var(--ds-text-primary);
 }
 
 .popoverHeader span {
   font-size: 0.62rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--ds-text-muted);
 }
 
 .popoverBody {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--ds-space-3);
   min-width: 0;
 }
 
 .selectList {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--ds-space-1);
   overflow-y: auto;
 }
 
 .selectOption {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--ds-space-1);
   align-items: flex-start;
   width: 100%;
-  padding: 7px 9px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: rgba(255, 255, 255, 0.78);
-  color: #111;
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border: 1px solid var(--ds-control-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-control-bg);
+  color: var(--ds-text-primary);
   text-align: left;
   font: inherit;
   cursor: pointer;
 }
 
+.selectOption:hover:not(:disabled),
 .selectOptionActive {
-  border-color: rgba(0, 0, 0, 0.48);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.66) inset;
+  border-color: var(--ds-border-contrast);
+  background:
+    linear-gradient(135deg, var(--ds-state-info-bg) 0%, transparent 100%),
+    var(--ds-control-bg-hover);
 }
 
 .selectOptionTopRow {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--ds-space-2);
   width: 100%;
 }
 
@@ -295,32 +311,25 @@
   font-weight: 600;
 }
 
-.selectOptionMeta {
-  flex: none;
-  font-size: 0.56rem;
+.selectOptionMeta,
+.traySectionLabel,
+.listEditorRowLabel {
+  font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--ds-text-muted);
 }
 
 .selectOptionDescription {
   font-size: 0.62rem;
-  color: rgba(0, 0, 0, 0.52);
+  color: var(--ds-text-secondary);
 }
 
 .traySection {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-}
-
-.traySectionLabel {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.5);
+  gap: var(--ds-space-2);
 }
 
 .trayTextarea,
@@ -328,10 +337,10 @@
 .trayNumberInput,
 .traySummary,
 .trayCode {
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  background: rgba(255, 255, 255, 0.84);
-  color: #111;
-  border-radius: 0;
+  border: 1px solid var(--ds-control-border);
+  background: var(--ds-control-bg);
+  color: var(--ds-text-primary);
+  border-radius: var(--ds-radius-md);
   font: inherit;
 }
 
@@ -339,7 +348,7 @@
 .trayInput,
 .trayNumberInput {
   width: 100%;
-  padding: 7px 9px;
+  padding: var(--ds-space-2) var(--ds-space-3);
 }
 
 .trayTextarea {
@@ -359,60 +368,57 @@
 .trayTextarea:focus,
 .trayTextarea:focus-visible {
   outline: none;
-  border-color: rgba(0, 0, 0, 0.32);
+  border-color: var(--ds-border-focus);
+  box-shadow: var(--ds-focus-ring);
 }
 
 .traySummary {
-  padding: 7px 9px;
+  padding: var(--ds-space-2) var(--ds-space-3);
   font-size: 0.66rem;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .traySummaryReady {
-  border-color: rgba(98, 195, 123, 0.45);
-  background: rgba(236, 255, 237, 0.92);
-  color: rgba(18, 67, 27, 0.92);
+  border-color: var(--ds-state-success-border);
+  background: var(--ds-state-success-bg);
+  color: var(--ds-state-success-fg);
 }
 
 .traySummaryWarning {
-  border-color: rgba(255, 188, 16, 0.5);
-  background: rgba(255, 248, 221, 0.92);
-  color: rgba(102, 55, 0, 0.94);
+  border-color: var(--ds-state-warning-border);
+  background: var(--ds-state-warning-bg);
+  color: var(--ds-state-warning-fg);
 }
 
 .trayCode {
   margin: 0;
   max-height: 320px;
   overflow: auto;
-  padding: 9px;
+  padding: var(--ds-space-3);
   font-size: 0.62rem;
-  line-height: 1.4;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
+  font-family: var(--ds-font-family-mono);
 }
 
 .trayActions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--ds-space-2);
 }
 
 .inlineActionButton {
-  height: 34px;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  background: rgba(255, 255, 255, 0.84);
-  color: #101010;
+  min-height: 34px;
+  border: 1px solid var(--ds-control-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-control-bg);
+  color: var(--ds-text-primary);
   font: inherit;
   font-size: 0.66rem;
   font-weight: 700;
-  padding: 0 10px;
+  padding: 0 var(--ds-space-3);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -420,24 +426,24 @@
 .listEditor {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--ds-space-2);
   max-height: 340px;
   overflow: auto;
-  padding-bottom: 2px;
+  padding-bottom: var(--ds-space-1);
 }
 
 .listEditorHeader,
 .listEditorRow {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--ds-space-2);
   min-width: max-content;
 }
 
 .listEditorColumn {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--ds-space-2);
   width: 164px;
   flex: none;
 }
@@ -445,18 +451,13 @@
 .listEditorRows {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--ds-space-2);
 }
 
 .listEditorRowLabel {
   width: 54px;
   flex: none;
-  padding-top: 9px;
-  color: rgba(0, 0, 0, 0.5);
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  padding-top: var(--ds-space-3);
 }
 
 .listEditorRow .trayInput {
@@ -467,20 +468,16 @@
 .trayGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: var(--ds-space-2);
 }
 
 @media (max-width: 900px) {
-  .barRoot {
-    gap: 8px;
-  }
-
   .actionLane {
-    padding-left: 8px;
+    padding-left: var(--ds-space-2);
   }
 
   .popover {
-    width: min(420px, calc(100vw - 28px)) !important;
-    left: 14px !important;
+    width: min(420px, calc(100vw - (var(--ds-space-4) * 2))) !important;
+    left: var(--ds-space-4) !important;
   }
 }

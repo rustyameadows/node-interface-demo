@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Button, Field, Input, Panel, SectionHeader, SelectField, ToolbarGroup } from "@/components/ui";
 import { useRouter, useSearchParams } from "@/renderer/navigation";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import {
@@ -21,6 +22,7 @@ import {
   type AssetFilterState,
   type CanvasDocument,
 } from "@/components/workspace/types";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import { queryKeys } from "@/renderer/query";
 import styles from "./assets-view.module.css";
 
@@ -198,13 +200,12 @@ export function AssetsView({ projectId }: Props) {
 
   return (
     <WorkspaceShell projectId={projectId} view="assets">
-      <div className={styles.page}>
-        <aside className={styles.filterRail}>
+      <div {...buildUiDataAttributes("app", "compact")} className={styles.page}>
+        <Panel as="aside" variant="shell" density="compact" className={styles.filterRail}>
           <h2>Assets</h2>
 
-          <label>
-            Type
-            <select
+          <Field label="Type">
+            <SelectField
               value={filters.type}
               onChange={(event) => onFilterChange({ type: event.target.value as AssetFilterState["type"] })}
             >
@@ -212,12 +213,11 @@ export function AssetsView({ projectId }: Props) {
               <option value="image">image</option>
               <option value="video">video</option>
               <option value="text">text</option>
-            </select>
-          </label>
+            </SelectField>
+          </Field>
 
-          <label>
-            Rating
-            <select
+          <Field label="Rating">
+            <SelectField
               value={filters.ratingAtLeast}
               onChange={(event) => onFilterChange({ ratingAtLeast: Number(event.target.value) })}
             >
@@ -227,12 +227,11 @@ export function AssetsView({ projectId }: Props) {
               <option value={3}>3+ stars</option>
               <option value={4}>4+ stars</option>
               <option value={5}>5 stars</option>
-            </select>
-          </label>
+            </SelectField>
+          </Field>
 
-          <label>
-            Provider
-            <select
+          <Field label="Provider">
+            <SelectField
               value={filters.providerId}
               onChange={(event) =>
                 onFilterChange({ providerId: event.target.value as AssetFilterState["providerId"] })
@@ -242,20 +241,19 @@ export function AssetsView({ projectId }: Props) {
               <option value="openai">openai</option>
               <option value="google-gemini">google-gemini</option>
               <option value="topaz">topaz</option>
-            </select>
-          </label>
+            </SelectField>
+          </Field>
 
-          <label>
-            Sort
-            <select
+          <Field label="Sort">
+            <SelectField
               value={filters.sort}
               onChange={(event) => onFilterChange({ sort: event.target.value as AssetFilterState["sort"] })}
             >
               <option value="newest">newest</option>
               <option value="oldest">oldest</option>
               <option value="rating">rating</option>
-            </select>
-          </label>
+            </SelectField>
+          </Field>
 
           <label className={styles.checkboxRow}>
             <input
@@ -266,23 +264,46 @@ export function AssetsView({ projectId }: Props) {
             flagged only
           </label>
 
-          <label>
-            Tag
-            <input
+          <Field label="Tag">
+            <Input
               value={filters.tag}
               onChange={(event) => onFilterChange({ tag: event.target.value })}
               placeholder="tag filter"
             />
-          </label>
-        </aside>
+          </Field>
+        </Panel>
 
-        <section className={styles.content}>
+        <Panel variant="panel" density="compact" className={styles.content}>
           <header className={styles.contentHeader}>
-            <div className={styles.modeButtons}>
-              <button onClick={() => changeLayoutMode("grid")} className={layoutMode === "grid" ? styles.modeOn : ""}>Grid</button>
-              <button onClick={() => changeLayoutMode("compare_2")} className={layoutMode === "compare_2" ? styles.modeOn : ""}>2-up</button>
-              <button onClick={() => changeLayoutMode("compare_4")} className={layoutMode === "compare_4" ? styles.modeOn : ""}>4-up</button>
-            </div>
+            <SectionHeader
+              eyebrow="Review"
+              title="Assets"
+              description="Filter by source and quality, then flip between review grid and precision compare layouts."
+            />
+
+            <ToolbarGroup className={styles.modeButtons}>
+              <Button
+                variant={layoutMode === "grid" ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => changeLayoutMode("grid")}
+              >
+                Grid
+              </Button>
+              <Button
+                variant={layoutMode === "compare_2" ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => changeLayoutMode("compare_2")}
+              >
+                2-up
+              </Button>
+              <Button
+                variant={layoutMode === "compare_4" ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => changeLayoutMode("compare_4")}
+              >
+                4-up
+              </Button>
+            </ToolbarGroup>
           </header>
 
           {workspaceQuery.isLoading || (workspaceReady && assetsQuery.isLoading) ? (
@@ -398,7 +419,7 @@ export function AssetsView({ projectId }: Props) {
               </div>
             </div>
           )}
-        </section>
+        </Panel>
       </div>
     </WorkspaceShell>
   );

@@ -1,16 +1,9 @@
 .page {
   position: absolute;
   inset: 0;
-  --canvas-corner-radius: 0px;
-  --canvas-selection-accent: #d8ff3e;
-  --canvas-selection-accent-p3: color(display-p3 0.84 0.98 0.22);
+  --canvas-corner-radius: var(--ds-radius-md);
+  --canvas-selection-accent: var(--ds-accent-primary);
   --canvas-selection-color: var(--canvas-selection-accent);
-}
-
-@supports (color: color(display-p3 1 1 1)) {
-  .page {
-    --canvas-selection-color: var(--canvas-selection-accent-p3);
-  }
 }
 
 .canvasSurface {
@@ -24,8 +17,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 1rem;
+  color: var(--ds-text-primary);
+  font-size: var(--ds-font-size-md);
 }
 
 .fileInput {
@@ -40,80 +33,86 @@
   position: fixed;
   z-index: 42;
   display: flex;
-  padding: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.4);
-  background: var(--canvas-selection-color);
-  color: #040404;
-  box-shadow:
-    0 18px 46px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  padding: var(--ds-space-4);
+  border: 1px solid var(--ds-border-contrast);
+  border-radius: var(--ds-radius-lg);
+  background:
+    linear-gradient(180deg, var(--ds-state-accent-bg) 0%, transparent 100%),
+    var(--ds-surface-overlay);
+  color: var(--ds-text-primary);
+  box-shadow: var(--ds-shadow-overlay);
+  backdrop-filter: blur(var(--ds-popover-blur));
   transform: translate(10px, 10px);
 }
 
 .insertMenuColumns {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--ds-space-4);
 }
 
 .insertMenuPrimaryColumn {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 196px;
-  min-width: 196px;
+  gap: var(--ds-space-2);
+  width: 208px;
+  min-width: 208px;
 }
 
 .insertMenuSecondaryColumn {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 272px;
-  min-width: 272px;
+  gap: var(--ds-space-3);
+  width: 292px;
+  min-width: 292px;
 }
 
-.insertMenuTitle {
-  font-size: 0.7rem;
+.insertMenuTitle,
+.insertMenuSecondaryTitle,
+.insertMenuProviderLabel {
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-}
-
-.insertMenuSecondaryTitle {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(14, 14, 14, 0.72);
+  color: var(--ds-text-muted);
 }
 
 .insertMenu button {
-  border: 1px solid rgba(0, 0, 0, 0.28);
-  background: rgba(255, 255, 255, 0.55);
-  color: #0e0e0e;
+  min-height: var(--ds-control-height-sm);
+  border: 1px solid var(--ds-control-border);
+  background: var(--ds-control-bg);
+  color: var(--ds-text-primary);
   border-radius: var(--canvas-corner-radius);
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--ds-font-size-xs);
   font-weight: 600;
-  padding: 8px 10px;
+  padding: 0 var(--ds-space-3);
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color var(--ds-motion-micro) var(--ds-ease-standard),
+    background var(--ds-motion-micro) var(--ds-ease-standard),
+    transform var(--ds-motion-micro) var(--ds-ease-standard);
 }
 
 .insertMenu button:hover {
-  background: rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(135deg, var(--ds-state-info-bg) 0%, transparent 100%),
+    var(--ds-control-bg-hover);
+  border-color: var(--ds-border-contrast);
+  transform: translateY(-1px);
 }
 
 .insertMenuSubmenuGroup {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--ds-space-2);
 }
 
 .insertMenuRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+  gap: var(--ds-space-2);
 }
 
 .insertMenuAction {
@@ -121,44 +120,36 @@
 }
 
 .insertMenuDisclosure {
-  min-width: 38px;
+  min-width: 40px;
   text-align: center !important;
 }
 
 .insertMenuSubmenu {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--ds-space-2);
   width: 100%;
-  padding: 8px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.36);
+  padding: var(--ds-space-3);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface-panel-muted);
 }
 
 .insertMenuProviderGroup {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.insertMenuProviderLabel {
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(14, 14, 14, 0.72);
+  gap: var(--ds-space-2);
 }
 
 .insertMenuVariantButton {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: var(--ds-space-3);
 }
 
 .insertMenuVariantButton span:last-child {
   font-size: 0.68rem;
-  color: rgba(14, 14, 14, 0.66);
+  color: var(--ds-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -170,103 +161,116 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.34);
-  backdrop-filter: blur(6px);
+  background: var(--ds-backdrop-scrim);
+  backdrop-filter: blur(8px);
 }
 
 .assetPickerModal {
-  width: min(720px, calc(100vw - 44px));
-  max-height: min(78vh, 760px);
+  width: min(760px, calc(100vw - 44px));
+  max-height: min(80vh, 760px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 20px 46px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.68) inset;
+  gap: var(--ds-space-4);
+  padding: var(--ds-space-5);
+  border: 1px solid var(--ds-border-contrast);
+  border-radius: var(--ds-modal-radius);
+  background:
+    linear-gradient(180deg, var(--ds-state-info-bg) 0%, transparent 100%),
+    var(--ds-surface-overlay);
+  color: var(--ds-text-primary);
+  box-shadow: var(--ds-shadow-overlay);
 }
 
 .assetPickerHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--ds-space-3);
 }
 
 .assetPickerHeader strong {
   display: block;
-  color: #101010;
-  font-size: 0.9rem;
+  color: var(--ds-text-primary);
+  font-size: var(--ds-font-size-md);
 }
 
 .assetPickerHeader span {
   display: block;
-  margin-top: 3px;
-  color: rgba(0, 0, 0, 0.58);
-  font-size: 0.7rem;
+  margin-top: var(--ds-space-1);
+  color: var(--ds-text-secondary);
+  font-size: var(--ds-font-size-xs);
 }
 
 .assetPickerHeader button,
 .assetPickerActions button {
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  background: rgba(255, 255, 255, 0.86);
-  color: #111;
+  min-height: var(--ds-control-height-sm);
+  border: 1px solid var(--ds-control-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-control-bg);
+  color: var(--ds-text-primary);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: var(--ds-font-size-xs);
   font-weight: 600;
-  padding: 6px 9px;
+  padding: 0 var(--ds-space-3);
   cursor: pointer;
 }
 
 .assetPickerToolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--ds-space-2);
 }
 
 .assetPickerSearch {
   flex: 1;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  background: rgba(255, 255, 255, 0.84);
-  color: #111;
+  min-height: var(--ds-control-height-sm);
+  border: 1px solid var(--ds-control-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-control-bg);
+  color: var(--ds-text-primary);
   font: inherit;
-  padding: 7px 9px;
+  padding: 0 var(--ds-space-3);
 }
 
 .assetPickerMeta {
-  color: rgba(0, 0, 0, 0.58);
-  font-size: 0.7rem;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-font-size-xs);
   white-space: nowrap;
+}
+
+.assetPickerError {
+  color: var(--ds-state-danger-fg);
+  font-size: var(--ds-font-size-sm);
 }
 
 .assetPickerList {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--ds-space-2);
   overflow-y: auto;
   min-height: 220px;
-  max-height: min(52vh, 520px);
-  padding-right: 2px;
+  max-height: min(54vh, 520px);
+  padding-right: var(--ds-space-1);
 }
 
 .assetPickerItem {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
-  gap: 10px;
+  gap: var(--ds-space-3);
   align-items: center;
   width: 100%;
-  padding: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: rgba(255, 255, 255, 0.78);
+  padding: var(--ds-space-3);
+  border: 1px solid var(--ds-control-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-control-bg);
   text-align: left;
   cursor: pointer;
+  color: inherit;
 }
 
 .assetPickerItemSelected {
-  border-color: var(--canvas-selection-color);
-  box-shadow: 0 0 0 1px var(--canvas-selection-color) inset;
+  border-color: var(--ds-accent-primary);
+  box-shadow: 0 0 0 1px var(--ds-accent-primary) inset;
 }
 
 .assetPickerThumb,
@@ -276,21 +280,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: #b4b4b4;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-ink-950);
   object-fit: contain;
 }
 
 .assetPickerThumbPlaceholder {
-  color: rgba(0, 0, 0, 0.64);
-  font-size: 0.7rem;
+  color: var(--ds-text-secondary);
+  font-size: var(--ds-font-size-xs);
   font-weight: 700;
 }
 
 .assetPickerItemMeta {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--ds-space-1);
   min-width: 0;
 }
 
@@ -303,37 +308,45 @@
 }
 
 .assetPickerItemMeta strong {
-  color: #111;
-  font-size: 0.74rem;
+  color: var(--ds-text-primary);
+  font-size: var(--ds-font-size-xs);
 }
 
 .assetPickerItemMeta span {
-  color: rgba(0, 0, 0, 0.58);
-  font-size: 0.65rem;
+  color: var(--ds-text-muted);
+  font-size: 0.68rem;
 }
 
 .assetPickerEmpty {
   grid-column: 1 / -1;
-  padding: 18px 10px;
-  border: 1px dashed rgba(0, 0, 0, 0.18);
-  color: rgba(0, 0, 0, 0.54);
-  font-size: 0.72rem;
+  padding: var(--ds-space-6) var(--ds-space-3);
+  border: 1px dashed var(--ds-border-strong);
+  border-radius: var(--ds-radius-lg);
+  color: var(--ds-text-muted);
+  font-size: var(--ds-font-size-sm);
   text-align: center;
 }
 
 .assetPickerActions {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  color: rgba(0, 0, 0, 0.58);
-  font-size: 0.7rem;
+  gap: var(--ds-space-3);
+  color: var(--ds-text-secondary);
 }
 
-.assetPickerError {
-  border: 1px solid rgba(255, 188, 16, 0.5);
-  background: rgba(255, 248, 221, 0.92);
-  color: rgba(102, 55, 0, 0.94);
-  padding: 8px 10px;
-  font-size: 0.72rem;
+@media (max-width: 760px) {
+  .insertMenuColumns {
+    flex-direction: column;
+  }
+
+  .insertMenuPrimaryColumn,
+  .insertMenuSecondaryColumn {
+    width: min(292px, calc(100vw - 72px));
+    min-width: 0;
+  }
+
+  .assetPickerList {
+    grid-template-columns: 1fr;
+  }
 }

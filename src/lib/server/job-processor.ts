@@ -4,7 +4,6 @@ import {
   createGeneratedTextNoteDescriptorsFromRawText,
   parseStructuredTextOutput,
 } from "@/lib/generated-text-output";
-import { buildTopazGigapixelDebugRequest } from "@/lib/topaz-gigapixel-settings";
 import { getDb } from "@/lib/db/client";
 import { assets, jobAttempts, jobPreviewFrames, jobs } from "@/lib/db/schema";
 import { getProviderAdapter } from "@/lib/providers/registry";
@@ -14,7 +13,7 @@ import { updateProviderModelAccessState } from "@/lib/services/providers";
 import { readAssetContent, saveBufferAsPreview } from "@/lib/storage/local-storage";
 import { isStructuredTextOutputTarget, readOpenAiTextOutputTarget } from "@/lib/text-output-targets";
 import type { NodePayload, NormalizedPreviewFrame, ProviderId } from "@/lib/types";
-import { buildProviderDebugRequest, isRunnableTextModel } from "@/lib/provider-model-helpers";
+import { buildProviderDebugRequest } from "@/lib/provider-model-helpers";
 
 function asNodePayload(value: unknown): NodePayload {
   if (!value || typeof value !== "object") {

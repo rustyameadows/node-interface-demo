@@ -14,6 +14,7 @@ Run these from the repo root:
 
 ```bash
 npm run lint
+npm run check:design-system
 npm run test:unit
 npm run build
 npm run db:generate
@@ -21,6 +22,7 @@ npm run db:generate
 
 Expected results:
 - `lint` passes
+- `check:design-system` passes
 - `test:unit` passes
 - `build` emits `dist/renderer` and `dist/electron`
 - `db:generate` emits a migration under `drizzle/`
@@ -68,6 +70,7 @@ What it does:
   - app home shows archived projects in a separate section when archived projects exist
   - app home can reopen an existing project card
   - `Home` works from the workspace Menu pill and native mac menu
+  - light non-canvas views render with the new design-system shell while the main canvas remains black
   - SQLite file is created
   - native new-project and add-node commands round-trip into the renderer
   - Node Library routes and playgrounds render in the real Electron app
@@ -244,14 +247,16 @@ Run this when touching workflow or asset UX:
 28. Open the Assets view and confirm the imported asset appears.
 29. Open Project Settings and confirm the project metadata renders and provider credentials do not appear there.
 30. Open App Settings and confirm provider credentials render there.
-31. If testing on macOS, confirm:
+31. Confirm the workspace menu, queue pill, insert picker, bottom-bar popovers, and selection compare/download strip all use the refreshed chrome without changing canvas node or connection rendering.
+32. Confirm focus-visible, disabled buttons, and compact-density tables/filters still read clearly on home, settings, queue, and assets.
+33. If testing on macOS, confirm:
    - `File`, `Project`, `Canvas`, `Edit`, `View`, and `Window` menus appear
    - `Cmd+,` opens App Settings
    - `File > New Project` opens a new project
    - `Project > Home` returns to app home
    - `Project > Assets` / `Queue` / `Project Settings` match the in-app menu behavior
    - `Canvas > Add Node…`, `Connect Selected Nodes`, `Duplicate Selected Node`, `Undo Canvas Change`, and `Redo Canvas Change` enable or disable correctly on canvas
-32. If API keys are configured, run at least one real provider job and verify:
+34. If API keys are configured, run at least one real provider job and verify:
   - queue row created
   - state changes visible
   - output lands on canvas or in assets as appropriate

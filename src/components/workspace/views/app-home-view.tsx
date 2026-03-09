@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Badge, Button, EmptyState, Field, Input, Panel, SectionHeader, ToolbarGroup } from "@/components/ui";
 import {
   createProject,
   getProjects,
@@ -15,6 +16,7 @@ import {
   buildNodeLibraryRoute,
   buildWorkspaceRoute,
 } from "@/renderer/workspace-route";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import styles from "./app-home-view.module.css";
 
 function formatDate(value: string | null) {
@@ -60,10 +62,14 @@ function ProjectCard({ project, busy, onOpen }: ProjectCardProps) {
         </div>
 
         <div className={styles.badgeRow}>
-          {isOpen ? <span className={styles.badgeOpen}>Current</span> : null}
-          <span className={project.status === "archived" ? styles.badgeArchived : styles.badgeActive}>
+          {isOpen ? (
+            <Badge variant="accent" className={styles.badge}>
+              Current
+            </Badge>
+          ) : null}
+          <Badge variant={project.status === "archived" ? "warning" : "success"} className={styles.badge}>
             {project.status === "archived" ? "Archived" : "Active"}
-          </span>
+          </Badge>
         </div>
       </div>
 
@@ -134,95 +140,133 @@ export function AppHomeView() {
   };
 
   return (
-    <main className={styles.page}>
-      <section className={styles.heroPanel}>
+    <main {...buildUiDataAttributes("app", "comfortable")} className={styles.page}>
+      <Panel variant="hero" className={styles.heroPanel}>
         <div className={styles.heroCopy}>
           <div className={styles.kicker}>Nodes Nodes Nodes</div>
           <h1>App Home</h1>
           <p>
-            Create a project, reopen an existing workspace, or jump into app-wide settings.
+            Build media workflows from a local-first canvas, keep projects tidy, and move between setup, library, and production views without losing context.
           </p>
+
+          <ToolbarGroup className={styles.heroActions}>
+            <Button
+              onClick={() => {
+                void handleCreateProject();
+              }}
+              disabled={busy || Boolean(busyProjectId) || !name.trim()}
+            >
+              {busy ? "Creating..." : "Create and Open"}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy || Boolean(busyProjectId)}
+              onClick={() => {
+                router.push(buildNodeLibraryRoute());
+              }}
+            >
+              Explore Nodes
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy || Boolean(busyProjectId)}
+              onClick={() => {
+                router.push(buildAppSettingsRoute());
+              }}
+            >
+              Configure App
+            </Button>
+          </ToolbarGroup>
         </div>
 
-        <div className={styles.heroMeta}>
-          <div className={styles.heroMetaCard}>
+        <div className={styles.heroMetaGrid}>
+          <Panel variant="subtle" className={styles.heroMetaCard}>
             <span>Current Project</span>
             <strong>{currentProject ? currentProject.name : "No project open"}</strong>
-          </div>
-          <div className={styles.heroMetaCard}>
+          </Panel>
+          <Panel variant="subtle" className={styles.heroMetaCard}>
             <span>Total Projects</span>
             <strong>{isLoading ? "…" : projects.length}</strong>
-          </div>
+          </Panel>
+          <Panel variant="subtle" className={styles.heroMetaCard}>
+            <span>Active Workspaces</span>
+            <strong>{isLoading ? "…" : activeProjects.length}</strong>
+          </Panel>
+          <Panel variant="subtle" className={styles.heroMetaCard}>
+            <span>Archived Projects</span>
+            <strong>{isLoading ? "…" : archivedProjects.length}</strong>
+          </Panel>
         </div>
-      </section>
+      </Panel>
 
-      <section className={styles.createPanel}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2>Create Project</h2>
-            <p>Start a new local workspace and land on canvas immediately.</p>
-          </div>
-        </div>
+      <Panel variant="raised" className={styles.createPanel}>
+        <SectionHeader
+          eyebrow="Kickoff"
+          title="Create Project"
+          description="Start a new local workspace and land on canvas immediately."
+        />
 
-        <label className={styles.field}>
-          Project Name
-          <input
+        <Field
+          className={styles.field}
+          label="Project Name"
+          description="Use a short workspace name. You can rename it later in Project Settings."
+        >
+          <Input
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Project name"
             disabled={busy || Boolean(busyProjectId)}
           />
-        </label>
+        </Field>
 
-        <div className={styles.actionRow}>
-          <button
-            type="button"
+        <ToolbarGroup className={styles.actionRow}>
+          <Button
             disabled={busy || Boolean(busyProjectId) || !name.trim()}
             onClick={() => {
               void handleCreateProject();
             }}
           >
             {busy ? "Creating..." : "Create Project"}
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            className={styles.secondaryButton}
+          <Button
+            variant="secondary"
             disabled={busy || Boolean(busyProjectId)}
             onClick={() => {
               router.push(buildNodeLibraryRoute());
             }}
           >
             Node Library
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            className={styles.secondaryButton}
+          <Button
+            variant="ghost"
             disabled={busy || Boolean(busyProjectId)}
             onClick={() => {
               router.push(buildAppSettingsRoute());
             }}
           >
             App Settings
-          </button>
-        </div>
+          </Button>
+        </ToolbarGroup>
 
         {error ? <div className={styles.error}>{error}</div> : null}
-      </section>
+      </Panel>
 
-      <section className={styles.projectsPanel}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2>Active Projects</h2>
-            <p>Open any active workspace and continue on its canvas.</p>
-          </div>
-        </div>
+      <Panel variant="panel" className={styles.projectsPanel}>
+        <SectionHeader
+          eyebrow="Workspace"
+          title="Active Projects"
+          description="Open any active workspace and continue on its canvas."
+        />
 
         {isLoading ? (
           <div className={styles.loading}>Loading projects...</div>
         ) : activeProjects.length === 0 ? (
-          <div className={styles.emptyState}>No active projects yet.</div>
+          <EmptyState
+            title="No active projects yet"
+            description="Create a project above to open your first canvas."
+          />
         ) : (
           <div className={styles.projectGrid}>
             {activeProjects.map((project) => (
@@ -235,16 +279,15 @@ export function AppHomeView() {
             ))}
           </div>
         )}
-      </section>
+      </Panel>
 
       {archivedProjects.length > 0 ? (
-        <section className={styles.projectsPanel}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <h2>Archived Projects</h2>
-              <p>Archived work stays separate but can still be reopened from home.</p>
-            </div>
-          </div>
+        <Panel variant="panel" className={styles.projectsPanel}>
+          <SectionHeader
+            eyebrow="Archive"
+            title="Archived Projects"
+            description="Archived work stays separate but can still be reopened from home."
+          />
 
           <div className={styles.projectGrid}>
             {archivedProjects.map((project) => (
@@ -256,7 +299,7 @@ export function AppHomeView() {
               />
             ))}
           </div>
-        </section>
+        </Panel>
       ) : null}
     </main>
   );

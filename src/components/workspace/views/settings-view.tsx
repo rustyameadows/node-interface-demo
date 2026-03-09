@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Badge, Button, Field, Input, Panel, SectionHeader, ToolbarGroup } from "@/components/ui";
 import { useRouter } from "@/renderer/navigation";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import {
@@ -11,6 +12,7 @@ import {
   updateProject,
 } from "@/components/workspace/client-api";
 import type { Project } from "@/components/workspace/types";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import { queryKeys } from "@/renderer/query";
 import styles from "./settings-view.module.css";
 
@@ -51,9 +53,14 @@ export function SettingsView({ projectId }: Props) {
 
   return (
     <WorkspaceShell projectId={projectId} view="settings">
-      <main className={styles.page}>
-        <section className={styles.panel}>
-          <h1>Project Settings</h1>
+      <main {...buildUiDataAttributes("app", "comfortable")} className={styles.page}>
+        <Panel variant="panel" className={styles.panel}>
+          <SectionHeader
+            eyebrow="Workspace"
+            title="Project Settings"
+            description="Rename the project, archive it when it goes dormant, or delete it locally."
+            actions={project ? <Badge variant={project.status === "active" ? "success" : "warning"}>{project.status}</Badge> : null}
+          />
 
           {isLoading ? (
             <div className={styles.loading}>Loading project...</div>
@@ -61,10 +68,9 @@ export function SettingsView({ projectId }: Props) {
             <div className={styles.error}>Project not found.</div>
           ) : (
             <>
-              <label>
-                Name
-                <input value={name} onChange={(event) => setName(event.target.value)} disabled={busy} />
-              </label>
+              <Field label="Name" description="Project names are local and can be changed at any time.">
+                <Input value={name} onChange={(event) => setName(event.target.value)} disabled={busy} />
+              </Field>
 
               <div className={styles.metaRow}>
                 <span>Created</span>
@@ -81,8 +87,8 @@ export function SettingsView({ projectId }: Props) {
                 <strong>{formatDate(project.lastOpenedAt)}</strong>
               </div>
 
-              <div className={styles.actionRow}>
-                <button
+              <ToolbarGroup className={styles.actionRow}>
+                <Button
                   disabled={busy || !name.trim() || name.trim() === project.name}
                   onClick={async () => {
                     setBusy(true);
@@ -98,9 +104,10 @@ export function SettingsView({ projectId }: Props) {
                   }}
                 >
                   Save Name
-                </button>
+                </Button>
 
-                <button
+                <Button
+                  variant="secondary"
                   disabled={busy}
                   onClick={async () => {
                     setBusy(true);
@@ -118,10 +125,11 @@ export function SettingsView({ projectId }: Props) {
                   }}
                 >
                   {project.status === "active" ? "Archive Project" : "Unarchive Project"}
-                </button>
-              </div>
+                </Button>
+              </ToolbarGroup>
 
-              <button
+              <Button
+                variant="danger"
                 className={styles.deleteButton}
                 disabled={busy}
                 onClick={async () => {
@@ -151,12 +159,12 @@ export function SettingsView({ projectId }: Props) {
                 }}
               >
                 Delete Project
-              </button>
+              </Button>
 
               {error && <div className={styles.error}>{error}</div>}
             </>
           )}
-        </section>
+        </Panel>
       </main>
     </WorkspaceShell>
   );

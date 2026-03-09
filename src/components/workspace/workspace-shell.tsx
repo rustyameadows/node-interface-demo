@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "@/renderer/navigation";
 import { buildAppHomeRoute, buildAppSettingsRoute, buildNodeLibraryRoute } from "@/renderer/workspace-route";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import styles from "./workspace-shell.module.css";
 import { getProjects, openProject, summarizeQueue } from "@/components/workspace/client-api";
 import type { Job, MenuFlyoutState, Project, QueueSummary, WorkspaceView } from "@/components/workspace/types";
@@ -44,6 +45,8 @@ export function WorkspaceShell({
   const closeTimer = useRef<NodeJS.Timeout | null>(null);
 
   const queueSummary: QueueSummary = useMemo(() => summarizeQueue(jobs), [jobs]);
+  const shellSurface = view === "canvas" ? "canvas-overlay" : "app";
+  const shellDensity = view === "canvas" ? "compact" : "comfortable";
 
   const activeProjects = useMemo(() => projects.filter((project) => project.status === "active"), [projects]);
   const archivedProjects = useMemo(() => projects.filter((project) => project.status === "archived"), [projects]);
@@ -153,7 +156,8 @@ export function WorkspaceShell({
 
   return (
     <div
-      className={styles.workspaceRoot}
+      {...buildUiDataAttributes(shellSurface, shellDensity)}
+      className={`${styles.workspaceRoot} ${view === "canvas" ? styles.workspaceRootCanvas : styles.workspaceRootApp}`}
       style={view === "canvas" ? ({ "--workspace-shell-corner-radius": "0px" } as CSSProperties) : undefined}
     >
       <div className={styles.workspaceContent}>{children}</div>

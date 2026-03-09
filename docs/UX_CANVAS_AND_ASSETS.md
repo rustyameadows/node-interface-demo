@@ -17,7 +17,10 @@
   - project-only metadata and lifecycle actions
 
 ## Visual Direction
-- Preserve the existing dark palette and glass/text tokens.
+- Use a two-surface system:
+  - light app chrome for home, library, settings, queue, assets, and detail views
+  - dark overlay chrome for floating controls above the black canvas
+- Preserve the black canvas and the semantic node color language inside protected node renderers.
 - Preserve semantic canvas colors:
   - pink for text
   - blue for image assets
@@ -107,6 +110,7 @@
   - pin the run launcher near the source output edge
 - active template nodes suppress external phantom row cards while they are in `full` mode and rely on the inline merge preview instead
 - multi-selection compare/download actions live in a floating selection strip near the current selection instead of the old bottom bar
+- the selection strip, queue pill, insert picker, asset picker, and bottom-bar popovers may be restyled as overlay chrome without changing node or connection rendering
 - canvas keyboard shortcuts when focus is not inside an input, textarea, select, or contenteditable surface:
   - `A` opens the add-to-canvas insert menu at viewport center
   - `C` connects exactly two selected nodes from oldest selected -> newest selected
@@ -140,6 +144,7 @@
 - 2-up compare
 - 4-up compare
 - Single asset detail view
+- Assets, queue, and settings now default to the compact/light app design-system density rather than bespoke view-local chrome
 
 Controls:
 - rating
@@ -153,6 +158,7 @@ Controls:
 - app home is reachable from the in-canvas `Menu` pill, app settings, and the native macOS `Project` menu
 - Node Library is reachable from app home, the in-canvas `Menu` pill, and the native macOS app/project menus
 - App Settings shows per-provider readiness; the Gemini row includes per-project access summary plus a manual `Refresh Access` action
+- Node Library detail keeps the actual playground canvas black and protected while the surrounding rails and wrappers follow the light app surface system
 - browser uploads are replaced by native file dialogs
 - asset and preview rendering uses `app-asset://` URLs
 - renderer never sees raw local file paths

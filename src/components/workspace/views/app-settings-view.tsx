@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Badge, Button, Field, Input, Panel, SectionHeader, ToolbarGroup } from "@/components/ui";
 import { useRouter } from "@/renderer/navigation";
 import {
   clearProviderCredential,
@@ -18,6 +19,7 @@ import type {
   ProviderModel,
 } from "@/components/workspace/types";
 import { formatProviderAccessMessage } from "@/lib/provider-readiness";
+import { buildUiDataAttributes } from "@/lib/design-system";
 import { queryKeys } from "@/renderer/query";
 import { buildAppHomeRoute, buildWorkspaceRoute } from "@/renderer/workspace-route";
 import styles from "./settings-view.module.css";
@@ -148,23 +150,21 @@ export function AppSettingsView() {
   );
 
   return (
-    <main className={styles.page}>
-      <section className={styles.panel}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h1>App Settings</h1>
-            <p>Provider API keys are app-wide and shared across projects. They resolve from Keychain first, then fall back to environment variables.</p>
-          </div>
-        </div>
+    <main {...buildUiDataAttributes("app", "comfortable")} className={styles.page}>
+      <Panel variant="hero" className={styles.panel}>
+        <SectionHeader
+          eyebrow="Application"
+          title="App Settings"
+          description="Provider API keys are app-wide and shared across projects. They resolve from Keychain first, then fall back to environment variables."
+        />
 
         <div className={styles.metaRow}>
           <span>Current Workspace</span>
           <strong>{projectsLoading ? "Loading…" : currentProject ? currentProject.name : "No project open"}</strong>
         </div>
 
-        <div className={styles.actionRow}>
-          <button
-            type="button"
+        <ToolbarGroup className={styles.actionRow}>
+          <Button
             onClick={() => {
               if (currentProject) {
                 router.push(buildWorkspaceRoute(currentProject.id, "canvas"));
@@ -175,39 +175,38 @@ export function AppSettingsView() {
             }}
           >
             {currentProject ? "Back to Workspace" : "Back to Home"}
-          </button>
+          </Button>
 
           {currentProject ? (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => {
                 router.push(buildAppHomeRoute());
               }}
             >
               Home
-            </button>
+            </Button>
           ) : null}
 
           {currentProject ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               onClick={() => {
                 router.push(buildWorkspaceRoute(currentProject.id, "settings"));
               }}
             >
               Project Settings
-            </button>
+            </Button>
           ) : null}
-        </div>
-      </section>
+        </ToolbarGroup>
+      </Panel>
 
-      <section className={styles.panel}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h1>Provider Credentials</h1>
-            <p>Packaged apps can save provider API keys in the macOS Keychain. Keychain values override environment variables.</p>
-          </div>
-        </div>
+      <Panel variant="panel" className={styles.panel}>
+        <SectionHeader
+          eyebrow="Providers"
+          title="Provider Credentials"
+          description="Packaged apps can save provider API keys in the macOS Keychain. Keychain values override environment variables."
+        />
 
         {credentialsLoading ? (
           <div className={styles.loading}>Loading provider credentials...</div>
@@ -231,10 +230,10 @@ export function AppSettingsView() {
                     </div>
 
                     <div className={styles.badgeRow}>
-                      <span className={status.configured ? styles.badgeReady : styles.badgeMissing}>
+                      <Badge variant={status.configured ? "success" : "warning"}>
                         {status.configured ? "Configured" : "Missing"}
-                      </span>
-                      <span className={styles.badgeSource}>{getCredentialSourceLabel(status.source)}</span>
+                      </Badge>
+                      <Badge variant="info">{getCredentialSourceLabel(status.source)}</Badge>
                     </div>
                   </div>
 
@@ -251,9 +250,8 @@ export function AppSettingsView() {
                   {providerStatusDetail ? <p className={styles.helpText}>{providerStatusDetail}</p> : null}
                   <p className={styles.helpText}>{getProviderCredentialHelpText(status)}</p>
 
-                  <label>
-                    Save to Keychain
-                    <input
+                  <Field label="Save to Keychain" description="Stored Keychain values override matching environment variables.">
+                    <Input
                       type="password"
                       value={draftValue}
                       placeholder={`Enter ${status.key}`}
@@ -265,11 +263,10 @@ export function AppSettingsView() {
                       }}
                       disabled={Boolean(credentialBusyKey)}
                     />
-                  </label>
+                  </Field>
 
-                  <div className={styles.actionRow}>
-                    <button
-                      type="button"
+                  <ToolbarGroup className={styles.actionRow}>
+                    <Button
                       disabled={Boolean(credentialBusyKey) || draftValue.trim().length === 0}
                       onClick={async () => {
                         setCredentialBusyKey(status.key);
@@ -291,10 +288,10 @@ export function AppSettingsView() {
                       }}
                     >
                       {isSaving ? "Saving..." : "Save to Keychain"}
-                    </button>
+                    </Button>
 
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
                       disabled={Boolean(credentialBusyKey) || !canClear}
                       onClick={async () => {
                         setCredentialBusyKey(status.key);
@@ -312,11 +309,11 @@ export function AppSettingsView() {
                       }}
                     >
                       {isClearing && canClear ? "Clearing..." : "Clear Saved Key"}
-                    </button>
+                    </Button>
 
                     {providerId === "google-gemini" ? (
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
                         disabled={Boolean(credentialBusyKey) || isRefreshing}
                         onClick={async () => {
                           setRefreshBusyProviderId("google-gemini");
@@ -334,9 +331,9 @@ export function AppSettingsView() {
                         }}
                       >
                         {isRefreshing ? "Refreshing..." : "Refresh Access"}
-                      </button>
+                      </Button>
                     ) : null}
-                  </div>
+                  </ToolbarGroup>
                 </section>
               );
             })}
@@ -344,7 +341,7 @@ export function AppSettingsView() {
         )}
 
         {credentialError && <div className={styles.error}>{credentialError}</div>}
-      </section>
+      </Panel>
     </main>
   );
 }

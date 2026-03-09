@@ -23,7 +23,6 @@ import { isModelParameterVisible } from "@/lib/model-parameters";
 import { getTextOutputTargetLabel, readTextOutputTarget } from "@/lib/text-output-targets";
 import {
   isRunnableTopazGigapixelModel,
-  resolveTopazGigapixelSettings,
 } from "@/lib/topaz-gigapixel-settings";
 import {
   buildProviderDebugRequest,
