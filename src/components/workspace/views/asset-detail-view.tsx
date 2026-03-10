@@ -59,9 +59,9 @@ export function AssetDetailView({ projectId, assetId }: Props) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => router.push(`/projects/${projectId}/queue?inspectJobId=${asset.jobId}`)}
+                  onClick={() => router.push(`/projects/${projectId}/queue/${asset.jobId}`)}
                 >
-                  View Source Call
+                  View Source Job
                 </Button>
               ) : null}
             </ToolbarGroup>

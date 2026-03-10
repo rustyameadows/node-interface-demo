@@ -144,3 +144,8 @@
 - Decision: keep `Nano Banana 2` `Images & Text` as a single Gemini provider call with no app-level fallback text call, and treat image-only mixed results as successful provider-authentic outcomes.
 - Rationale: live runs on March 10, 2026 showed the same request harness sometimes returns `["image","text"]` and sometimes `["image"]`, especially on reference-image edit runs, so the correct short-term contract is best-effort observability rather than synthesized determinism.
 - Consequence: mixed Gemini attempts now persist typed diagnostics when text is missing, queue inspection explains “Gemini returned image-only” directly, and job serialization can reparse stored smart text outputs if descriptor arrays are absent in the attempt payload.
+
+## 2026-03-10 - Queue Debugging Uses A Dense Ledger Plus Full Record
+- Decision: keep `/queue` as a dense run ledger and move rich job diagnostics entirely into the dedicated `/queue/$jobId` execution-record route.
+- Rationale: the list page is for scanning and selecting runs, while provider payloads, media previews, reconciliation counts, and raw JSON belong in one focused diagnostics surface instead of a side summary pane.
+- Consequence: queue rows open the full record directly, legacy `?inspectJobId=` links redirect to the detailed route, and the queue list now optimizes for high-density debugging columns instead of inline summary cards.

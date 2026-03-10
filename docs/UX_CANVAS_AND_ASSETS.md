@@ -143,6 +143,8 @@
   - excluded: viewport pan/zoom, queue state changes, polling-driven generated output hydration, and async placeholder reconciliation
 
 ## Queue Feedback
+- the queue list is a dense run ledger, not a secondary inspector pane
+- clicking a queue row opens the dedicated full execution record for that job
 - running jobs show queue state in the queue view and on generated output nodes
 - OpenAI image jobs can show persisted preview frames before final completion
 - Gemini image jobs do not stream preview frames in v1

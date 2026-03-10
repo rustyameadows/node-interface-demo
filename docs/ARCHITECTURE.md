@@ -212,8 +212,9 @@ Copilot run path:
   - `gemini-3-pro-image-preview` also exposes `imageSize`
   - `gemini-3.1-flash-image-preview` also exposes `outputMode`, `imageSize`, and `thinkingLevel`
   - `gemini-3.1-flash-image-preview` `Images & Text` reuses the `smart` structured-output contract for its text modality, but as of March 10, 2026 the provider behavior is still experimental and may return image-only
-  - successful mixed image-only Gemini attempts persist typed diagnostics in `job_attempts.provider_response` so queue inspection can explain that Gemini omitted text instead of implying a renderer parse failure
-  - OpenAI-style image settings are pruned from Gemini image nodes instead of being carried through as inert payload noise
+- successful mixed image-only Gemini attempts persist typed diagnostics in `job_attempts.provider_response` so queue inspection can explain that Gemini omitted text instead of implying a renderer parse failure
+- queue inspection is split into a dense `/queue` run ledger plus a dedicated `/queue/$jobId` execution-record route
+- OpenAI-style image settings are pruned from Gemini image nodes instead of being carried through as inert payload noise
 - The smart-output prompt builder derives allowed node kinds and payload summaries from the node catalog instead of hardcoded node descriptions.
 
 ## Queue Recovery

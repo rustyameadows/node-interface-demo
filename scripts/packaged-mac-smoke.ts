@@ -582,8 +582,7 @@ async function main() {
     await clickButton(driver, "Menu");
     await clickButton(driver, "Queue");
     await waitForUrl(driver, new RegExp(`#?/projects/${projectId}/queue$`));
-    await waitForHeading(driver, "Queue");
-    await waitForHeading(driver, "Call Inspector");
+    await waitForHeading(driver, "Run Queue");
     await saveScreenshot(driver, queueScreenshotPath);
 
     await clickButton(driver, "Menu");

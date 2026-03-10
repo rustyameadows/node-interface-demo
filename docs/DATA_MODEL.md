@@ -254,6 +254,7 @@ The renderer never sees absolute paths; those refs are resolved only in main/wor
 - Parse failure falls back to one generated text-note descriptor instead of failing the job.
 - Those outputs do not create `assets` rows.
 - Queue debug data stores both the returned text and the parsed structured-output metadata inline in `job_attempts.provider_response`.
+- Queue UI consumes those typed job-debug payloads only on the dedicated execution-record route; the queue list itself stays a compact run ledger.
 - Experimental `Nano Banana 2` mixed image/text attempts may also store:
   - `mixedOutputDiagnostics.requested`
   - `mixedOutputDiagnostics.executionMode`

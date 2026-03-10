@@ -4473,7 +4473,7 @@ export function CanvasView({ projectId }: Props) {
 
   const openQueueInspect = useCallback(
     (jobId: string) => {
-      router.push(`/projects/${projectId}/queue?inspectJobId=${jobId}`);
+      router.push(`/projects/${projectId}/queue/${jobId}`);
     },
     [projectId, router]
   );

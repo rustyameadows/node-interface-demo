@@ -2,14 +2,23 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Job, JobDebugResponse } from "@/components/workspace/types";
+import { normalizeCanvasDocument } from "@/lib/canvas-document";
 import { getDb, getSqlite } from "@/lib/db/client";
-import { assets, jobAttempts, jobPreviewFrames, jobs } from "@/lib/db/schema";
+import { assets, canvases, jobAttempts, jobPreviewFrames, jobs } from "@/lib/db/schema";
 import {
   getGeneratedOutputData,
   getGeminiMixedOutputDiagnostics,
   getLatestTextOutputs,
   getStoredTextOutputTarget,
 } from "@/lib/job-attempt-response";
+import {
+  buildJobAttemptRequestSummary,
+  buildJobAttemptResponseSummary,
+  buildJobCanvasImpact,
+  buildJobOutputReconciliation,
+  getInputAssetsFromProviderRequest,
+  getNormalizedOutputsFromProviderResponse,
+} from "@/lib/job-diagnostics";
 import {
   formatProviderAccessMessage,
   formatProviderRequirementMessage,
@@ -137,9 +146,74 @@ async function getSubmissionError(input: z.infer<typeof createJobSchema>) {
   return null;
 }
 
+function serializeAssetRow(row: typeof assets.$inferSelect) {
+  return {
+    id: row.id,
+    type: row.type as Job["assets"][number]["type"],
+    mimeType: row.mimeType,
+    outputIndex: row.outputIndex,
+    createdAt: row.createdAt,
+    storageRef: row.storageRef,
+    width: row.width,
+    height: row.height,
+    durationMs: row.durationMs,
+  };
+}
+
+function serializePreviewFrameRow(row: typeof jobPreviewFrames.$inferSelect) {
+  return {
+    id: row.id,
+    outputIndex: row.outputIndex,
+    previewIndex: row.previewIndex,
+    mimeType: row.mimeType,
+    width: row.width,
+    height: row.height,
+    createdAt: row.createdAt,
+  };
+}
+
+function getNodeReference(
+  canvasDocument: ReturnType<typeof normalizeCanvasDocument> | null,
+  nodeId: string | null | undefined
+): JobDebugResponse["sourceNode"] {
+  if (!nodeId) {
+    return null;
+  }
+
+  const node = canvasDocument?.workflow.nodes.find((candidate) => candidate.id === nodeId) || null;
+  if (!node) {
+    return {
+      id: nodeId,
+      label: null,
+      kind: null,
+      nodeType: null,
+    };
+  }
+
+  return {
+    id: node.id,
+    label: node.label,
+    kind: node.kind,
+    nodeType: node.nodeType,
+  };
+}
+
 function serializeJobRows(
   rows: typeof jobs.$inferSelect[],
-  assetsByJobId: Map<string, Array<{ id: string; type: string; mimeType: string; outputIndex: number | null; createdAt: string }>>,
+  assetsByJobId: Map<
+    string,
+    Array<{
+      id: string;
+      type: string;
+      mimeType: string;
+      outputIndex: number | null;
+      createdAt: string;
+      storageRef: string;
+      width: number | null;
+      height: number | null;
+      durationMs: number | null;
+    }>
+  >,
   previewFramesByJobId: Map<
     string,
     Array<{
@@ -155,7 +229,8 @@ function serializeJobRows(
   latestAttemptByJobId: Map<string, typeof jobAttempts.$inferSelect>
 ): Job[] {
   return rows.map((job) => {
-    const latestProviderResponse = latestAttemptByJobId.get(job.id)?.providerResponse || null;
+    const latestAttempt = latestAttemptByJobId.get(job.id) || null;
+    const latestProviderResponse = latestAttempt?.providerResponse || null;
     const sourceModelNodeId =
       typeof (job.nodeRunPayload as Record<string, unknown> | undefined)?.nodeId === "string" &&
       (job.nodeRunPayload as Record<string, unknown> | undefined)?.runOrigin !== "copilot"
@@ -206,19 +281,28 @@ export async function listJobs(projectId: string): Promise<Job[]> {
   const previewRows = jobIds.length ? db.select().from(jobPreviewFrames).where(inArray(jobPreviewFrames.jobId, jobIds)).all() : [];
   const attempts = jobIds.length ? db.select().from(jobAttempts).where(inArray(jobAttempts.jobId, jobIds)).all() : [];
 
-  const assetsByJobId = jobAssetRows.reduce<Map<string, Array<{ id: string; type: string; mimeType: string; outputIndex: number | null; createdAt: string }>>>(
+  const assetsByJobId = jobAssetRows.reduce<
+    Map<
+      string,
+      Array<{
+        id: string;
+        type: string;
+        mimeType: string;
+        outputIndex: number | null;
+        createdAt: string;
+        storageRef: string;
+        width: number | null;
+        height: number | null;
+        durationMs: number | null;
+      }>
+    >
+  >(
     (acc, asset) => {
       if (!asset.jobId) {
         return acc;
       }
       const next = acc.get(asset.jobId) || [];
-      next.push({
-        id: asset.id,
-        type: asset.type as Job["assets"][number]["type"],
-        mimeType: asset.mimeType,
-        outputIndex: asset.outputIndex,
-        createdAt: asset.createdAt,
-      });
+      next.push(serializeAssetRow(asset));
       acc.set(asset.jobId, next);
       return acc;
     },
@@ -242,15 +326,7 @@ export async function listJobs(projectId: string): Promise<Job[]> {
     >((acc, preview) => {
       const next = acc.get(preview.jobId) || [];
       if (!next.some((existing) => existing.outputIndex === preview.outputIndex)) {
-        next.push({
-          id: preview.id,
-          outputIndex: preview.outputIndex,
-          previewIndex: preview.previewIndex,
-          mimeType: preview.mimeType,
-          width: preview.width,
-          height: preview.height,
-          createdAt: preview.createdAt,
-        });
+        next.push(serializePreviewFrameRow(preview));
       }
       acc.set(preview.jobId, next);
       return acc;
@@ -274,17 +350,80 @@ export async function getJobDebug(projectId: string, jobId: string): Promise<Job
     throw new Error("Job not found");
   }
 
-  const attempts = db.select().from(jobAttempts).where(eq(jobAttempts.jobId, jobId)).orderBy(desc(jobAttempts.attemptNumber), desc(jobAttempts.createdAt)).all();
+  const attempts = db
+    .select()
+    .from(jobAttempts)
+    .where(eq(jobAttempts.jobId, jobId))
+    .orderBy(desc(jobAttempts.attemptNumber), desc(jobAttempts.createdAt))
+    .all();
+  const outputAssetRows = db
+    .select()
+    .from(assets)
+    .where(and(eq(assets.projectId, projectId), eq(assets.jobId, jobId)))
+    .orderBy(desc(assets.createdAt))
+    .all();
+  const previewRows = db
+    .select()
+    .from(jobPreviewFrames)
+    .where(eq(jobPreviewFrames.jobId, jobId))
+    .orderBy(desc(jobPreviewFrames.createdAt), desc(jobPreviewFrames.previewIndex))
+    .all();
+  const canvasRow = db.select().from(canvases).where(eq(canvases.projectId, projectId)).get();
   const latestAttemptByJobId = attempts.reduce<Map<string, typeof jobAttempts.$inferSelect>>((acc, attempt) => {
     if (!acc.has(attempt.jobId)) {
       acc.set(attempt.jobId, attempt);
     }
     return acc;
   }, new Map());
-  const [job] = serializeJobRows([row], new Map(), new Map(), latestAttemptByJobId);
+  const [job] = serializeJobRows(
+    [row],
+    new Map([[jobId, outputAssetRows.map((asset) => serializeAssetRow(asset))]]),
+    new Map([[jobId, previewRows.map((preview) => serializePreviewFrameRow(preview))]]),
+    latestAttemptByJobId
+  );
+  const latestAttempt = attempts[0] || null;
+  const latestProviderRequest = latestAttempt?.providerRequest || null;
+  const latestProviderResponse = latestAttempt?.providerResponse || null;
+  const canvasDocument = normalizeCanvasDocument(canvasRow?.canvasDocument);
+  const canvasImpact = buildJobCanvasImpact(canvasDocument, jobId);
+  const normalizedOutputs = getNormalizedOutputsFromProviderResponse(latestProviderResponse);
+  const outputAssets = outputAssetRows.map((asset) => serializeAssetRow(asset));
+  const previewFrames = previewRows.map((preview) => serializePreviewFrameRow(preview));
+  const sourceNodeId = typeof row.nodeRunPayload?.nodeId === "string" ? row.nodeRunPayload.nodeId : null;
+  const promptSourceNodeId =
+    typeof row.nodeRunPayload?.promptSourceNodeId === "string" ? row.nodeRunPayload.promptSourceNodeId : null;
 
   return {
     job,
+    lifecycle: {
+      queuedAt: row.queuedAt,
+      createdAt: row.createdAt,
+      availableAt: row.availableAt,
+      claimedAt: row.claimedAt,
+      lastHeartbeatAt: row.lastHeartbeatAt,
+      startedAt: row.startedAt,
+      finishedAt: row.finishedAt,
+      attempts: row.attempts,
+      maxAttempts: row.maxAttempts,
+      errorCode: row.errorCode,
+      errorMessage: row.errorMessage,
+    },
+    sourceNode: getNodeReference(canvasDocument, sourceNodeId),
+    promptSourceNode: getNodeReference(canvasDocument, promptSourceNodeId),
+    inputAssets: getInputAssetsFromProviderRequest(latestProviderRequest),
+    outputAssets,
+    previewFrames,
+    normalizedOutputs,
+    outputReconciliation: buildJobOutputReconciliation({
+      job,
+      normalizedOutputs,
+      outputAssets,
+      previewFrames,
+      generatedNodeDescriptors: job.generatedNodeDescriptors || [],
+      canvasImpact,
+      mixedOutputDiagnostics: job.mixedOutputDiagnostics,
+    }),
+    canvasImpact,
     attempts: attempts.map((attempt) => ({
       id: attempt.id,
       attemptNumber: attempt.attemptNumber,
@@ -295,6 +434,11 @@ export async function getJobDebug(projectId: string, jobId: string): Promise<Job
       durationMs: attempt.durationMs,
       createdAt: attempt.createdAt,
       mixedOutputDiagnostics: getGeminiMixedOutputDiagnostics(attempt.providerResponse),
+      requestSummary: buildJobAttemptRequestSummary(attempt.providerRequest),
+      responseSummary: buildJobAttemptResponseSummary(
+        attempt.providerResponse,
+        getGeminiMixedOutputDiagnostics(attempt.providerResponse)
+      ),
     })),
   };
 }

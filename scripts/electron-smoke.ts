@@ -4,6 +4,7 @@ import { access, mkdtemp, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, chromium, type Browser, type Page } from "playwright";
+import { seedQueueDiagnosticsFixture } from "./queue-diagnostics-fixture";
 
 const APP_NAME = "Nodes Nodes Nodes";
 const PACKAGED_REMOTE_DEBUGGING_PORT = 9339;
@@ -64,6 +65,14 @@ function projectRoutePattern(projectId?: string, view?: "canvas" | "assets" | "q
   }
 
   return /#?\/projects\/[^/]+$/;
+}
+
+function jobRoutePattern(projectId?: string, jobId?: string) {
+  if (projectId && jobId) {
+    return new RegExp(`#?/projects/${projectId}/queue/${jobId}$`);
+  }
+
+  return /#?\/projects\/[^/]+\/queue\/[^/]+$/;
 }
 
 function appSettingsRoutePattern() {
@@ -606,6 +615,7 @@ async function main() {
   const menuBarScreenshotPath = path.join(appDataRoot, "menu-bar-smoke.png");
   const assetsScreenshotPath = path.join(appDataRoot, "assets-smoke.png");
   const queueScreenshotPath = path.join(appDataRoot, "queue-smoke.png");
+  const jobRecordScreenshotPath = path.join(appDataRoot, "job-record-smoke.png");
   const projectSettingsScreenshotPath = path.join(appDataRoot, "project-settings-smoke.png");
   const appSettingsScreenshotPath = path.join(appDataRoot, "app-settings-smoke.png");
   const launchTarget = isPackagedMacMode() ? getPackagedExecutablePath() : path.resolve("dist/electron/main.cjs");
@@ -1279,6 +1289,8 @@ async function main() {
       "Expected canvas delete shortcuts to stay disabled while the prompt editor is focused."
     );
     console.log("Canvas shortcuts stay suppressed while typing in the prompt editor");
+    const promptBeforeCommittedEdit =
+      (await getCanvasNodes(window, projectId)).find((node) => node.id === modelNodeId)?.prompt || "";
     await promptEditor.fill("Updated smoke prompt from inline full node");
     await blurActiveElement(window);
     await window.mouse.click(48, 48);
@@ -1293,7 +1305,7 @@ async function main() {
     await window.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+z`);
     await window.waitForTimeout(900);
     const undoPromptNodes = await getCanvasNodes(window, projectId);
-    assert.equal(undoPromptNodes.find((node) => node.id === modelNodeId)?.prompt, "");
+    assert.equal(undoPromptNodes.find((node) => node.id === modelNodeId)?.prompt, promptBeforeCommittedEdit);
     await window.keyboard.press(`${process.platform === "darwin" ? "Meta+Shift" : "Control+Shift"}+z`);
     await window.waitForTimeout(900);
     const redoPromptNodes = await getCanvasNodes(window, projectId);
@@ -1890,6 +1902,13 @@ async function main() {
     await screenshotCanvasNode(window, uploadedAssetNode.label, resizedAssetScreenshotPath);
     console.log("Resized asset screenshot:", resizedAssetScreenshotPath);
 
+    const queueFixture = await seedQueueDiagnosticsFixture({
+      appDataRoot,
+      projectId,
+      inputAssetId: importedAssets[0]!.id,
+    });
+    console.log("Queue diagnostics fixture:", JSON.stringify(queueFixture, null, 2));
+
     await triggerWorkspaceView(runtime, window, "project.view.assets", "Assets");
     await withTimeout("assets route", window.waitForURL(projectRoutePattern(projectId, "assets")));
     await withTimeout(
@@ -1905,13 +1924,63 @@ async function main() {
 
     await triggerWorkspaceView(runtime, window, "project.view.queue", "Queue");
     await withTimeout("queue route", window.waitForURL(projectRoutePattern(projectId, "queue")));
-    await withTimeout("queue heading", window.getByRole("heading", { name: "Queue" }).waitFor({ state: "visible", timeout: 15_000 }));
+    await withTimeout("queue heading", window.getByRole("heading", { name: "Run Queue" }).waitFor({ state: "visible", timeout: 15_000 }));
     await withTimeout(
-      "queue inspector",
-      window.getByRole("heading", { name: "Call Inspector" }).waitFor({ state: "visible", timeout: 15_000 })
+      "queue fixture primary row",
+      window.getByText(queueFixture.primaryJobId).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await withTimeout(
+      "queue fixture secondary row",
+      window.getByText(queueFixture.secondaryJobId).waitFor({ state: "visible", timeout: 15_000 })
     );
     await window.screenshot({ path: queueScreenshotPath, fullPage: true });
     console.log("Queue screenshot:", queueScreenshotPath);
+
+    await window.locator("tr").filter({ hasText: queueFixture.secondaryJobId }).click();
+    await withTimeout("job record route", window.waitForURL(jobRoutePattern(projectId, queueFixture.secondaryJobId)));
+    await withTimeout(
+      "job record heading",
+      window.getByRole("heading", { name: "Execution Record" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await withTimeout(
+      "job diagnostics view",
+      window.getByTestId("job-diagnostics-view").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await withTimeout(
+      "job record output preview",
+      window.getByAltText("queue-output-secondary.svg").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await withTimeout(
+      "job record request toggle",
+      window.getByRole("button", { name: "Request JSON" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await withTimeout(
+      "job record response toggle",
+      window.getByRole("button", { name: "Response JSON" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await window.screenshot({ path: jobRecordScreenshotPath, fullPage: true });
+    console.log("Job record screenshot:", jobRecordScreenshotPath);
+
+    await window.evaluate(
+      ({ activeProjectId, assetId }) => {
+        window.location.hash = `/projects/${activeProjectId}/assets/${assetId}`;
+      },
+      { activeProjectId: projectId, assetId: queueFixture.primaryOutputAssetId }
+    );
+    await withTimeout(
+      "generated asset detail route",
+      window.waitForURL(new RegExp(`#?/projects/${projectId}/assets/${queueFixture.primaryOutputAssetId}$`))
+    );
+    await withTimeout(
+      "generated asset source button",
+      window.getByRole("button", { name: "View Source Job" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await window.getByRole("button", { name: "View Source Job" }).click();
+    await withTimeout("asset detail source job route", window.waitForURL(jobRoutePattern(projectId, queueFixture.primaryJobId)));
+    await withTimeout(
+      "asset detail source job heading",
+      window.getByRole("heading", { name: "Execution Record" }).waitFor({ state: "visible", timeout: 15_000 })
+    );
 
     await triggerWorkspaceView(runtime, window, "project.settings", "Project Settings");
     await withTimeout("settings route", window.waitForURL(projectRoutePattern(projectId, "settings")));

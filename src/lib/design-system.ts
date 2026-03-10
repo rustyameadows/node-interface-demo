@@ -73,6 +73,7 @@ export const designSystemGuardrailScopes = [
   "src/components/workspace/views/assets-view",
   "src/components/workspace/views/asset-detail-view",
   "src/components/workspace/views/queue-view",
+  "src/components/workspace/views/job-detail-view",
   "src/components/workspace/views/settings-view",
   "src/components/workspace/views/node-library-view",
   "src/components/workspace/views/node-library-detail-view",

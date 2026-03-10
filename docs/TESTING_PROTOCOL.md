@@ -268,6 +268,7 @@ Run this when touching workflow or asset UX:
 34. If API keys are configured, run at least one real provider job and verify:
   - queue row created
   - state changes visible
+  - queue rows open the full execution record directly; there is no secondary summary inspector on the list page
   - output lands on canvas or in assets as appropriate
   - rerunning appends a fresh set of generated child nodes instead of replacing earlier ones
 

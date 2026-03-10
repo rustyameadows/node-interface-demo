@@ -3,6 +3,7 @@ import { AssetDetailView } from "@/components/workspace/views/asset-detail-view"
 import { AppSettingsView } from "@/components/workspace/views/app-settings-view";
 import { AssetsView } from "@/components/workspace/views/assets-view";
 import { CanvasView } from "@/components/workspace/views/canvas-view";
+import { JobDetailView } from "@/components/workspace/views/job-detail-view";
 import { MenuBarView } from "@/components/workspace/views/menu-bar-view";
 import { NodeLibraryDetailView } from "@/components/workspace/views/node-library-detail-view";
 import { NodeLibraryView } from "@/components/workspace/views/node-library-view";
@@ -95,6 +96,15 @@ const projectQueueRoute = createRoute({
   },
 });
 
+const projectQueueJobRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/queue/$jobId",
+  component: () => {
+    const { projectId, jobId } = projectQueueJobRoute.useParams();
+    return <JobDetailView projectId={projectId} jobId={jobId} />;
+  },
+});
+
 const projectSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/settings",
@@ -123,6 +133,7 @@ const routeTree = rootRoute.addChildren([
   projectAssetsRoute,
   projectAssetDetailRoute,
   projectQueueRoute,
+  projectQueueJobRoute,
   projectSettingsRoute,
   projectRootRedirectRoute,
 ]);

@@ -331,10 +331,127 @@ export type JobAttemptDebug = {
   durationMs: number | null;
   createdAt: string;
   mixedOutputDiagnostics?: GeminiMixedOutputDiagnostics | null;
+  requestSummary?: {
+    executionMode: ProviderExecutionMode | null;
+    requestedOutputCount: number | null;
+    promptLength: number;
+    inputAssetCount: number;
+    settingCount: number;
+  };
+  responseSummary?: {
+    normalizedOutputCount: number;
+    normalizedOutputTypes: Array<{
+      key: WorkflowNode["outputType"];
+      count: number;
+    }>;
+    previewFrameCount: number;
+    textOutputCount: number;
+    generatedDescriptorCount: number;
+    providerObjectCounts: Array<{
+      label: string;
+      count: number;
+    }>;
+    warning: string | null;
+  };
+};
+
+export type JobDebugNodeReference = {
+  id: string;
+  label: string | null;
+  kind: WorkflowNode["kind"] | null;
+  nodeType: WorkflowNode["nodeType"] | null;
+};
+
+export type JobDebugAssetReference = {
+  id: string;
+  type: Asset["type"];
+  mimeType: string;
+  outputIndex: number | null;
+  createdAt: string;
+  storageRef: string;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+};
+
+export type JobDebugPreviewFrame = {
+  id: string;
+  outputIndex: number;
+  previewIndex: number;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+};
+
+export type JobDebugNormalizedOutput = {
+  outputIndex: number;
+  type: WorkflowNode["outputType"];
+  mimeType: string;
+  extension: string;
+  responseId: string | null;
+  content: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type JobDebugCountBreakdown<Key extends string = string> = {
+  key: Key;
+  count: number;
+};
+
+export type JobDebugProviderObjectCount = {
+  label: string;
+  count: number;
+};
+
+export type JobOutputReconciliation = {
+  requestedOutputCount: number;
+  requestedOutputType: WorkflowNode["outputType"] | null;
+  normalizedOutputCount: number;
+  normalizedOutputTypes: JobDebugCountBreakdown<WorkflowNode["outputType"]>[];
+  providerObjectCounts: JobDebugProviderObjectCount[];
+  persistedAssetCount: number;
+  persistedAssetTypes: JobDebugCountBreakdown<Asset["type"]>[];
+  previewFrameCount: number;
+  textOutputCount: number;
+  generatedDescriptorCount: number;
+  generatedDescriptorKinds: JobDebugCountBreakdown<GeneratedNodeDescriptor["kind"]>[];
+  canvasNodeCount: number;
+  canvasNodeKinds: JobDebugCountBreakdown<WorkflowNode["kind"]>[];
+};
+
+export type JobCanvasImpact = {
+  totalNodeCount: number;
+  pendingNodeCount: number;
+  finishedNodeCount: number;
+  nodeKinds: JobDebugCountBreakdown<WorkflowNode["kind"]>[];
+};
+
+export type JobLifecycleDebug = {
+  queuedAt: string;
+  createdAt: string;
+  availableAt: string | null;
+  claimedAt: string | null;
+  lastHeartbeatAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  attempts: number;
+  maxAttempts: number;
+  errorCode: string | null;
+  errorMessage: string | null;
 };
 
 export type JobDebugResponse = {
   job: Job;
+  lifecycle: JobLifecycleDebug;
+  sourceNode: JobDebugNodeReference | null;
+  promptSourceNode: JobDebugNodeReference | null;
+  inputAssets: JobDebugAssetReference[];
+  outputAssets: JobDebugAssetReference[];
+  previewFrames: JobDebugPreviewFrame[];
+  normalizedOutputs: JobDebugNormalizedOutput[];
+  outputReconciliation: JobOutputReconciliation;
+  canvasImpact: JobCanvasImpact;
   attempts: JobAttemptDebug[];
 };
 

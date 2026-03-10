@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Panel, SectionHeader, SelectField } from "@/components/ui";
-import { useSearchParams } from "@/renderer/navigation";
+import { Panel, SectionHeader, SelectField } from "@/components/ui";
+import { getJobs, openProject } from "@/components/workspace/client-api";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
-import { getJobDebug, getJobs, openProject } from "@/components/workspace/client-api";
-import type { Job, JobAttemptDebug, JobDebugResponse } from "@/components/workspace/types";
+import type { Job } from "@/components/workspace/types";
 import { buildUiDataAttributes } from "@/lib/design-system";
-import { formatGeminiMixedOutputDiagnosticsNotice } from "@/lib/gemini-mixed-output";
+import { getJobDiagnosticsNotice } from "@/lib/job-diagnostics";
+import { useRouter, useSearchParams } from "@/renderer/navigation";
 import { queryKeys } from "@/renderer/query";
 import styles from "./queue-view.module.css";
 
@@ -24,68 +24,104 @@ function formatDate(value: string | null) {
     return "-";
   }
 
-  const date = new Date(value);
-  return date.toLocaleString();
+  return new Date(value).toLocaleString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-function formatDuration(durationMs: number | null) {
-  if (durationMs === null || durationMs === undefined) {
+function formatDuration(startedAt: string | null, finishedAt: string | null) {
+  if (!startedAt || !finishedAt) {
     return "-";
   }
-  return `${durationMs}ms`;
+
+  return `${Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime())}ms`;
 }
 
-function renderJson(value: Record<string, unknown> | null) {
-  if (!value) {
-    return "-";
-  }
-  return JSON.stringify(value, null, 2);
+function formatOutputType(job: Job) {
+  const count = job.nodeRunPayload?.outputCount || 1;
+  const type = job.nodeRunPayload?.outputType || "output";
+  return `${count} ${type}${count === 1 ? "" : "s"}`;
 }
 
-function attemptLabel(attempt: JobAttemptDebug) {
-  const pieces: string[] = [`Attempt ${attempt.attemptNumber}`];
-  if (attempt.errorCode || attempt.errorMessage) {
-    pieces.push("failed");
-  } else if (attempt.providerResponse) {
-    pieces.push("succeeded");
+function formatProduced(job: Job) {
+  const pieces = [
+    `${job.assets?.length || 0} assets`,
+    `${job.generatedNodeDescriptors?.length || 0} nodes`,
+  ];
+
+  if ((job.latestPreviewFrames?.length || 0) > 0) {
+    pieces.push(`${job.latestPreviewFrames?.length || 0} previews`);
   }
+  if ((job.latestTextOutputs?.length || 0) > 0) {
+    pieces.push(`${job.latestTextOutputs?.length || 0} text`);
+  }
+
   return pieces.join(" · ");
 }
 
+function formatRequest(job: Job) {
+  const executionMode = job.nodeRunPayload?.executionMode || "-";
+  const inputCount =
+    job.nodeRunPayload?.inputImageAssetIds?.length || job.nodeRunPayload?.upstreamAssetIds?.length || 0;
+
+  return `${executionMode} · ${formatOutputType(job)} · ${inputCount} inputs`;
+}
+
+function formatSource(job: Job) {
+  const nodeId = job.nodeRunPayload?.nodeId || "-";
+  const runOrigin = job.nodeRunPayload?.runOrigin || "canvas-node";
+  return `${nodeId} · ${runOrigin}`;
+}
+
+function formatModel(job: Job) {
+  return `${job.providerId}\n${job.modelId}`;
+}
+
+function formatStatusNote(job: Job) {
+  if (job.errorMessage?.trim()) {
+    return job.errorMessage.trim();
+  }
+
+  const notice = getJobDiagnosticsNotice({
+    mixedOutputDiagnostics: job.mixedOutputDiagnostics,
+    generatedOutputWarning: job.generatedOutputWarning,
+  });
+
+  if (!notice) {
+    return "-";
+  }
+
+  return notice.length > 110 ? `${notice.slice(0, 107)}...` : notice;
+}
+
 export function QueueView({ projectId }: Props) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
-  const [inspectJobId, setInspectJobId] = useState<string | null>(null);
+  const bootstrapInspectJobId = searchParams.get("inspectJobId");
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
     queryKey: queryKeys.jobs(projectId),
     queryFn: () => getJobs(projectId),
     refetchInterval: (query) => {
       const currentJobs = (query.state.data as Job[] | undefined) || [];
-      const hasActiveJobs = currentJobs.some((job) => job.state === "queued" || job.state === "running");
-      return hasActiveJobs ? 900 : 2_500;
+      return currentJobs.some((job) => job.state === "queued" || job.state === "running") ? 900 : 2_500;
     },
   });
-  const {
-    data: jobDebug,
-    isLoading: inspectLoading,
-    error: inspectQueryError,
-  } = useQuery<JobDebugResponse>({
-    queryKey: inspectJobId ? queryKeys.jobDebug(projectId, inspectJobId) : ["job-debug", projectId, "idle"],
-    queryFn: () => getJobDebug(projectId, inspectJobId!),
-    enabled: Boolean(inspectJobId),
-  });
-  const inspectError = inspectQueryError instanceof Error ? inspectQueryError.message : null;
 
   useEffect(() => {
     openProject(projectId).catch(console.error);
   }, [projectId]);
 
   useEffect(() => {
-    const inspectFromQuery = searchParams.get("inspectJobId");
-    if (inspectFromQuery) {
-      setInspectJobId(inspectFromQuery);
+    if (!bootstrapInspectJobId) {
+      return;
     }
-  }, [searchParams]);
+
+    router.push(`/projects/${projectId}/queue/${bootstrapInspectJobId}`);
+  }, [bootstrapInspectJobId, projectId, router]);
 
   const visibleJobs = useMemo(() => {
     if (stateFilter === "all") {
@@ -95,10 +131,6 @@ export function QueueView({ projectId }: Props) {
     return jobs.filter((job) => job.state === stateFilter);
   }, [jobs, stateFilter]);
 
-  const latestAttempt = jobDebug?.attempts[0] || null;
-  const latestMixedOutputDiagnostics = latestAttempt?.mixedOutputDiagnostics || jobDebug?.job.mixedOutputDiagnostics || null;
-  const mixedOutputNotice = formatGeminiMixedOutputDiagnosticsNotice(latestMixedOutputDiagnostics);
-
   return (
     <WorkspaceShell projectId={projectId} view="queue" jobs={jobs}>
       <main {...buildUiDataAttributes("app", "compact")} className={styles.page}>
@@ -106,8 +138,8 @@ export function QueueView({ projectId }: Props) {
           <header className={styles.header}>
             <SectionHeader
               eyebrow="Execution"
-              title="Queue"
-              description="Inspect provider calls, job timing, and retry state without leaving the active project."
+              title="Run Queue"
+              description="Dense run ledger. Click any row to open the full execution record."
             />
 
             <SelectField value={stateFilter} onChange={(event) => setStateFilter(event.target.value as StateFilter)}>
@@ -122,126 +154,51 @@ export function QueueView({ projectId }: Props) {
           {isLoading ? (
             <div className={styles.loading}>Loading queue...</div>
           ) : (
-            <div className={styles.content}>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Actions</th>
-                      <th>State</th>
-                      <th>Node</th>
-                      <th>Provider</th>
-                      <th>Model</th>
-                      <th>Queued</th>
-                      <th>Started</th>
-                      <th>Finished</th>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Job</th>
+                    <th>State</th>
+                    <th>Source</th>
+                    <th>Provider / Model</th>
+                    <th>Request</th>
+                    <th>Produced</th>
+                    <th>Queued / Duration</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleJobs.map((job) => (
+                    <tr
+                      key={job.id}
+                      tabIndex={0}
+                      onClick={() => router.push(`/projects/${projectId}/queue/${job.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          router.push(`/projects/${projectId}/queue/${job.id}`);
+                        }
+                      }}
+                    >
+                      <td className={styles.jobIdCell}>{job.id}</td>
+                      <td>
+                        <span className={`${styles.state} ${styles[`state_${job.state}`] || ""}`}>{job.state}</span>
+                      </td>
+                      <td className={styles.compoundCell}>{formatSource(job)}</td>
+                      <td className={styles.multiLineCell}>{formatModel(job)}</td>
+                      <td className={styles.compoundCell}>{formatRequest(job)}</td>
+                      <td className={styles.compoundCell}>{formatProduced(job)}</td>
+                      <td className={styles.multiLineCell}>{`${formatDate(job.createdAt)}\n${formatDuration(job.startedAt, job.finishedAt)}`}</td>
+                      <td className={styles.statusCell} title={formatStatusNote(job)}>
+                        {formatStatusNote(job)}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {visibleJobs.map((job) => (
-                      <tr key={job.id} className={inspectJobId === job.id ? styles.jobActive : ""}>
-                        <td>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className={styles.inspectButton}
-                            onClick={() => setInspectJobId(job.id)}
-                          >
-                            Inspect Call
-                          </Button>
-                        </td>
-                        <td>
-                          <span className={`${styles.state} ${styles[`state_${job.state}`] || ""}`}>{job.state}</span>
-                        </td>
-                        <td>{job.nodeRunPayload?.nodeId || "-"}</td>
-                        <td>{job.providerId}</td>
-                        <td>{job.modelId}</td>
-                        <td>{formatDate(job.createdAt)}</td>
-                        <td>{formatDate(job.startedAt)}</td>
-                        <td>{formatDate(job.finishedAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  ))}
+                </tbody>
+              </table>
 
-                {visibleJobs.length === 0 && <div className={styles.empty}>No jobs in this state.</div>}
-              </div>
-
-              <aside className={styles.inspectPane}>
-                <h2>Call Inspector</h2>
-
-                {!inspectJobId ? (
-                  <div className={styles.inspectEmpty}>Select a queue row and click Inspect Call.</div>
-                ) : inspectLoading ? (
-                  <div className={styles.inspectEmpty}>Loading call details...</div>
-                ) : inspectError ? (
-                  <div className={styles.inspectError}>{inspectError}</div>
-                ) : !jobDebug ? (
-                  <div className={styles.inspectEmpty}>No debug details found.</div>
-                ) : (
-                  <>
-                    <dl className={styles.inspectMeta}>
-                      <div>
-                        <dt>Job</dt>
-                        <dd>{jobDebug.job.id}</dd>
-                      </div>
-                      <div>
-                        <dt>State</dt>
-                        <dd>{jobDebug.job.state}</dd>
-                      </div>
-                      <div>
-                        <dt>Provider</dt>
-                        <dd>{jobDebug.job.providerId}</dd>
-                      </div>
-                      <div>
-                        <dt>Model</dt>
-                        <dd>{jobDebug.job.modelId}</dd>
-                      </div>
-                      <div>
-                        <dt>Attempts</dt>
-                        <dd>{jobDebug.attempts.length}</dd>
-                      </div>
-                    </dl>
-
-                    <section className={styles.inspectSection}>
-                      <h3>Mixed Output</h3>
-                      <pre>{mixedOutputNotice || "-"}</pre>
-                    </section>
-
-                    <section className={styles.inspectSection}>
-                      <h3>Latest Request</h3>
-                      <pre>{renderJson(latestAttempt?.providerRequest || null)}</pre>
-                    </section>
-
-                    <section className={styles.inspectSection}>
-                      <h3>Latest Response</h3>
-                      <pre>{renderJson(latestAttempt?.providerResponse || null)}</pre>
-                    </section>
-
-                    <section className={styles.inspectSection}>
-                      <h3>Latest Error</h3>
-                      <pre>
-                        {latestAttempt?.errorCode || latestAttempt?.errorMessage
-                          ? `${latestAttempt.errorCode || "ERROR"}: ${latestAttempt.errorMessage || "Unknown error"}`
-                          : "-"}
-                      </pre>
-                    </section>
-
-                    <section className={styles.inspectSection}>
-                      <h3>Attempt History</h3>
-                      <ul className={styles.attemptList}>
-                        {jobDebug.attempts.map((attempt) => (
-                          <li key={attempt.id}>
-                            <strong>{attemptLabel(attempt)}</strong>
-                            <span>{formatDate(attempt.createdAt)}</span>
-                            <span>{formatDuration(attempt.durationMs)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  </>
-                )}
-              </aside>
+              {visibleJobs.length === 0 ? <div className={styles.empty}>No jobs in this state.</div> : null}
             </div>
           )}
         </Panel>

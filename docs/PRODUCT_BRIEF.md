@@ -23,7 +23,7 @@ Ship a local-first desktop app where one person can:
 3. Land on an empty or previously saved canvas for a project.
 4. Add text notes, models, list nodes, text templates, or asset pointers.
 5. Connect nodes and run a model node.
-6. Watch queue state and inspect the exact provider call.
+6. Watch queue state in a dense run ledger and open a full execution record for exact provider diagnostics.
 7. Review outputs in grid, 2-up, or 4-up modes.
 8. Rate, flag, tag, and filter assets.
 9. Return to app home and switch projects cleanly.
