@@ -187,7 +187,13 @@ Controls:
 - flagged state
 - tags
 - sorting
-- filtering by type, provider, tag, flagged state, and rating
+- filtering by origin, type, provider, tag, flagged state, and rating
+- asset review always opens in an unfiltered state so all project assets are visible on entry, even if an older workspace snapshot stored restrictive filters
+- grid cards always show whether an asset is `Uploaded` or `Generated`
+- grid cards keep media ratio-safe with `object-fit: contain`, a stronger selected state, and a compact hover/focus utility rail for rating, flagging, and tags
+- 2-up and 4-up compare hide the filter rail and place ratio-safe assets on one shared gray review canvas with divider lines instead of padded individual cards
+- the dedicated single-asset viewer uses the same square-corner review canvas language and keeps metadata in a side pane without helper copy
+- asset-view keyboard shortcuts do not fire while focus is inside tag fields or other editable controls
 
 ## Desktop-Specific UX Changes
 - app startup lands on the app home view instead of auto-resuming directly into a project route

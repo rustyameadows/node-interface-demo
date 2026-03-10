@@ -66,4 +66,5 @@ Build a local-first Next.js app for node-based media generation and post-process
 - Decision recorded when architecture or product direction changed.
 - No stale contradictions across docs.
 - UI-impacting changes verified in-browser via Chrome MCP before handoff.
+- For UI or visual polish changes, do not claim completion until you have personally reviewed fresh screenshots or live Chrome MCP output from the changed surface. If the user is asking about layout/styling, include those screenshots in the handoff.
 - When presenting completed work to the user, always build a fresh mac app artifact with `npm run package:mac` and report the resulting `.app` and `.zip` paths in the handoff.

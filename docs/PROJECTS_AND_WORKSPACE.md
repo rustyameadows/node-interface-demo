@@ -32,11 +32,10 @@ Support multiple local projects with strict isolation and exactly one open works
 - Canvas document
 - Canvas viewport inside that document
 - Asset viewer layout
-- Asset viewer filters
 - Open-project marker
 - Provider credentials are not project data; they are app-level settings shared across projects
 
-Current selection is treated as local UI state, not durable cross-restart state.
+Current selection and asset-view filters are treated as local UI state, not durable cross-restart state. The Assets view always opens unfiltered so every project asset is visible on entry.
 
 ## Isolation Guarantees
 - Jobs are always project-scoped.

@@ -25,7 +25,7 @@ Ship a local-first desktop app where one person can:
 5. Connect nodes and run a model node.
 6. Watch queue state in a dense run ledger and open a full execution record for exact provider diagnostics.
 7. Review outputs in grid, 2-up, or 4-up modes.
-8. Rate, flag, tag, and filter assets.
+8. Rate, flag, tag, and filter uploaded and generated assets without leaving the review surface.
 9. Return to app home and switch projects cleanly.
 
 ## In Scope

@@ -62,6 +62,7 @@ Source files live under `src/styles/design-system/`.
 Rule:
 - CSS Modules and component styles consume semantic/component variables.
 - Primitive values stay in the token layer.
+- View-level overrides can deliberately force square corners for tool surfaces like asset review without rewriting the shared radius tokens globally.
 
 ## Density
 - `comfortable`

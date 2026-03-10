@@ -130,7 +130,7 @@ async function getTagNamesForAssets(assetIds: string[]) {
   }, new Map());
 }
 
-function assetMatchesFilters(
+export function assetMatchesFilters(
   asset: Asset,
   filters: AssetFilterState,
   options?: { origin?: "all" | "uploaded" | "generated"; query?: string }
@@ -140,7 +140,7 @@ function assetMatchesFilters(
   if (filters.type !== "all" && asset.type !== filters.type) return false;
   if (filters.flaggedOnly && !asset.flagged) return false;
   if (filters.ratingAtLeast > 0 && (asset.rating || 0) < filters.ratingAtLeast) return false;
-  if (filters.providerId !== "all" && asset.job?.providerId !== filters.providerId && asset.jobId) return false;
+  if (filters.providerId !== "all" && asset.job?.providerId !== filters.providerId) return false;
   if (filters.tag && !asset.tagNames.some((tag) => tag.toLowerCase() === filters.tag.toLowerCase())) return false;
   if (options?.query) {
     const query = options.query.toLowerCase();

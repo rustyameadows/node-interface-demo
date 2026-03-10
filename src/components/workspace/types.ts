@@ -308,6 +308,7 @@ export type ImportedAssetResult = {
 };
 
 export type AssetFilterState = {
+  origin: "all" | "uploaded" | "generated";
   type: "all" | "image" | "video" | "text";
   ratingAtLeast: number;
   flaggedOnly: boolean;
@@ -468,6 +469,7 @@ export const defaultCanvasDocument: CanvasDocument = {
 };
 
 export const defaultFilterState: AssetFilterState = {
+  origin: "all",
   type: "all",
   ratingAtLeast: 0,
   flaggedOnly: false,

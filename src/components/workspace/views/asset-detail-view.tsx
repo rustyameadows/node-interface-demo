@@ -48,7 +48,7 @@ export function AssetDetailView({ projectId, assetId }: Props) {
 
   return (
     <WorkspaceShell projectId={projectId} view="assets">
-      <main {...buildUiDataAttributes("app", "compact")} className={styles.page}>
+      <main data-testid="asset-detail-view" {...buildUiDataAttributes("app", "compact")} className={styles.page}>
         <Panel variant="shell" density="compact" className={styles.panel}>
           <header className={styles.header}>
             <ToolbarGroup className={styles.headerActions}>
@@ -66,10 +66,20 @@ export function AssetDetailView({ projectId, assetId }: Props) {
               ) : null}
             </ToolbarGroup>
             <SectionHeader
-              eyebrow="Asset Review"
-              title="Single Asset Viewer"
-              description="Inspect one persisted output in detail while keeping metadata and source call context close."
-              actions={asset ? <Badge variant="info">{asset.type}</Badge> : null}
+              eyebrow="Review"
+              title="Asset"
+              actions={
+                asset ? (
+                  <div className={styles.headerBadges}>
+                    <Badge className={styles.headerBadge} variant={asset.origin === "generated" ? "info" : "accent"}>
+                      {asset.origin === "generated" ? "Generated" : "Uploaded"}
+                    </Badge>
+                    <Badge className={styles.headerBadge} variant="info">
+                      {asset.type}
+                    </Badge>
+                  </div>
+                ) : null
+              }
             />
           </header>
 
@@ -88,7 +98,9 @@ export function AssetDetailView({ projectId, assetId }: Props) {
 
             <aside className={styles.metaPane}>
               <h2>Asset Info</h2>
-              {!asset ? (
+              {isLoading ? (
+                <p className={styles.metaEmpty}>Loading asset metadata...</p>
+              ) : !asset ? (
                 <p className={styles.metaEmpty}>No asset metadata available.</p>
               ) : (
                 <dl className={styles.metaList}>
@@ -107,6 +119,10 @@ export function AssetDetailView({ projectId, assetId }: Props) {
                   <div className={styles.metaRow}>
                     <dt>MIME</dt>
                     <dd>{asset.mimeType}</dd>
+                  </div>
+                  <div className={styles.metaRow}>
+                    <dt>Origin</dt>
+                    <dd>{asset.origin === "generated" ? "generated" : "uploaded"}</dd>
                   </div>
                   <div className={styles.metaRow}>
                     <dt>Provider</dt>

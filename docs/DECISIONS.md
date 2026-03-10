@@ -149,3 +149,13 @@
 - Decision: keep `/queue` as a dense run ledger and move rich job diagnostics entirely into the dedicated `/queue/$jobId` execution-record route.
 - Rationale: the list page is for scanning and selecting runs, while provider payloads, media previews, reconciliation counts, and raw JSON belong in one focused diagnostics surface instead of a side summary pane.
 - Consequence: queue rows open the full record directly, legacy `?inspectJobId=` links redirect to the detailed route, and the queue list now optimizes for high-density debugging columns instead of inline summary cards.
+
+## 2026-03-10 - Asset Review Uses Grid Curation Plus Square Inspection Stages
+- Decision: keep filters editable only in asset grid mode, and treat `2-up`, `4-up`, and single-asset viewing as cleaner square-corner inspection stages without helper copy or filter rails.
+- Rationale: the old asset library felt like a decorative gallery, buried uploaded-vs-generated state, and let keyboard shortcuts fire while typing tags, which made review slower and less trustworthy.
+- Consequence: asset cards now show uploaded/generated origin directly, rating/flag/tag controls collapse into a compact hover/focus utility rail, compare stages share one ratio-safe gray canvas with divider lines, single-asset viewing matches that language, and asset hotkeys are suppressed inside editable fields.
+
+## 2026-03-10 - Asset Review Always Loads Unfiltered
+- Decision: ignore persisted asset-view filter state when opening the Assets route and reset any stale saved filter payloads back to the default unfiltered state.
+- Rationale: restrictive saved filters like `providerId = topaz` make the library look incomplete and break the core debugging expectation that opening Assets should show every project asset immediately.
+- Consequence: asset layout still persists, but the asset grid now always boots with `all` origin/type/provider and no tag/rating/flag constraints, while stale workspace filter snapshots are cleared on first hydrate.

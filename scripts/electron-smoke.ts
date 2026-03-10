@@ -9,6 +9,7 @@ import { seedQueueDiagnosticsFixture } from "./queue-diagnostics-fixture";
 const APP_NAME = "Nodes Nodes Nodes";
 const PACKAGED_REMOTE_DEBUGGING_PORT = 9339;
 const FILTERS = {
+  origin: "all" as const,
   type: "all" as const,
   ratingAtLeast: 0,
   flaggedOnly: false,
@@ -614,6 +615,9 @@ async function main() {
   const nodeLibraryTemplateScreenshotPath = path.join(appDataRoot, "node-library-template-detail.png");
   const menuBarScreenshotPath = path.join(appDataRoot, "menu-bar-smoke.png");
   const assetsScreenshotPath = path.join(appDataRoot, "assets-smoke.png");
+  const assetsTwoUpScreenshotPath = path.join(appDataRoot, "assets-2up-smoke.png");
+  const assetsFourUpScreenshotPath = path.join(appDataRoot, "assets-4up-smoke.png");
+  const assetDetailScreenshotPath = path.join(appDataRoot, "asset-detail-smoke.png");
   const queueScreenshotPath = path.join(appDataRoot, "queue-smoke.png");
   const jobRecordScreenshotPath = path.join(appDataRoot, "job-record-smoke.png");
   const projectSettingsScreenshotPath = path.join(appDataRoot, "project-settings-smoke.png");
@@ -1909,6 +1913,30 @@ async function main() {
     });
     console.log("Queue diagnostics fixture:", JSON.stringify(queueFixture, null, 2));
 
+    await window.evaluate(async ({ activeProjectId, filters }) => {
+      const snapshot = await window.nodeInterface.getWorkspaceSnapshot(activeProjectId);
+      await window.nodeInterface.saveWorkspaceSnapshot(activeProjectId, {
+        canvasDocument: (snapshot.canvas?.canvasDocument || {
+          canvasViewport: { x: 240, y: 180, zoom: 1 },
+          generatedOutputReceiptKeys: [],
+          workflow: { nodes: [] },
+        }) as never,
+        assetViewerLayout: "grid",
+        filterState: filters,
+      });
+    }, {
+      activeProjectId: projectId,
+      filters: {
+        origin: "generated",
+        type: "all",
+        ratingAtLeast: 0,
+        flaggedOnly: false,
+        tag: "",
+        providerId: "topaz",
+        sort: "newest",
+      },
+    });
+
     await triggerWorkspaceView(runtime, window, "project.view.assets", "Assets");
     await withTimeout("assets route", window.waitForURL(projectRoutePattern(projectId, "assets")));
     await withTimeout(
@@ -1918,9 +1946,78 @@ async function main() {
         timeout: 15_000,
       })
     );
+    await withTimeout(
+      "uploaded asset remains visible despite stale persisted filters",
+      window.getByTestId(`asset-review-card-${importedAssets[0]!.id}`).waitFor({
+        state: "visible",
+        timeout: 15_000,
+      })
+    );
+    await withTimeout(
+      "fixture asset preview",
+      window.getByTestId(`asset-review-card-${queueFixture.secondaryOutputAssetId}`).waitFor({
+        state: "visible",
+        timeout: 15_000,
+      })
+    );
+    await withTimeout(
+      "gemini asset remains visible despite stale persisted filters",
+      window.getByTestId(`asset-review-card-${queueFixture.primaryOutputAssetId}`).waitFor({
+        state: "visible",
+        timeout: 15_000,
+      })
+    );
     await window.waitForTimeout(800);
     await window.screenshot({ path: assetsScreenshotPath, fullPage: true });
     console.log("Assets screenshot:", assetsScreenshotPath);
+
+    const uploadedAssetCard = window.getByTestId(`asset-review-card-${importedAssets[0]!.id}`);
+    await uploadedAssetCard.hover();
+    const tagInput = window.getByTestId(`asset-tag-input-${importedAssets[0]!.id}`);
+    await tagInput.waitFor({ state: "visible", timeout: 15_000 });
+    await tagInput.click();
+    await tagInput.fill("");
+    await tagInput.type("o");
+    assert.match(window.url(), projectRoutePattern(projectId, "assets"), "Typing o in tags should not open asset detail.");
+    await blurActiveElement(window);
+
+    await uploadedAssetCard.click();
+    await window.getByTestId(`asset-review-card-${queueFixture.secondaryOutputAssetId}`).click();
+    await window.getByRole("button", { name: "2-up" }).click();
+    await withTimeout(
+      "2-up compare stage",
+      window.getByTestId("asset-review-compare-stage").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    assert.equal(await window.getByTestId("asset-review-filter-rail").count(), 0, "2-up mode should hide the filter rail.");
+    await window.screenshot({ path: assetsTwoUpScreenshotPath, fullPage: true });
+    console.log("Assets 2-up screenshot:", assetsTwoUpScreenshotPath);
+
+    await window.getByRole("button", { name: "4-up" }).click();
+    await withTimeout(
+      "4-up compare stage",
+      window.getByTestId("asset-review-compare-stage").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    assert.equal(await window.getByTestId("asset-review-filter-rail").count(), 0, "4-up mode should hide the filter rail.");
+    await window.screenshot({ path: assetsFourUpScreenshotPath, fullPage: true });
+    console.log("Assets 4-up screenshot:", assetsFourUpScreenshotPath);
+
+    await window.getByRole("button", { name: "Grid" }).click();
+    await withTimeout(
+      "grid rail restored",
+      window.getByTestId("asset-review-filter-rail").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await uploadedAssetCard.dblclick();
+    await withTimeout("asset detail route", window.waitForURL(new RegExp(`#?/projects/${projectId}/assets/${importedAssets[0]!.id}$`)));
+    await withTimeout(
+      "asset detail view",
+      window.getByTestId("asset-detail-view").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await withTimeout(
+      "asset detail metadata",
+      window.getByText("Filename").waitFor({ state: "visible", timeout: 15_000 })
+    );
+    await window.screenshot({ path: assetDetailScreenshotPath, fullPage: true });
+    console.log("Asset detail screenshot:", assetDetailScreenshotPath);
 
     await triggerWorkspaceView(runtime, window, "project.view.queue", "Queue");
     await withTimeout("queue route", window.waitForURL(projectRoutePattern(projectId, "queue")));
@@ -2129,6 +2226,9 @@ async function main() {
           listFullScreenshotPath,
           resizedAssetScreenshotPath,
           assetsScreenshotPath,
+          assetsTwoUpScreenshotPath,
+          assetsFourUpScreenshotPath,
+          assetDetailScreenshotPath,
           queueScreenshotPath,
           projectSettingsScreenshotPath,
           appSettingsScreenshotPath,

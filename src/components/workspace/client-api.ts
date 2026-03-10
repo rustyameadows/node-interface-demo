@@ -178,6 +178,7 @@ export async function getAssetPointers(
   return getAssets(
     projectId,
     {
+      origin: "all",
       type: "all",
       ratingAtLeast: 0,
       flaggedOnly: false,

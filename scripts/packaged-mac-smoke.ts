@@ -12,6 +12,7 @@ const execFile = promisify(execFileCallback);
 const APP_NAME = "Nodes Nodes Nodes";
 const APP_ID = "com.rustymeadows.nodesnodenodes";
 const FILTERS = {
+  origin: "all" as const,
   type: "all" as const,
   ratingAtLeast: 0,
   flaggedOnly: false,
