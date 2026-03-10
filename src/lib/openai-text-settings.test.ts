@@ -231,6 +231,7 @@ test("builds smart output requests without oneOf in the JSON schema", () => {
               type: "object",
               additionalProperties: false,
               properties: {
+                id: { type: "string" },
                 kind: {
                   type: "string",
                   enum: ["text-note", "list", "text-template"],
@@ -250,11 +251,27 @@ test("builds smart output requests without oneOf in the JSON schema", () => {
                 },
                 templateText: { type: ["string", "null"] },
               },
-              required: ["kind", "label", "text", "columns", "rows", "templateText"],
+              required: ["id", "kind", "label", "text", "columns", "rows", "templateText"],
+            },
+          },
+          connections: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                kind: {
+                  type: "string",
+                  enum: ["input", "prompt"],
+                },
+                sourceDescriptorId: { type: "string" },
+                targetDescriptorId: { type: "string" },
+              },
+              required: ["kind", "sourceDescriptorId", "targetDescriptorId"],
             },
           },
         },
-        required: ["nodes"],
+        required: ["nodes", "connections"],
       },
       strict: true,
     },

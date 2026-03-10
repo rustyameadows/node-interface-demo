@@ -54,6 +54,7 @@ test("parses list output into a generated list descriptor", () => {
   assert.equal(parsed.warning, null);
   assert.equal(parsed.generatedNodeDescriptors.length, 1);
   assert.deepEqual(parsed.generatedNodeDescriptors[0], {
+    descriptorId: "generated-0-0",
     kind: "list",
     label: "Southwest Cities",
     columns: ["City", "State"],
@@ -65,7 +66,9 @@ test("parses list output into a generated list descriptor", () => {
     sourceModelNodeId: "model-1",
     outputIndex: 0,
     descriptorIndex: 0,
+    runOrigin: "canvas-node",
   });
+  assert.deepEqual(parsed.generatedConnections, []);
 });
 
 test("parses smart output into multiple detached descriptor candidates", () => {
@@ -74,20 +77,30 @@ test("parses smart output into multiple detached descriptor candidates", () => {
     content: JSON.stringify({
       nodes: [
         {
+          id: "brief",
           kind: "text-note",
           label: "Brief",
           text: "Ten southwest cities.",
         },
         {
+          id: "cities",
           kind: "list",
           label: "Cities",
           columns: ["City"],
           rows: [["Phoenix"], ["Tucson"]],
         },
         {
+          id: "template",
           kind: "text-template",
           label: "Prompt Template",
           templateText: "Illustrate [city] at sunset.",
+        },
+      ],
+      connections: [
+        {
+          kind: "input",
+          sourceDescriptorId: "cities",
+          targetDescriptorId: "template",
         },
       ],
     }),
@@ -100,6 +113,10 @@ test("parses smart output into multiple detached descriptor candidates", () => {
   assert.deepEqual(
     parsed.generatedNodeDescriptors.map((descriptor) => descriptor.kind),
     ["text-note", "list", "text-template"]
+  );
+  assert.deepEqual(
+    parsed.generatedNodeDescriptors.map((descriptor) => descriptor.descriptorId),
+    ["brief", "cities", "template"]
   );
   assert.deepEqual(
     parsed.generatedNodeDescriptors.map((descriptor) => descriptor.descriptorIndex),
@@ -117,6 +134,13 @@ test("parses smart output into multiple detached descriptor candidates", () => {
       : null,
     "Illustrate [[city]] at sunset."
   );
+  assert.deepEqual(parsed.generatedConnections, [
+    {
+      kind: "input",
+      sourceDescriptorId: "cities",
+      targetDescriptorId: "template",
+    },
+  ]);
 });
 
 test("allows smart output templates to repeat placeholders in any order", () => {
@@ -125,12 +149,14 @@ test("allows smart output templates to repeat placeholders in any order", () => 
     content: JSON.stringify({
       nodes: [
         {
+          id: "animals",
           kind: "list",
           label: "Animals",
           columns: ["Species", "Pose"],
           rows: [["Otter", "sleeping"]],
         },
         {
+          id: "template",
           kind: "text-template",
           label: "Prompt Template",
           templateText: "Show [Pose] behavior for a [Species]. Then show the [Species] again.",
@@ -149,6 +175,50 @@ test("allows smart output templates to repeat placeholders in any order", () => 
       : null,
     "Show [[Pose]] behavior for a [[Species]]. Then show the [[Species]] again."
   );
+  assert.deepEqual(parsed.generatedConnections, []);
+});
+
+test("filters invalid smart output connections instead of failing the whole response", () => {
+  const parsed = parseStructuredTextOutput({
+    textOutputTarget: "smart",
+    content: JSON.stringify({
+      nodes: [
+        {
+          id: "cities",
+          kind: "list",
+          label: "Cities",
+          columns: ["City"],
+          rows: [["Phoenix"]],
+        },
+        {
+          id: "template",
+          kind: "text-template",
+          label: "Template",
+          templateText: "Draw [City].",
+        },
+      ],
+      connections: [
+        {
+          kind: "input",
+          sourceDescriptorId: "cities",
+          targetDescriptorId: "template",
+        },
+        {
+          kind: "input",
+          sourceDescriptorId: "missing",
+          targetDescriptorId: "template",
+        },
+      ],
+    }),
+    sourceJobId: "job-1",
+    sourceModelNodeId: null,
+    runOrigin: "copilot",
+  });
+
+  assert.equal(parsed.generatedNodeDescriptors.length, 2);
+  assert.equal(parsed.generatedConnections.length, 1);
+  assert.equal(parsed.generatedNodeDescriptors[0]?.runOrigin, "copilot");
+  assert.match(parsed.warning || "", /Ignored 1 invalid generated connection/);
 });
 
 test("builds smart-output instructions from the node catalog summaries", () => {
@@ -158,6 +228,7 @@ test("builds smart-output instructions from the node catalog summaries", () => {
   assert.match(contract.instructions, /text-note: Use for plain written content/i);
   assert.match(contract.instructions, /list: Use for structured repeated data/i);
   assert.match(contract.instructions, /text-template: Use for reusable prompt or writing patterns/i);
+  assert.match(contract.instructions, /connections array/i);
 });
 
 test("falls back to a generated text note when structured parsing fails", () => {
@@ -170,12 +241,14 @@ test("falls back to a generated text note when structured parsing fails", () => 
 
   assert.equal(parsed.generatedNodeDescriptors.length, 1);
   assert.equal(parsed.generatedNodeDescriptors[0]?.kind, "text-note");
+  assert.equal(parsed.generatedNodeDescriptors[0]?.runOrigin, "canvas-node");
   assert.match(parsed.warning || "", /Structured output parsing failed/);
 });
 
 test("materializes smart output list nodes without upstream connections", () => {
   const modelNode = createModelNode();
   const descriptor: GeneratedNodeDescriptor = {
+    descriptorId: "cities",
     kind: "list",
     label: "Cities",
     columns: ["City"],
@@ -184,6 +257,7 @@ test("materializes smart output list nodes without upstream connections", () => 
     sourceModelNodeId: modelNode.id,
     outputIndex: 0,
     descriptorIndex: 1,
+    runOrigin: "canvas-node",
   };
 
   const node = createGeneratedModelNode({
@@ -252,6 +326,7 @@ test("preserves edited content after a generated node is hydrated once", () => {
 
 test("preserves user graph connections when a generated node rehydrates", () => {
   const descriptor: GeneratedNodeDescriptor = {
+    descriptorId: "template",
     kind: "text-template",
     label: "Prompt Template",
     templateText: "Draw [[Animal]].",
@@ -259,6 +334,7 @@ test("preserves user graph connections when a generated node rehydrates", () => 
     sourceModelNodeId: "model-1",
     outputIndex: 0,
     descriptorIndex: 1,
+    runOrigin: "canvas-node",
   };
 
   const connectedNode = createGeneratedModelNode({

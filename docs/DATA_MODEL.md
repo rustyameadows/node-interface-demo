@@ -185,6 +185,11 @@ Worker behavior:
 - retries by moving it back to `queued` with a future `available_at`
 - marks it terminal on final success or failure
 
+`jobs.node_run_payload` now includes:
+- `runOrigin: "canvas-node" | "copilot"`
+- `runOrigin = "canvas-node"` for normal visible node runs
+- `runOrigin = "copilot"` for the session-only canvas copilot surface, which has no persisted source model node
+
 ## Filesystem References
 - `assets.storage_ref`
   - relative path under the app-data assets root
@@ -198,11 +203,16 @@ The renderer never sees absolute paths; those refs are resolved only in main/wor
 - Renderer-facing jobs expose:
   - `latestTextOutputs`
   - `generatedNodeDescriptors`
+  - `generatedConnections`
 - Generated node descriptors can materialize:
   - `text-note`
   - `list`
   - `text-template`
-- `Smart Output` may produce multiple descriptors from one text response, but they stay unconnected in this pass.
+- Each generated descriptor includes:
+  - `descriptorId`
+  - `runOrigin`
+  - `sourceModelNodeId`, which may be `null` for copilot-origin runs
+- `Smart Output` may produce multiple descriptors from one text response plus a `generatedConnections` array that references those descriptors by `descriptorId`.
 - Parse failure falls back to one generated text-note descriptor instead of failing the job.
 - Those outputs do not create `assets` rows.
 - Queue debug data stores both the returned text and the parsed structured-output metadata inline in `job_attempts.provider_response`.

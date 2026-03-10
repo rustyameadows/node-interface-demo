@@ -30,6 +30,7 @@ function asNodePayload(value: unknown): NodePayload {
     executionMode: raw.executionMode === "generate" ? "generate" : "edit",
     outputCount:
       typeof raw.outputCount === "number" && Number.isInteger(raw.outputCount) ? Math.max(1, raw.outputCount) : 1,
+    runOrigin: raw.runOrigin === "copilot" ? "copilot" : "canvas-node",
     promptSourceNodeId: raw.promptSourceNodeId ? String(raw.promptSourceNodeId) : null,
     upstreamNodeIds: Array.isArray(raw.upstreamNodeIds) ? raw.upstreamNodeIds.map((id) => String(id)) : [],
     upstreamAssetIds: Array.isArray(raw.upstreamAssetIds) ? raw.upstreamAssetIds.map((id) => String(id)) : [],
@@ -256,8 +257,9 @@ export async function processJobById(jobId: string) {
               textOutputTarget,
               content: textOutputs[0]!.content,
               sourceJobId: jobId,
-              sourceModelNodeId: payload.nodeId,
+              sourceModelNodeId: payload.runOrigin === "copilot" ? null : payload.nodeId,
               outputIndex: textOutputs[0]!.outputIndex,
+              runOrigin: payload.runOrigin,
             })
           : {
               generatedNodeDescriptors: createGeneratedTextNoteDescriptorsFromRawText({
@@ -266,8 +268,10 @@ export async function processJobById(jobId: string) {
                   outputIndex: output.outputIndex,
                 })),
                 sourceJobId: jobId,
-                sourceModelNodeId: payload.nodeId,
+                sourceModelNodeId: payload.runOrigin === "copilot" ? null : payload.nodeId,
+                runOrigin: payload.runOrigin,
               }),
+              generatedConnections: [],
               warning: null,
             };
 
@@ -299,6 +303,7 @@ export async function processJobById(jobId: string) {
             ? {
                 textOutputTarget,
                 generatedNodeDescriptors: generatedNodeDescriptorResult.generatedNodeDescriptors,
+                generatedConnections: generatedNodeDescriptorResult.generatedConnections,
                 generatedNodeDescriptorWarning: generatedNodeDescriptorResult.warning,
               }
             : {}),

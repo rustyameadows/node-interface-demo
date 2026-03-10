@@ -129,6 +129,7 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
   - `Add Model Node` expands into provider-grouped model variants from the provider catalog
   - native macOS `Canvas` add menus use the same catalog/provider source
 - Canvas overlays use the `canvas-overlay` surface, while node cards use the dedicated canvas-node system.
+- `CanvasView` also mounts a renderer-local `CanvasCopilotWidget` in the overlay layer. It is not persisted in the canvas document and is not represented by a hidden model node.
 - `CanvasView` and `NodePlaygroundCanvas` derive node presentation from persisted node-local metadata (`displayMode`, `size`) plus transient active-node state through `resolveCanvasNodePresentation`.
 - `CanvasNodeContent` in `src/components/canvas-nodes/` renders shared rails plus mode-aware node bodies for model, text note, list, template, and asset nodes.
 - `InfiniteCanvas` renders live drag previews, resize handles, phantom previews, quick mode transitions, and the edge-mounted run launcher, but committed node movement is written back once per drag through `onCommitNodePositions`.
@@ -176,6 +177,12 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 7. Worker persists final outputs as assets or text-response metadata with parsed generated-node descriptors.
 8. Worker records attempt metadata, marks terminal job state, and emits `jobs.changed` plus `assets.changed` when needed.
 
+Copilot run path:
+- `CanvasCopilotWidget` resolves a text-capable provider model from the same searchable model selector used elsewhere.
+- The widget submits a normal `createJob(...)` request with `nodeRunPayload.runOrigin = "copilot"` instead of synthesizing a hidden canvas model node.
+- The worker parses the response through the same structured text-output pipeline used by text model nodes.
+- `CanvasView` hydrates generated nodes once, inserts them near the current viewport center, applies any valid generated connections, and appends transcript status rows.
+
 ## Structured Text Output Flow
 - Runnable OpenAI and Gemini text models expose `textOutputTarget` in model settings.
 - `note` hydrates one generated text note.
@@ -183,10 +190,13 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 - OpenAI still supports its extra provider-specific controls (`verbosity`, `reasoningEffort`, optional note output formats).
 - Gemini deliberately exposes only the shared v1 controls: `textOutputTarget` and `maxOutputTokens`.
 - Worker-side parsing validates those structured responses into generated-node descriptors before they reach the renderer.
+- Generated descriptors now include stable response-local `descriptorId` values plus a `runOrigin` of `canvas-node` or `copilot`.
+- `smart` may also return generated connection descriptors keyed by those descriptor IDs.
 - `CanvasView` inserts model-spawned notes, lists, and templates once from `job.generatedNodeDescriptors` instead of parsing raw provider text in the renderer.
+- `CanvasView` applies valid generated connections after node insertion and drops invalid, duplicate, or out-of-scope links with a warning.
 - Pending generated-output placeholders/previews may exist while a job is unresolved, but once the final child nodes are inserted the polling loop no longer mutates them.
 - The canvas document stores `generatedOutputReceiptKeys` so completed outputs are materialized once, deleted generated nodes do not return, and reruns append fresh children instead of replacing older ones.
-- `smart` spawns multiple unconnected nodes in this pass; explicit `list` and `template` targets may still show deterministic placeholders while queued/running.
+- `smart` can now spawn multiple nodes plus optional valid wiring in one pass; explicit `list` and `template` targets may still show deterministic placeholders while queued/running.
 - The smart-output prompt builder derives allowed node kinds and payload summaries from the node catalog instead of hardcoded node descriptions.
 
 ## Queue Recovery

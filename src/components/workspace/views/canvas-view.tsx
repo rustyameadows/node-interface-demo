@@ -11,6 +11,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { useRouter } from "@/renderer/navigation";
 import { InfiniteCanvas } from "@/components/infinite-canvas";
 import { CanvasNodeContent, type ActiveCanvasNodeEditorState } from "@/components/canvas-nodes";
+import { CanvasCopilotWidget } from "@/components/workspace/views/canvas-copilot-widget";
 import type {
   CanvasConnection,
   CanvasInsertRequest,
@@ -30,9 +31,18 @@ import {
   buildGeneratedNodePosition,
   createGeneratedModelNode,
   getGeneratedDescriptorDefaultLabel,
+  type GeneratedConnectionDescriptor,
   type GeneratedNodeDescriptor,
   type GeneratedNodeKind,
 } from "@/lib/generated-text-output";
+import {
+  applyCanvasCopilotSuccessSummaries,
+  buildCanvasCopilotRunPreview,
+  getCanvasCopilotModelVariants,
+  getDefaultCanvasCopilotModelVariant,
+  type CanvasCopilotHydrationSummary,
+  type CanvasCopilotMessage,
+} from "@/lib/canvas-copilot";
 import {
   formatProviderAccessMessage,
   formatProviderRequirementMessage,
@@ -123,6 +133,9 @@ const generatedNodeColumnOffsetX = 40;
 const generatedNodeOffsetY = 38;
 const generatedTextNodeOffsetX = 320;
 const generatedTextNodeOffsetY = 172;
+const copilotGeneratedNodeOffsetX = 252;
+const copilotGeneratedNodeOffsetY = 152;
+const copilotGeneratedNodeColumnOffsetX = 48;
 const CANVAS_HISTORY_LIMIT = 100;
 const COALESCED_HISTORY_DELAY_MS = 450;
 const NODE_FOCUS_ZOOM_PADDING_X = 96;
@@ -269,6 +282,137 @@ function buildAssetRefsFromNodes(upstreamNodeIds: string[], nodes: WorkflowNode[
     .filter((value): value is string => Boolean(value));
 
   return [...new Set(refs)];
+}
+
+function applyCanvasNodeConnection(
+  nodes: WorkflowNode[],
+  sourceNodeId: string,
+  targetNodeId: string,
+  expectedKind?: GeneratedConnectionDescriptor["kind"]
+) {
+  const sourceNode = nodes.find((node) => node.id === sourceNodeId) || null;
+  const targetNode = nodes.find((node) => node.id === targetNodeId) || null;
+  if (!sourceNode || !targetNode || !canConnectCanvasNodes(sourceNode, targetNode)) {
+    return {
+      nodes,
+      applied: false,
+    };
+  }
+
+  const inferredKind: GeneratedConnectionDescriptor["kind"] = sourceNode.kind === "text-note" ? "prompt" : "input";
+  if (expectedKind && expectedKind !== inferredKind) {
+    return {
+      nodes,
+      applied: false,
+    };
+  }
+
+  if (targetNode.kind === "text-note") {
+    if (
+      targetNode.upstreamNodeIds.length === 1 &&
+      targetNode.upstreamNodeIds[0] === sourceNodeId &&
+      targetNode.upstreamAssetIds.length === 1 &&
+      targetNode.upstreamAssetIds[0] === `node:${sourceNodeId}`
+    ) {
+      return {
+        nodes,
+        applied: false,
+      };
+    }
+
+    return {
+      nodes: nodes.map((node) =>
+        node.id === targetNodeId
+          ? {
+              ...node,
+              upstreamNodeIds: [sourceNodeId],
+              upstreamAssetIds: [`node:${sourceNodeId}`],
+            }
+          : node
+      ),
+      applied: true,
+    };
+  }
+
+  if (sourceNode.kind === "text-note") {
+    if (targetNode.promptSourceNodeId === sourceNodeId) {
+      return {
+        nodes,
+        applied: false,
+      };
+    }
+
+    return {
+      nodes: nodes.map((node) =>
+        node.id === targetNodeId
+          ? {
+              ...node,
+              promptSourceNodeId: sourceNodeId,
+            }
+          : node
+      ),
+      applied: true,
+    };
+  }
+
+  if (sourceNode.kind === "list") {
+    const upstreamAssetIds = buildAssetRefsFromNodes([sourceNodeId], nodes);
+    if (
+      targetNode.upstreamNodeIds.length === 1 &&
+      targetNode.upstreamNodeIds[0] === sourceNodeId &&
+      JSON.stringify(targetNode.upstreamAssetIds) === JSON.stringify(upstreamAssetIds)
+    ) {
+      return {
+        nodes,
+        applied: false,
+      };
+    }
+
+    return {
+      nodes: nodes.map((node) =>
+        node.id === targetNodeId
+          ? {
+              ...node,
+              upstreamNodeIds: [sourceNodeId],
+              upstreamAssetIds,
+            }
+          : node
+      ),
+      applied: true,
+    };
+  }
+
+  const upstreamNodeIds = [...new Set([...targetNode.upstreamNodeIds, sourceNodeId])];
+  const upstreamAssetIds = buildAssetRefsFromNodes(upstreamNodeIds, nodes);
+  if (
+    JSON.stringify(targetNode.upstreamNodeIds) === JSON.stringify(upstreamNodeIds) &&
+    JSON.stringify(targetNode.upstreamAssetIds) === JSON.stringify(upstreamAssetIds)
+  ) {
+    return {
+      nodes,
+      applied: false,
+    };
+  }
+
+  return {
+    nodes: nodes.map((node) =>
+      node.id === targetNodeId
+        ? {
+            ...node,
+            upstreamNodeIds,
+            upstreamAssetIds,
+          }
+        : node
+    ),
+    applied: true,
+  };
+}
+
+function buildCopilotGeneratedNodePosition(anchor: { x: number; y: number }, visualIndex: number) {
+  return {
+    x: Math.round(anchor.x + Math.floor(visualIndex / 3) * copilotGeneratedNodeOffsetX + Math.floor(visualIndex / 6) * copilotGeneratedNodeColumnOffsetX),
+    y: Math.round(anchor.y + (visualIndex % 3) * copilotGeneratedNodeOffsetY),
+  };
 }
 
 function fallbackProviderModel(providers: ProviderModel[]): ProviderModel {
@@ -521,6 +665,7 @@ function createGeneratedModelPlaceholderNode(
   const descriptor: GeneratedNodeDescriptor =
     descriptorKind === "list"
       ? {
+          descriptorId: "generated-0-0",
           kind: "list",
           label: getGeneratedDescriptorDefaultLabel("list", visualIndex),
           columns: [],
@@ -529,9 +674,11 @@ function createGeneratedModelPlaceholderNode(
           sourceModelNodeId: sourceNodeId,
           outputIndex: 0,
           descriptorIndex: 0,
+          runOrigin: "canvas-node",
         }
       : descriptorKind === "text-template"
         ? {
+            descriptorId: "generated-0-0",
             kind: "text-template",
             label: getGeneratedDescriptorDefaultLabel("text-template", visualIndex),
             templateText: "",
@@ -539,8 +686,10 @@ function createGeneratedModelPlaceholderNode(
             sourceModelNodeId: sourceNodeId,
             outputIndex: 0,
             descriptorIndex: 0,
+            runOrigin: "canvas-node",
           }
       : {
+            descriptorId: "generated-0-0",
             kind: "text-note",
             label:
               target === "smart"
@@ -551,6 +700,7 @@ function createGeneratedModelPlaceholderNode(
             sourceModelNodeId: sourceNodeId,
             outputIndex: 0,
             descriptorIndex: 0,
+            runOrigin: "canvas-node",
           };
 
   return createGeneratedModelNode({
@@ -621,6 +771,11 @@ export function CanvasView({ projectId }: Props) {
   const [selectedConnection, setSelectedConnection] = useState<CanvasConnection | null>(null);
   const [activeFullNodeId, setActiveFullNodeId] = useState<string | null>(null);
   const [pendingViewportFocusNodeId, setPendingViewportFocusNodeId] = useState<string | null>(null);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotDraft, setCopilotDraft] = useState("");
+  const [copilotMessages, setCopilotMessages] = useState<CanvasCopilotMessage[]>([]);
+  const [copilotModelVariantId, setCopilotModelVariantId] = useState<string | null>(null);
+  const [copilotActiveJobId, setCopilotActiveJobId] = useState<string | null>(null);
   const [historyStacks, setHistoryStacks] = useState<CanvasHistoryStacks>({
     undo: [],
     redo: [],
@@ -920,6 +1075,11 @@ export function CanvasView({ projectId }: Props) {
   const modelCatalogVariants = useMemo(() => getModelCatalogVariants(providers), [providers]);
   const groupedModelCatalogVariants = useMemo(() => groupModelCatalogVariants(providers), [providers]);
   const defaultModelCatalogVariant = useMemo(() => getDefaultModelCatalogVariant(providers), [providers]);
+  const copilotModelVariants = useMemo(() => getCanvasCopilotModelVariants(modelCatalogVariants), [modelCatalogVariants]);
+  const defaultCopilotModelVariant = useMemo(
+    () => getDefaultCanvasCopilotModelVariant(copilotModelVariants),
+    [copilotModelVariants]
+  );
 
   const providerModelDisplayNames = useMemo(() => {
     return providers.reduce<Record<string, string>>((acc, model) => {
@@ -927,6 +1087,19 @@ export function CanvasView({ projectId }: Props) {
       return acc;
     }, {});
   }, [providers]);
+
+  useEffect(() => {
+    if (copilotModelVariants.length === 0) {
+      setCopilotModelVariantId(null);
+      return;
+    }
+
+    if (copilotModelVariantId && copilotModelVariants.some((variant) => variant.id === copilotModelVariantId)) {
+      return;
+    }
+
+    setCopilotModelVariantId(defaultCopilotModelVariant?.id || copilotModelVariants[0]?.id || null);
+  }, [copilotModelVariantId, copilotModelVariants, defaultCopilotModelVariant]);
 
   const nodesById = useMemo(() => {
     return canvasDoc.workflow.nodes.reduce<Record<string, WorkflowNode>>((acc, node) => {
@@ -1457,6 +1630,7 @@ export function CanvasView({ projectId }: Props) {
           outputType: node.outputType,
           executionMode,
           outputCount,
+          runOrigin: "canvas-node" as const,
           promptSourceNodeId: node.promptSourceNodeId,
           upstreamNodeIds: node.upstreamNodeIds,
           upstreamAssetIds: inputImageAssetIds,
@@ -1570,6 +1744,18 @@ export function CanvasView({ projectId }: Props) {
     return buildNodeRunRequest(selectedNode);
   }, [buildNodeRunRequest, selectedNode, selectedNodeIsModel]);
 
+  const copilotRunPreview = useMemo(
+    () =>
+      buildCanvasCopilotRunPreview({
+        providers,
+        variants: modelCatalogVariants,
+        selectedVariantId: copilotModelVariantId,
+        prompt: copilotDraft,
+        requestNodeId: "canvas-copilot-preview",
+      }),
+    [copilotDraft, copilotModelVariantId, modelCatalogVariants, providers]
+  );
+
   useEffect(() => {
     if (!activeNodeId) {
       setActiveFullNodeId(null);
@@ -1590,6 +1776,10 @@ export function CanvasView({ projectId }: Props) {
     setIsLoading(true);
     hasLoadedCanvasRef.current = false;
     pendingCanvasSaveRef.current = null;
+    setCopilotOpen(false);
+    setCopilotDraft("");
+    setCopilotMessages([]);
+    setCopilotActiveJobId(null);
 
     Promise.all([getProviders(), fetchCanvas(), fetchJobs(), openProject(projectId)])
       .then(([nextProviders]) => {
@@ -1705,6 +1895,10 @@ export function CanvasView({ projectId }: Props) {
         continue;
       }
 
+      if (!generatedSettings.sourceModelNodeId) {
+        continue;
+      }
+
       existingGeneratedTextCountByModelNodeId.set(
         generatedSettings.sourceModelNodeId,
         (existingGeneratedTextCountByModelNodeId.get(generatedSettings.sourceModelNodeId) || 0) + 1
@@ -1713,19 +1907,46 @@ export function CanvasView({ projectId }: Props) {
 
     const insertedGeneratedImageCountByModelNodeId = new Map<string, number>();
     const insertedGeneratedTextCountByModelNodeId = new Map<string, number>();
+    const copilotJobSummaries = new Map<string, CanvasCopilotHydrationSummary>();
+    let copilotAnchorIndex = 0;
 
-    for (const job of jobs) {
-      const sourceNodeId = job.nodeRunPayload?.nodeId;
-      if (!sourceNodeId) {
-        continue;
+    const getCopilotInsertAnchor = () => {
+      const offsetIndex = copilotAnchorIndex++;
+      const rect = canvasSurfaceRef.current?.getBoundingClientRect();
+      if (!rect || rect.width === 0 || rect.height === 0) {
+        const fallbackPosition = nextCanvasNodePosition(workingNodes.length);
+        return {
+          x: fallbackPosition.x + (offsetIndex % 2) * 56,
+          y: fallbackPosition.y + (Math.floor(offsetIndex / 2) % 2) * 40,
+        };
       }
 
-      const modelNode = workingNodes.find((node) => node.id === sourceNodeId && node.kind === "model");
-      if (!modelNode) {
+      return {
+        x: Math.round((rect.width / 2 - prev.canvasViewport.x) / prev.canvasViewport.zoom + (offsetIndex % 2) * 56),
+        y: Math.round(
+          (rect.height / 2 - prev.canvasViewport.y) / prev.canvasViewport.zoom + (Math.floor(offsetIndex / 2) % 2) * 40
+        ),
+      };
+    };
+
+    for (const job of jobs) {
+      const runOrigin = job.nodeRunPayload?.runOrigin === "copilot" ? "copilot" : "canvas-node";
+      const isCopilotJob = runOrigin === "copilot";
+      const sourceNodeId = job.nodeRunPayload?.nodeId;
+      const modelNode =
+        !isCopilotJob && sourceNodeId
+          ? workingNodes.find((node) => node.id === sourceNodeId && node.kind === "model") || null
+          : null;
+
+      if (!isCopilotJob && (!sourceNodeId || !modelNode)) {
         continue;
       }
 
       if (job.nodeRunPayload?.outputType === "image") {
+        if (isCopilotJob || !sourceNodeId || !modelNode) {
+          continue;
+        }
+
         const expectedOutputCount = getExpectedGeneratedOutputCount(job);
         if (expectedOutputCount <= 0) {
           continue;
@@ -1835,8 +2056,14 @@ export function CanvasView({ projectId }: Props) {
 
       const textOutputTarget = getTextOutputTargetFromSettings(job.nodeRunPayload?.settings);
       const generatedNodeDescriptors = job.generatedNodeDescriptors || [];
+
       if (job.state === "succeeded") {
         const descriptorsToSpawn = textOutputTarget === "smart" ? generatedNodeDescriptors : generatedNodeDescriptors.slice(0, 1);
+        const descriptorNodeIds = new Map<string, string>();
+        const createdNodeIds: string[] = [];
+        let connectedCount = 0;
+        let skippedConnectionCount = 0;
+        const copilotAnchor = isCopilotJob ? getCopilotInsertAnchor() : null;
 
         for (const descriptor of descriptorsToSpawn) {
           const receiptKey = getGeneratedOutputReceiptKey(descriptor);
@@ -1854,50 +2081,101 @@ export function CanvasView({ projectId }: Props) {
             continue;
           }
 
-          const visualIndex =
-            (existingGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) +
-            (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0);
+          const visualIndex = isCopilotJob
+            ? descriptor.descriptorIndex
+            : (existingGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0) +
+              (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0);
           const finalNode = createGeneratedModelNode({
             id: uid(),
-            providerId: modelNode.providerId,
-            modelId: modelNode.modelId,
-            modelNodeId: sourceNodeId,
+            providerId: (isCopilotJob ? job.providerId : modelNode!.providerId) as WorkflowNode["providerId"],
+            modelId: isCopilotJob ? job.modelId : modelNode!.modelId,
+            modelNodeId: isCopilotJob ? null : sourceNodeId!,
             label: descriptor.label || getGeneratedDescriptorDefaultLabel(descriptor.kind, visualIndex),
             position: pendingNode
               ? {
                   x: pendingNode.x,
                   y: pendingNode.y,
                 }
-              : buildGeneratedNodePosition({
-                  modelNode,
-                  visualIndex,
-                  baseOffsetX: generatedTextNodeOffsetX,
-                  offsetY: generatedTextNodeOffsetY,
-                }),
+              : isCopilotJob && copilotAnchor
+                ? buildCopilotGeneratedNodePosition(copilotAnchor, descriptor.descriptorIndex)
+                : buildGeneratedNodePosition({
+                    modelNode: modelNode!,
+                    visualIndex,
+                    baseOffsetX: generatedTextNodeOffsetX,
+                    offsetY: generatedTextNodeOffsetY,
+                  }),
             processingState: null,
             descriptor,
-            connectToSourceModel: textOutputTarget !== "smart",
+            connectToSourceModel: textOutputTarget !== "smart" && !isCopilotJob,
           });
 
           if (pendingNode) {
             filterWorkingNodes((node) => node.id !== pendingNode.id);
             replaceSelectedNodeId(pendingNode.id, finalNode.id);
-          } else {
+          } else if (!isCopilotJob) {
             insertedGeneratedTextCountByModelNodeId.set(
-              sourceNodeId,
-              (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) + 1
+              sourceNodeId!,
+              (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0) + 1
             );
           }
 
           upsertWorkingNode(finalNode);
+          descriptorNodeIds.set(descriptor.descriptorId, finalNode.id);
+          createdNodeIds.push(finalNode.id);
           nextGeneratedOutputReceiptKeys.add(receiptKey);
           didReceiptChange = true;
+        }
+
+        if (textOutputTarget === "smart" && (job.generatedConnections || []).length > 0) {
+          for (const connection of job.generatedConnections || []) {
+            const sourceGeneratedNodeId = descriptorNodeIds.get(connection.sourceDescriptorId);
+            const targetGeneratedNodeId = descriptorNodeIds.get(connection.targetDescriptorId);
+            if (!sourceGeneratedNodeId || !targetGeneratedNodeId) {
+              skippedConnectionCount += 1;
+              continue;
+            }
+
+            const result = applyCanvasNodeConnection(
+              workingNodes,
+              sourceGeneratedNodeId,
+              targetGeneratedNodeId,
+              connection.kind
+            );
+            if (!result.applied) {
+              skippedConnectionCount += 1;
+              continue;
+            }
+
+            workingNodes = result.nodes;
+            didChange = true;
+            connectedCount += 1;
+          }
+        }
+
+        if (isCopilotJob) {
+          copilotJobSummaries.set(job.id, {
+            addedNodeCount: createdNodeIds.length,
+            connectedCount,
+            skippedConnectionCount,
+          });
+          if (createdNodeIds.length > 0) {
+            nextSelectedNodeIds = createdNodeIds;
+          }
         }
         continue;
       }
 
       if (job.state === "canceled") {
-        filterWorkingNodes((node) => getNodeSourceJobId(node) !== job.id || isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys));
+        if (isCopilotJob) {
+          continue;
+        }
+        filterWorkingNodes(
+          (node) => getNodeSourceJobId(node) !== job.id || isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys)
+        );
+        continue;
+      }
+
+      if (isCopilotJob) {
         continue;
       }
 
@@ -1933,19 +2211,19 @@ export function CanvasView({ projectId }: Props) {
 
       if (!pendingNode) {
         const visualIndex =
-          (existingGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) +
-          (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0);
+          (existingGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0) +
+          (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0);
         const outputNode = createGeneratedModelPlaceholderNode(
-          modelNode,
+          modelNode!,
           job,
-          sourceNodeId,
+          sourceNodeId!,
           placeholderTarget,
           visualIndex
         );
         upsertWorkingNode(outputNode);
         insertedGeneratedTextCountByModelNodeId.set(
-          sourceNodeId,
-          (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId) || 0) + 1
+          sourceNodeId!,
+          (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0) + 1
         );
         continue;
       }
@@ -1959,6 +2237,14 @@ export function CanvasView({ projectId }: Props) {
           ...pendingNode,
           processingState: nextProcessingState,
         });
+      }
+    }
+
+    if (copilotJobSummaries.size > 0) {
+      setCopilotMessages((prev) => applyCanvasCopilotSuccessSummaries(prev, copilotJobSummaries));
+
+      if (copilotActiveJobId && copilotJobSummaries.has(copilotActiveJobId)) {
+        setCopilotActiveJobId(null);
       }
     }
 
@@ -1979,7 +2265,7 @@ export function CanvasView({ projectId }: Props) {
     applyCanvasDocWithoutHistory(nextDoc, {
       selectedNodeIds: nextSelectedNodeIds.filter((nodeId) => nextDoc.workflow.nodes.some((node) => node.id === nodeId)),
     });
-  }, [applyCanvasDocWithoutHistory, jobs]);
+  }, [applyCanvasDocWithoutHistory, copilotActiveJobId, jobs]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -3224,91 +3510,16 @@ export function CanvasView({ projectId }: Props) {
 
       runUserCanvasMutation((currentState) => {
         const prev = currentState.canvasDoc;
-        const sourceNode = prev.workflow.nodes.find((node) => node.id === sourceNodeId);
-        const targetNode = prev.workflow.nodes.find((node) => node.id === targetNodeId);
-        if (!sourceNode || !targetNode) {
+        const result = applyCanvasNodeConnection(prev.workflow.nodes, sourceNodeId, targetNodeId);
+        if (!result.applied) {
           return null;
         }
-
-        if (targetNode.kind === "text-note") {
-          const nextNodes = prev.workflow.nodes.map((node) =>
-            node.id === targetNodeId
-              ? {
-                  ...node,
-                  upstreamNodeIds: [sourceNodeId],
-                  upstreamAssetIds: [`node:${sourceNodeId}`],
-                }
-              : node
-          );
-
-          return {
-            canvasDoc: {
-              ...prev,
-              workflow: {
-                nodes: nextNodes,
-              },
-            },
-          };
-        }
-
-        if (sourceNode.kind === "text-note") {
-          const nextNodes = prev.workflow.nodes.map((node) =>
-            node.id === targetNodeId
-              ? {
-                  ...node,
-                  promptSourceNodeId: sourceNodeId,
-                }
-              : node
-          );
-
-          return {
-            canvasDoc: {
-              ...prev,
-              workflow: {
-                nodes: nextNodes,
-              },
-            },
-          };
-        }
-
-        if (sourceNode.kind === "list") {
-          const nextNodes = prev.workflow.nodes.map((node) =>
-            node.id === targetNodeId
-              ? {
-                  ...node,
-                  upstreamNodeIds: [sourceNodeId],
-                  upstreamAssetIds: buildAssetRefsFromNodes([sourceNodeId], prev.workflow.nodes),
-                }
-              : node
-          );
-
-          return {
-            canvasDoc: {
-              ...prev,
-              workflow: {
-                nodes: nextNodes,
-              },
-            },
-          };
-        }
-
-        const nextNodes = prev.workflow.nodes.map((node) => {
-          if (node.id !== targetNodeId) {
-            return node;
-          }
-          const upstreamNodeIds = [...new Set([...node.upstreamNodeIds, sourceNodeId])];
-          return {
-            ...node,
-            upstreamNodeIds,
-            upstreamAssetIds: buildAssetRefsFromNodes(upstreamNodeIds, prev.workflow.nodes),
-          };
-        });
 
         return {
           canvasDoc: {
             ...prev,
             workflow: {
-              nodes: nextNodes,
+              nodes: result.nodes,
             },
           },
         };
@@ -3987,6 +4198,74 @@ export function CanvasView({ projectId }: Props) {
     [runUserCanvasMutation]
   );
 
+  const submitCopilotPrompt = useCallback(async () => {
+    if (copilotActiveJobId || !copilotRunPreview.requestPayload) {
+      return;
+    }
+
+    const prompt = copilotDraft.trim();
+    if (!prompt) {
+      return;
+    }
+
+    const userMessageId = uid();
+    const statusMessageId = uid();
+    setCopilotMessages((prev) => [
+      ...prev,
+      {
+        id: userMessageId,
+        role: "user",
+        text: prompt,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: statusMessageId,
+        role: "system",
+        text: `Running ${copilotRunPreview.model?.displayName || "selected model"}...`,
+        createdAt: new Date().toISOString(),
+        state: "pending",
+        jobId: null,
+      },
+    ]);
+
+    try {
+      const job = await createJobFromRequest(projectId, {
+        ...copilotRunPreview.requestPayload,
+        nodePayload: {
+          ...copilotRunPreview.requestPayload.nodePayload,
+          nodeId: `copilot-${uid()}`,
+        },
+      });
+      setJobs((prev) => [job, ...prev.filter((existingJob) => existingJob.id !== job.id)]);
+      setCopilotActiveJobId(job.id);
+      setCopilotDraft("");
+      setCopilotMessages((prev) =>
+        prev.map((message) =>
+          message.id === statusMessageId
+            ? {
+                ...message,
+                jobId: job.id,
+              }
+            : message
+        )
+      );
+      await fetchJobs();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Copilot request failed.";
+      setCopilotMessages((prev) =>
+        prev.map((entry) =>
+          entry.id === statusMessageId
+            ? {
+                ...entry,
+                text: message,
+                state: "error",
+              }
+            : entry
+        )
+      );
+    }
+  }, [copilotActiveJobId, copilotDraft, copilotRunPreview, fetchJobs, projectId]);
+
   const runNode = useCallback(
     async (node: WorkflowNode) => {
       if (node.kind === "text-template") {
@@ -4028,6 +4307,37 @@ export function CanvasView({ projectId }: Props) {
       projectId,
     ]
   );
+
+  useEffect(() => {
+    if (!copilotActiveJobId) {
+      return;
+    }
+
+    const activeJob = jobs.find((job) => job.id === copilotActiveJobId && job.nodeRunPayload?.runOrigin === "copilot") || null;
+    if (!activeJob) {
+      return;
+    }
+
+    if (activeJob.state !== "failed" && activeJob.state !== "canceled") {
+      return;
+    }
+
+    setCopilotMessages((prev) =>
+      prev.map((message) =>
+        message.jobId === activeJob.id
+          ? {
+              ...message,
+              text:
+                activeJob.state === "canceled"
+                  ? "Copilot run canceled."
+                  : activeJob.errorMessage || "Copilot request failed.",
+              state: "error",
+            }
+          : message
+      )
+    );
+    setCopilotActiveJobId(null);
+  }, [copilotActiveJobId, jobs]);
 
   const openImportDialog = useCallback(async () => {
     const imported = await importProjectAssets(projectId);
@@ -4516,6 +4826,25 @@ export function CanvasView({ projectId }: Props) {
             />
           )}
         </div>
+
+        {!isLoading ? (
+          <CanvasCopilotWidget
+            open={copilotOpen}
+            modelVariantId={copilotRunPreview.variant?.id || copilotModelVariantId}
+            modelOptions={copilotModelVariants}
+            draft={copilotDraft}
+            messages={copilotMessages}
+            isRunning={Boolean(copilotActiveJobId)}
+            disabledReason={copilotRunPreview.disabledReason}
+            readyMessage={copilotRunPreview.readyMessage}
+            onOpenChange={setCopilotOpen}
+            onModelVariantChange={setCopilotModelVariantId}
+            onDraftChange={setCopilotDraft}
+            onSubmit={() => {
+              submitCopilotPrompt().catch(console.error);
+            }}
+          />
+        ) : null}
 
         {insertMenu ? (
           <div

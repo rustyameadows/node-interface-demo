@@ -119,3 +119,8 @@
 - Decision: standardize node chrome around external title, utility, caption, and action slots instead of ad hoc per-node absolute positioning.
 - Rationale: the post-issue-62 polish pass needs image labels/actions outside the media frame, centered title rails, inline template pills, and list controls that stop participating in table layout.
 - Consequence: the shared node renderer now owns top utility and footer rails, image nodes keep all chrome outside the image surface, template preview variables render inline, and list add/remove controls are overlay affordances rather than content-bearing cells.
+
+## 2026-03-09 - Canvas Copilot Reuses Structured Text Jobs Instead Of Hidden Nodes
+- Decision: implement the first copilot/chat surface as a canvas-overlay widget that submits normal text-generation jobs with a first-class `copilot` run origin instead of creating a hidden model node.
+- Rationale: issue `#49` needs a lightweight generate-to-canvas assistant, but a hidden node would blur provenance, duplicate smart-output parsing rules, and make hydration brittle.
+- Consequence: the canvas now has a session-only copilot pill/panel, smart-output descriptors carry stable IDs plus optional generated connections, and the renderer inserts copilot-generated nodes near the viewport center while keeping the existing queue/job pipeline intact.

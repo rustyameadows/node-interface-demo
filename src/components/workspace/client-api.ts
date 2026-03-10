@@ -122,6 +122,7 @@ export async function createJob(projectId: string, node: WorkflowNode) {
       outputType: node.outputType,
       executionMode,
       outputCount,
+      runOrigin: "canvas-node",
       promptSourceNodeId: node.promptSourceNodeId,
       upstreamNodeIds: node.upstreamNodeIds,
       upstreamAssetIds: node.upstreamAssetIds,
@@ -143,6 +144,7 @@ export async function createJobFromRequest(
       outputType: WorkflowNode["outputType"];
       executionMode: OpenAIImageMode;
       outputCount: number;
+      runOrigin?: import("@/components/workspace/types").JobRunOrigin;
       promptSourceNodeId?: string | null;
       upstreamNodeIds: string[];
       upstreamAssetIds: string[];

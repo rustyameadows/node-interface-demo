@@ -1,5 +1,5 @@
 import type { ModelParameterDefinition } from "@/lib/model-parameters";
-import type { GeneratedNodeDescriptor } from "@/lib/generated-text-output";
+import type { GeneratedConnectionDescriptor, GeneratedNodeDescriptor } from "@/lib/generated-text-output";
 
 export type ProviderId = "openai" | "google-gemini" | "topaz";
 export type ProviderCredentialKey = "OPENAI_API_KEY" | "GOOGLE_API_KEY" | "TOPAZ_API_KEY";
@@ -68,6 +68,8 @@ export type ProviderCredentialStatus = {
   source: ProviderCredentialSource;
 };
 
+export type JobRunOrigin = "canvas-node" | "copilot";
+
 export type WorkflowNodeKind = "model" | "asset-source" | "text-note" | "list" | "text-template";
 export type WorkflowNodeType = "text-gen" | "image-gen" | "video-gen" | "transform" | "text-note" | "list" | "text-template";
 export type RunnableWorkflowNodeType = "text-gen" | "image-gen" | "video-gen" | "transform";
@@ -95,9 +97,10 @@ export type BaseListNodeSettings = {
 
 export type GeneratedModelNodeProvenance = {
   sourceJobId: string;
-  sourceModelNodeId: string;
+  sourceModelNodeId: string | null;
   outputIndex: number;
   descriptorIndex: number;
+  runOrigin: JobRunOrigin;
 };
 
 export type GeneratedModelListSettings = GeneratedModelNodeProvenance & {
@@ -227,6 +230,7 @@ export type Job = {
     outputType?: WorkflowNode["outputType"];
     executionMode?: ProviderExecutionMode;
     outputCount?: number;
+    runOrigin?: JobRunOrigin;
     promptSourceNodeId?: string | null;
     upstreamNodeIds?: string[];
     upstreamAssetIds?: string[];
@@ -254,6 +258,8 @@ export type Job = {
     responseId: string | null;
   }>;
   generatedNodeDescriptors?: GeneratedNodeDescriptor[];
+  generatedConnections?: GeneratedConnectionDescriptor[];
+  generatedOutputWarning?: string | null;
 };
 
 export type QueueSummary = {

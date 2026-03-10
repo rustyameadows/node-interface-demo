@@ -115,6 +115,7 @@ test("allows model/template connections into generated text notes only", () => {
       sourceModelNodeId: model.id,
       outputIndex: 0,
       descriptorIndex: 0,
+      runOrigin: "canvas-node",
     }),
   });
   const generatedFromTemplate = createNode({

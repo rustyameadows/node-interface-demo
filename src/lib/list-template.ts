@@ -234,7 +234,6 @@ export function getGeneratedModelTextNoteSettings(value: unknown): GeneratedMode
   if (
     record.source !== MODEL_OUTPUT_TEXT_SOURCE ||
     !record.sourceJobId ||
-    !record.sourceModelNodeId ||
     typeof record.outputIndex !== "number"
   ) {
     return null;
@@ -243,9 +242,15 @@ export function getGeneratedModelTextNoteSettings(value: unknown): GeneratedMode
   return {
     source: MODEL_OUTPUT_TEXT_SOURCE,
     sourceJobId: String(record.sourceJobId),
-    sourceModelNodeId: String(record.sourceModelNodeId),
+    sourceModelNodeId: typeof record.sourceModelNodeId === "string" ? String(record.sourceModelNodeId) : null,
     outputIndex: Number(record.outputIndex),
     descriptorIndex: typeof record.descriptorIndex === "number" ? Number(record.descriptorIndex) : 0,
+    runOrigin:
+      record.runOrigin === "copilot" || record.runOrigin === "canvas-node"
+        ? record.runOrigin
+        : typeof record.sourceModelNodeId === "string"
+          ? "canvas-node"
+          : "copilot",
   };
 }
 
@@ -254,7 +259,6 @@ export function getGeneratedModelListSettings(value: unknown): GeneratedModelLis
   if (
     record.source !== MODEL_OUTPUT_LIST_SOURCE ||
     !record.sourceJobId ||
-    !record.sourceModelNodeId ||
     typeof record.outputIndex !== "number"
   ) {
     return null;
@@ -263,9 +267,15 @@ export function getGeneratedModelListSettings(value: unknown): GeneratedModelLis
   return {
     source: MODEL_OUTPUT_LIST_SOURCE,
     sourceJobId: String(record.sourceJobId),
-    sourceModelNodeId: String(record.sourceModelNodeId),
+    sourceModelNodeId: typeof record.sourceModelNodeId === "string" ? String(record.sourceModelNodeId) : null,
     outputIndex: Number(record.outputIndex),
     descriptorIndex: typeof record.descriptorIndex === "number" ? Number(record.descriptorIndex) : 0,
+    runOrigin:
+      record.runOrigin === "copilot" || record.runOrigin === "canvas-node"
+        ? record.runOrigin
+        : typeof record.sourceModelNodeId === "string"
+          ? "canvas-node"
+          : "copilot",
     columns: [],
     rows: [],
   };
@@ -276,7 +286,6 @@ export function getGeneratedModelTextTemplateSettings(value: unknown): Generated
   if (
     record.source !== MODEL_OUTPUT_TEMPLATE_SOURCE ||
     !record.sourceJobId ||
-    !record.sourceModelNodeId ||
     typeof record.outputIndex !== "number"
   ) {
     return null;
@@ -285,9 +294,15 @@ export function getGeneratedModelTextTemplateSettings(value: unknown): Generated
   return {
     source: MODEL_OUTPUT_TEMPLATE_SOURCE,
     sourceJobId: String(record.sourceJobId),
-    sourceModelNodeId: String(record.sourceModelNodeId),
+    sourceModelNodeId: typeof record.sourceModelNodeId === "string" ? String(record.sourceModelNodeId) : null,
     outputIndex: Number(record.outputIndex),
     descriptorIndex: typeof record.descriptorIndex === "number" ? Number(record.descriptorIndex) : 0,
+    runOrigin:
+      record.runOrigin === "copilot" || record.runOrigin === "canvas-node"
+        ? record.runOrigin
+        : typeof record.sourceModelNodeId === "string"
+          ? "canvas-node"
+          : "copilot",
   };
 }
 

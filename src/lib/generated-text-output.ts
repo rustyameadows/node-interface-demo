@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ProviderId, WorkflowNode } from "@/components/workspace/types";
+import type { JobRunOrigin, ProviderId, WorkflowNode } from "@/components/workspace/types";
 import { getSpawnableNodeCatalogSummaries } from "@/lib/node-catalog";
 import {
   createGeneratedModelListSettings,
@@ -12,12 +12,14 @@ import type { OpenAiTextOutputTarget } from "@/lib/text-output-targets";
 export type GeneratedNodeKind = "text-note" | "list" | "text-template";
 
 type GeneratedNodeDescriptorBase = {
+  descriptorId: string;
   kind: GeneratedNodeKind;
   label: string;
   sourceJobId: string;
-  sourceModelNodeId: string;
+  sourceModelNodeId: string | null;
   outputIndex: number;
   descriptorIndex: number;
+  runOrigin: JobRunOrigin;
 };
 
 export type GeneratedTextNoteDescriptor = GeneratedNodeDescriptorBase & {
@@ -41,38 +43,50 @@ export type GeneratedNodeDescriptor =
   | GeneratedListNodeDescriptor
   | GeneratedTextTemplateDescriptor;
 
+export type GeneratedConnectionDescriptor = {
+  kind: "input" | "prompt";
+  sourceDescriptorId: string;
+  targetDescriptorId: string;
+};
+
 type StructuredParseInput = {
   textOutputTarget: OpenAiTextOutputTarget;
   content: string;
   sourceJobId: string;
-  sourceModelNodeId: string;
+  sourceModelNodeId?: string | null;
   outputIndex?: number;
+  runOrigin?: JobRunOrigin;
 };
 
 export type StructuredParseResult = {
   generatedNodeDescriptors: GeneratedNodeDescriptor[];
+  generatedConnections: GeneratedConnectionDescriptor[];
   warning: string | null;
 };
 
 type DescriptorSeed =
   | {
+      id: string;
       kind: "text-note";
       label: string;
       text: string;
     }
   | {
+      id: string;
       kind: "list";
       label: string;
       columns: string[];
       rows: string[][];
     }
   | {
+      id: string;
       kind: "text-template";
       label: string;
       templateText: string;
     };
 
 const textNoteDescriptorSchema = z.object({
+  id: z.string().trim().min(1).max(80),
   kind: z.literal("text-note"),
   label: z.string().trim().min(1).max(120),
   text: z.string(),
@@ -80,6 +94,7 @@ const textNoteDescriptorSchema = z.object({
 
 const listDescriptorSchema = z
   .object({
+    id: z.string().trim().min(1).max(80),
     kind: z.literal("list"),
     label: z.string().trim().min(1).max(120),
     columns: z.array(z.string().trim().min(1).max(120)).min(1),
@@ -97,44 +112,79 @@ const listDescriptorSchema = z
   });
 
 const textTemplateDescriptorSchema = z.object({
+  id: z.string().trim().min(1).max(80),
   kind: z.literal("text-template"),
   label: z.string().trim().min(1).max(120),
   templateText: z.string().min(1),
 });
 
-const smartOutputSchema = z.object({
-  nodes: z.array(z.union([textNoteDescriptorSchema, listDescriptorSchema, textTemplateDescriptorSchema])).min(1),
+const generatedConnectionDescriptorSchema = z.object({
+  kind: z.enum(["input", "prompt"]),
+  sourceDescriptorId: z.string().trim().min(1).max(80),
+  targetDescriptorId: z.string().trim().min(1).max(80),
 });
 
+const smartOutputSchema = z
+  .object({
+    nodes: z.array(z.union([textNoteDescriptorSchema, listDescriptorSchema, textTemplateDescriptorSchema])).min(1),
+    connections: z.array(generatedConnectionDescriptorSchema).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const seenIds = new Set<string>();
+    value.nodes.forEach((node, index) => {
+      if (seenIds.has(node.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Node id "${node.id}" must be unique.`,
+          path: ["nodes", index, "id"],
+        });
+        return;
+      }
+      seenIds.add(node.id);
+    });
+  });
+
 const singleBracketPlaceholderPattern = /\[(?!\[)\s*([^[\]]+?)\s*\](?!\])/g;
+
+function getDefaultGeneratedDescriptorId(outputIndex: number, descriptorIndex: number) {
+  return `generated-${outputIndex}-${descriptorIndex}`;
+}
 
 function descriptorSeedToDescriptor(
   seed: DescriptorSeed,
   provenance: {
     sourceJobId: string;
-    sourceModelNodeId: string;
+    sourceModelNodeId: string | null;
     outputIndex: number;
     descriptorIndex: number;
+    runOrigin: JobRunOrigin;
   }
 ): GeneratedNodeDescriptor {
+  const descriptorBase = {
+    descriptorId: seed.id,
+    kind: seed.kind,
+    label: seed.label,
+    ...provenance,
+  } as const;
+
   if (seed.kind === "text-template") {
     return {
-      ...seed,
+      ...descriptorBase,
       templateText: normalizeGeneratedTemplateText(seed.templateText),
-      ...provenance,
     };
   }
 
   if (seed.kind === "list") {
     return {
-      ...seed,
-      ...provenance,
+      ...descriptorBase,
+      columns: seed.columns,
+      rows: seed.rows,
     };
   }
 
   return {
-    ...seed,
-    ...provenance,
+    ...descriptorBase,
+    text: seed.text,
   };
 }
 
@@ -151,7 +201,7 @@ function buildSmartOutputInstructions() {
   const generalRules = summaries.map((summary) => `${summary.kind}: ${summary.promptSummary}`).join(" ");
   const payloadRules = summaries.map((summary) => summary.payloadSummary).join(" ");
 
-  return `Respond with JSON only. Generate the set of nodes that best fulfills the user's request. If the user gives specific instructions about what nodes to create, follow those instructions first. Apply the general rules below only when the user has not already made the desired node types clear. Allowed kinds are ${allowedKinds}. You may return one node or many. Create only the node types that are actually useful for the request. Do not force a list or template unless the user's request clearly calls for one. ${generalRules} You may return multiple nodes when the request naturally implies multiple useful outputs. Template rules: placeholder variables must use only [[variable]] syntax. Placeholders may appear in any order and may repeat any number of times. Do not use single-bracket placeholders like [variable]. Do not use mustache placeholders like {{variable}}. Do not use any other delimiter style for placeholder variables. Curly braces, single brackets, parentheses, quotes, and other punctuation may appear as literal text when they are not placeholder variables, so preserve them when they are meant literally. Before returning a text-template node, rewrite placeholder-like variable references into [[variable]] syntax while leaving literal punctuation unchanged. If you return both a list and a text-template that are meant to work together, every template placeholder must correspond to a list column, do not invent template placeholders that are not backed by the list, and make them compatible enough that the template can be filled from the list without missing variables. Every node must include kind, label, text, columns, rows, and templateText. For unused fields, set the value to null. ${payloadRules} Do not include explanations, markdown, commentary, or connections. Return only valid JSON that matches the schema.`;
+  return `Respond with JSON only. Generate the set of nodes that best fulfills the user's request. If the user gives specific instructions about what nodes to create, follow those instructions first. Apply the general rules below only when the user has not already made the desired node types clear. Allowed kinds are ${allowedKinds}. You may return one node or many. Create only the node types that are actually useful for the request. Do not force a list or template unless the user's request clearly calls for one. ${generalRules} You may return multiple nodes when the request naturally implies multiple useful outputs. Each node must include a unique id that is stable within the response so connections can reference it. Template rules: placeholder variables must use only [[variable]] syntax. Placeholders may appear in any order and may repeat any number of times. Do not use single-bracket placeholders like [variable]. Do not use mustache placeholders like {{variable}}. Do not use any other delimiter style for placeholder variables. Curly braces, single brackets, parentheses, quotes, and other punctuation may appear as literal text when they are not placeholder variables, so preserve them when they are meant literally. Before returning a text-template node, rewrite placeholder-like variable references into [[variable]] syntax while leaving literal punctuation unchanged. If you return both a list and a text-template that are meant to work together, every template placeholder must correspond to a list column, do not invent template placeholders that are not backed by the list, make them compatible enough that the template can be filled from the list without missing variables, and add an input connection from the list node to the template node when that pairing should already be wired. Every node must include id, kind, label, text, columns, rows, and templateText. For unused fields, set the value to null. Always include a connections array. Use [] when there are no useful links to add. Each connection must include kind, sourceDescriptorId, and targetDescriptorId. Only connect nodes that you also returned in the nodes array. ${payloadRules} Do not include explanations, markdown, or commentary. Return only valid JSON that matches the schema.`;
 }
 
 export function getGeneratedDescriptorDefaultLabel(kind: GeneratedNodeKind, visualIndex = 0) {
@@ -230,6 +280,7 @@ export function getStructuredTextOutputContract(target: Exclude<OpenAiTextOutput
                 type: "string",
                 enum: ["text-note", "list", "text-template"],
               },
+              id: { type: "string" },
               label: { type: "string" },
               text: { type: ["string", "null"] },
               columns: {
@@ -245,11 +296,27 @@ export function getStructuredTextOutputContract(target: Exclude<OpenAiTextOutput
               },
               templateText: { type: ["string", "null"] },
             },
-            required: ["kind", "label", "text", "columns", "rows", "templateText"],
+            required: ["id", "kind", "label", "text", "columns", "rows", "templateText"],
+          },
+        },
+        connections: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              kind: {
+                type: "string",
+                enum: ["input", "prompt"],
+              },
+              sourceDescriptorId: { type: "string" },
+              targetDescriptorId: { type: "string" },
+            },
+            required: ["kind", "sourceDescriptorId", "targetDescriptorId"],
           },
         },
       },
-      required: ["nodes"],
+      required: ["nodes", "connections"],
     },
   } as const;
 }
@@ -257,44 +324,76 @@ export function getStructuredTextOutputContract(target: Exclude<OpenAiTextOutput
 export function createFallbackGeneratedTextNoteDescriptor(input: {
   content: string;
   sourceJobId: string;
-  sourceModelNodeId: string;
+  sourceModelNodeId?: string | null;
   outputIndex?: number;
   descriptorIndex?: number;
   label?: string;
+  runOrigin?: JobRunOrigin;
+  descriptorId?: string;
 }): GeneratedTextNoteDescriptor {
   return {
+    descriptorId:
+      input.descriptorId || getDefaultGeneratedDescriptorId(input.outputIndex ?? 0, input.descriptorIndex ?? 0),
     kind: "text-note",
     label: input.label || getGeneratedDescriptorDefaultLabel("text-note", input.descriptorIndex || 0),
     text: input.content,
     sourceJobId: input.sourceJobId,
-    sourceModelNodeId: input.sourceModelNodeId,
+    sourceModelNodeId: input.sourceModelNodeId ?? null,
     outputIndex: input.outputIndex ?? 0,
     descriptorIndex: input.descriptorIndex ?? 0,
+    runOrigin: input.runOrigin || (input.sourceModelNodeId ? "canvas-node" : "copilot"),
   };
 }
 
 export function parseStructuredTextOutput(input: StructuredParseInput): StructuredParseResult {
   const outputIndex = input.outputIndex ?? 0;
+  const runOrigin = input.runOrigin || (input.sourceModelNodeId ? "canvas-node" : "copilot");
 
   try {
     const parsed = JSON.parse(input.content) as unknown;
+    const warnings: string[] = [];
+    const smartOutput =
+      input.textOutputTarget === "smart" ? smartOutputSchema.parse(parsed) : null;
     const seeds =
       input.textOutputTarget === "list"
-        ? [listDescriptorSchema.parse(parsed)]
+        ? [{ ...listDescriptorSchema.parse({ id: getDefaultGeneratedDescriptorId(outputIndex, 0), ...((parsed as Record<string, unknown>) || {}) }) }]
         : input.textOutputTarget === "template"
-          ? [textTemplateDescriptorSchema.parse(parsed)]
-          : smartOutputSchema.parse(parsed).nodes;
+          ? [{ ...textTemplateDescriptorSchema.parse({ id: getDefaultGeneratedDescriptorId(outputIndex, 0), ...((parsed as Record<string, unknown>) || {}) }) }]
+          : smartOutput?.nodes || [];
+    const nodeIds = new Set(seeds.map((seed) => seed.id));
+    const seenConnections = new Set<string>();
+    const generatedConnections =
+      smartOutput?.connections?.filter((connection) => {
+        if (
+          !nodeIds.has(connection.sourceDescriptorId) ||
+          !nodeIds.has(connection.targetDescriptorId) ||
+          connection.sourceDescriptorId === connection.targetDescriptorId
+        ) {
+          warnings.push("Ignored 1 invalid generated connection.");
+          return false;
+        }
+
+        const key = `${connection.kind}:${connection.sourceDescriptorId}:${connection.targetDescriptorId}`;
+        if (seenConnections.has(key)) {
+          warnings.push("Ignored 1 duplicate generated connection.");
+          return false;
+        }
+        seenConnections.add(key);
+        return true;
+      }) || [];
 
     return {
       generatedNodeDescriptors: seeds.map((seed, descriptorIndex) =>
         descriptorSeedToDescriptor(seed, {
           sourceJobId: input.sourceJobId,
-          sourceModelNodeId: input.sourceModelNodeId,
+          sourceModelNodeId: input.sourceModelNodeId ?? null,
           outputIndex,
           descriptorIndex,
+          runOrigin,
         })
       ),
-      warning: null,
+      generatedConnections,
+      warning: warnings.length > 0 ? [...new Set(warnings)].join(" ") : null,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown structured output parse failure.";
@@ -303,10 +402,12 @@ export function parseStructuredTextOutput(input: StructuredParseInput): Structur
         createFallbackGeneratedTextNoteDescriptor({
           content: input.content,
           sourceJobId: input.sourceJobId,
-          sourceModelNodeId: input.sourceModelNodeId,
+          sourceModelNodeId: input.sourceModelNodeId ?? null,
           outputIndex,
+          runOrigin,
         }),
       ],
+      generatedConnections: [],
       warning: `Structured output parsing failed. Fell back to a generated text note. ${message}`,
     };
   }
@@ -315,15 +416,17 @@ export function parseStructuredTextOutput(input: StructuredParseInput): Structur
 export function createGeneratedTextNoteDescriptorsFromRawText(input: {
   outputs: Array<{ content: string; outputIndex: number }>;
   sourceJobId: string;
-  sourceModelNodeId: string;
+  sourceModelNodeId?: string | null;
+  runOrigin?: JobRunOrigin;
 }): GeneratedNodeDescriptor[] {
   return input.outputs.map((output, descriptorIndex) =>
     createFallbackGeneratedTextNoteDescriptor({
       content: output.content,
       sourceJobId: input.sourceJobId,
-      sourceModelNodeId: input.sourceModelNodeId,
+      sourceModelNodeId: input.sourceModelNodeId ?? null,
       outputIndex: output.outputIndex,
       descriptorIndex,
+      runOrigin: input.runOrigin,
     })
   );
 }
@@ -361,7 +464,7 @@ type CreateGeneratedModelNodeInput = {
   id: string;
   providerId: ProviderId;
   modelId: string;
-  modelNodeId: string;
+  modelNodeId?: string | null;
   label: string;
   position: { x: number; y: number };
   processingState: WorkflowNode["processingState"];
@@ -370,7 +473,7 @@ type CreateGeneratedModelNodeInput = {
 };
 
 export function createGeneratedModelNode(input: CreateGeneratedModelNodeInput): WorkflowNode {
-  const connectToSourceModel = input.connectToSourceModel !== false;
+  const connectToSourceModel = input.connectToSourceModel !== false && Boolean(input.modelNodeId);
   const shared = {
     id: input.id,
     label: input.label,
@@ -382,8 +485,8 @@ export function createGeneratedModelNode(input: CreateGeneratedModelNodeInput): 
     sourceOutputIndex: input.descriptor.outputIndex,
     processingState: input.processingState,
     promptSourceNodeId: null,
-    upstreamNodeIds: connectToSourceModel ? [input.modelNodeId] : [],
-    upstreamAssetIds: connectToSourceModel ? [`node:${input.modelNodeId}`] : [],
+    upstreamNodeIds: connectToSourceModel && input.modelNodeId ? [input.modelNodeId] : [],
+    upstreamAssetIds: connectToSourceModel && input.modelNodeId ? [`node:${input.modelNodeId}`] : [],
     x: input.position.x,
     y: input.position.y,
     displayMode: "preview" as const,
@@ -405,6 +508,7 @@ export function createGeneratedModelNode(input: CreateGeneratedModelNodeInput): 
         sourceModelNodeId: input.descriptor.sourceModelNodeId,
         outputIndex: input.descriptor.outputIndex,
         descriptorIndex: input.descriptor.descriptorIndex,
+        runOrigin: input.descriptor.runOrigin,
         columns: input.descriptor.columns.map((label, columnIndex) => ({
           id: getDeterministicListColumnId(input.descriptor, columnIndex),
           label,
@@ -432,6 +536,7 @@ export function createGeneratedModelNode(input: CreateGeneratedModelNodeInput): 
         sourceModelNodeId: input.descriptor.sourceModelNodeId,
         outputIndex: input.descriptor.outputIndex,
         descriptorIndex: input.descriptor.descriptorIndex,
+        runOrigin: input.descriptor.runOrigin,
       }),
     };
   }
@@ -447,6 +552,7 @@ export function createGeneratedModelNode(input: CreateGeneratedModelNodeInput): 
       sourceModelNodeId: input.descriptor.sourceModelNodeId,
       outputIndex: input.descriptor.outputIndex,
       descriptorIndex: input.descriptor.descriptorIndex,
+      runOrigin: input.descriptor.runOrigin,
     }),
   };
 }

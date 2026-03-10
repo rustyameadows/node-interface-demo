@@ -4,6 +4,7 @@ import type {
   AppRouteView,
   CanvasDocument,
   Job,
+  JobRunOrigin,
   JobDebugResponse,
   OpenAIImageMode,
   ProviderCredentialKey,
@@ -81,6 +82,7 @@ export type CreateJobRequest = {
     outputType: WorkflowNode["outputType"];
     executionMode: OpenAIImageMode;
     outputCount: number;
+    runOrigin?: JobRunOrigin;
     promptSourceNodeId?: string | null;
     upstreamNodeIds: string[];
     upstreamAssetIds: string[];

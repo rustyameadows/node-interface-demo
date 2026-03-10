@@ -20,6 +20,7 @@ export type ProviderExecutionMode = "generate" | "edit";
 export type OpenAIImageMode = ProviderExecutionMode;
 export type ProviderRequirementKind = "env" | "executable";
 export type ProviderPromptMode = "required" | "optional" | "unsupported";
+export type JobRunOrigin = "canvas-node" | "copilot";
 export type ImageOutputFormat = "png" | "jpeg" | "webp";
 export type ImageSize = "1024x1024" | "1536x1024" | "1024x1536" | "auto";
 export type ImageQuality = "low" | "medium" | "high" | "auto";
@@ -64,6 +65,7 @@ export type NodePayload = {
   outputType: OutputType;
   executionMode: ProviderExecutionMode;
   outputCount: number;
+  runOrigin: JobRunOrigin;
   promptSourceNodeId?: string | null;
   upstreamNodeIds: string[];
   upstreamAssetIds: string[];

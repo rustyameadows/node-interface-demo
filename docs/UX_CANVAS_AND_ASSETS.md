@@ -116,7 +116,14 @@
   - pin the run launcher near the source output edge
 - active template nodes suppress external phantom row cards while they are in edit mode
 - multi-selection compare/download actions live in a floating selection strip near the current selection instead of the old bottom bar
-- the selection strip, queue pill, insert picker, asset picker, and bottom-bar popovers may be restyled as overlay chrome without changing node or connection rendering
+- the selection strip, queue pill, copilot pill/panel, insert picker, asset picker, and bottom-bar popovers may be restyled as overlay chrome without changing node or connection rendering
+- the canvas also includes a bottom-right copilot surface:
+  - collapsed as a small fixed `Copilot` pill with the current text model label
+  - expands into a session-only chat panel that grows upward/left from the pill
+  - uses only runnable text-capable provider models
+  - keeps the composer focusable even when the selected model is blocked, and surfaces an explicit status notice explaining why `Send` is disabled
+  - supports one active copilot turn at a time
+  - clears transcript history when the project canvas session reloads
 - canvas keyboard shortcuts when focus is not inside an input, textarea, select, or contenteditable surface:
   - `A` opens the add-to-canvas insert menu at viewport center
   - `C` connects exactly two selected nodes from oldest selected -> newest selected
@@ -138,8 +145,10 @@
   - `Text Note` -> generated text note
   - `List` -> generated list node
   - `Template` -> generated template node
-  - `Smart Output` -> one or more unconnected generated nodes
+  - `Smart Output` -> one or more generated nodes plus any valid returned connections
 - model-spawned list/template/note nodes keep source-job provenance but are otherwise normal editable child nodes after insertion
+- copilot text runs reuse the same `Smart Output` pipeline but insert their generated nodes near the current viewport center instead of relative to a visible model node
+- invalid smart-output connections are dropped with a warning instead of failing the whole job hydration
 - pending generated-output placeholders/previews may appear while a job is queued, running, or failed, but they are separate from the final spawned child nodes
 - rerunning a model node appends a fresh set of generated child nodes instead of replacing older ones
 - deleting a generated child node keeps it deleted; completed outputs do not respawn automatically on later reloads or job polls
