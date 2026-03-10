@@ -1347,6 +1347,7 @@ export function InfiniteCanvas({
   return (
     <div
       ref={containerRef}
+      data-testid="canvas-root"
       className={`${styles.canvasRoot} ${marqueeDraft ? styles.canvasMarqueeActive : ""} ${interactionMode !== "idle" ? styles.canvasInteractionActive : ""}`}
       onPointerDown={onBackgroundPointerDown}
       onDoubleClick={onDoubleClick}

@@ -58,6 +58,20 @@ function getLatestTextOutputs(providerResponse: Record<string, unknown> | null |
     });
 }
 
+function getStoredTextOutputTarget(
+  providerResponse: Record<string, unknown> | null | undefined,
+  fallback: unknown
+): Job["textOutputTarget"] {
+  if (providerResponse && typeof providerResponse === "object" && "textOutputTarget" in providerResponse) {
+    return readOpenAiTextOutputTarget(
+      (providerResponse as Record<string, unknown>).textOutputTarget,
+      readOpenAiTextOutputTarget(fallback)
+    );
+  }
+
+  return readOpenAiTextOutputTarget(fallback);
+}
+
 function normalizeGeneratedNodeDescriptors(
   rawDescriptors: unknown[],
   sourceJobId: string,
@@ -332,6 +346,13 @@ function serializeJobRows(
     assets: assetsByJobId.get(job.id) || [],
     latestPreviewFrames: previewFramesByJobId.get(job.id) || [],
     latestTextOutputs: getLatestTextOutputs(latestAttemptByJobId.get(job.id)?.providerResponse || null),
+    textOutputTarget: getStoredTextOutputTarget(
+      latestAttemptByJobId.get(job.id)?.providerResponse || null,
+      (job.nodeRunPayload as Record<string, unknown> | undefined)?.settings &&
+        typeof (job.nodeRunPayload as Record<string, unknown> | undefined)?.settings === "object"
+        ? ((job.nodeRunPayload as Record<string, unknown>).settings as Record<string, unknown>).textOutputTarget
+        : undefined
+    ),
     generatedNodeDescriptors: getGeneratedNodeDescriptors(
       latestAttemptByJobId.get(job.id)?.providerResponse || null,
       job.id,

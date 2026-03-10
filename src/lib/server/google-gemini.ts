@@ -6,6 +6,23 @@ import type {
   ProviderModelAccessStatus,
 } from "@/lib/types";
 
+type GoogleGeminiClientLike = Pick<GoogleGenAI, "models">;
+type GoogleGeminiCandidatePart = {
+  text?: string;
+  inlineData?: {
+    data?: string;
+    mimeType?: string;
+  };
+};
+type GoogleGeminiResponseShape = {
+  text?: string | undefined;
+  candidates?: Array<{
+    content?: {
+      parts?: GoogleGeminiCandidatePart[];
+    };
+  }>;
+};
+
 type GoogleGeminiAccessUpdate = {
   accessStatus: ProviderModelAccessStatus;
   accessReason: ProviderModelAccessReason | null;
@@ -28,17 +45,29 @@ export type GoogleGeminiErrorClassification = {
   details: Record<string, unknown>;
 };
 
-function buildGoogleGeminiClient(apiKey: string) {
+let googleGeminiClientFactoryForTests: (() => Promise<GoogleGeminiClientLike>) | null = null;
+
+function buildGoogleGeminiClient(apiKey: string): GoogleGeminiClientLike {
   return new GoogleGenAI({ apiKey });
 }
 
 export async function getGoogleGeminiClient() {
+  if (googleGeminiClientFactoryForTests) {
+    return googleGeminiClientFactoryForTests();
+  }
+
   const apiKey = await resolveProviderCredentialValue("GOOGLE_API_KEY");
   if (!apiKey) {
     throw new Error("Google Gemini is not configured.");
   }
 
   return buildGoogleGeminiClient(apiKey);
+}
+
+export function setGoogleGeminiClientFactoryForTests(
+  factory: (() => Promise<GoogleGeminiClientLike>) | null
+) {
+  googleGeminiClientFactoryForTests = factory;
 }
 
 export function normalizeGoogleGeminiModelId(value: string | null | undefined) {
@@ -93,25 +122,23 @@ export function buildGoogleGeminiContents(prompt: string, inputAssets: ProviderI
   ];
 }
 
-export function extractGoogleGeminiText(response: {
-  text?: string | undefined;
-}) {
-  const text = response.text?.trim();
+export function extractGoogleGeminiText(response: GoogleGeminiResponseShape) {
+  const directText = response.text?.trim();
+  if (directText) {
+    return directText;
+  }
+
+  const candidateParts = response.candidates?.[0]?.content?.parts || [];
+  const text = candidateParts
+    .map((part) => (typeof part.text === "string" ? part.text.trim() : ""))
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+
   return text ? text : null;
 }
 
-export function extractGoogleGeminiImageParts(response: {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        inlineData?: {
-          data?: string;
-          mimeType?: string;
-        };
-      }>;
-    };
-  }>;
-}) {
+export function extractGoogleGeminiImageParts(response: GoogleGeminiResponseShape) {
   const parts = response.candidates?.[0]?.content?.parts || [];
 
   return parts

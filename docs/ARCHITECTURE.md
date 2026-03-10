@@ -177,7 +177,7 @@ TanStack Query owns persisted app data in the renderer and is invalidated from t
 4. Worker polls eligible `queued` jobs and atomically claims one.
 5. Worker marks heartbeats while the provider call is running.
 6. Provider adapter emits preview frames when supported.
-7. Worker persists final outputs as assets or text-response metadata with parsed generated-node descriptors.
+7. Worker persists final outputs as assets and/or text-response metadata with parsed generated-node descriptors.
 8. Worker records attempt metadata, marks terminal job state, and emits `jobs.changed` plus `assets.changed` when needed.
 
 Copilot run path:
@@ -196,17 +196,22 @@ Copilot run path:
   - Gemini 3 flash-family models add `thinkingLevel`
   - Gemini 2.5-family models add `thinkingBudget`
 - Worker-side parsing validates those structured responses into generated-node descriptors before they reach the renderer.
+- Mixed Gemini image jobs may also emit structured text in the same provider response; the worker reads the text output target from output metadata before falling back to node settings.
 - Generated descriptors now include stable response-local `descriptorId` values plus a `runOrigin` of `canvas-node` or `copilot`.
 - `smart` may also return generated connection descriptors keyed by those descriptor IDs.
 - `CanvasView` inserts model-spawned notes, lists, and templates once from `job.generatedNodeDescriptors` instead of parsing raw provider text in the renderer.
+- `CanvasView` now hydrates generated image assets and generated text descriptors independently for the same job, so mixed-output image models can materialize both result kinds from one run.
 - `CanvasView` applies valid generated connections after node insertion and drops invalid, duplicate, or out-of-scope links with a warning.
+- Root generated descriptors keep a visible source-model anchor unless a valid generated connection already targets that descriptor, so mixed outputs stay discoverable without overriding provider-specified wiring.
+- Model-spawned placeholders and final children now use the same visible-edge spawn anchor as the phantom preview, so active expanded model nodes materialize outputs where the preview projected them.
 - Pending generated-output placeholders/previews may exist while a job is unresolved, but once the final child nodes are inserted the polling loop no longer mutates them.
-- The canvas document stores `generatedOutputReceiptKeys` so completed outputs are materialized once, deleted generated nodes do not return, and reruns append fresh children instead of replacing older ones.
+- The canvas document stores `generatedOutputReceiptKeys` so completed outputs are materialized once, deleted generated nodes do not return, reruns append fresh children instead of replacing older ones, and stale generated-image placeholders can self-heal if a receipt exists but the node still lacks its asset pointer.
 - `smart` can now spawn multiple nodes plus optional valid wiring in one pass; explicit `list` and `template` targets may still show deterministic placeholders while queued/running.
 - Gemini image settings are also model-aware:
   - shared Gemini image controls: `temperature`, `aspectRatio`, `maxOutputTokens`, `topP`, `stopSequences`
   - `gemini-3-pro-image-preview` also exposes `imageSize`
   - `gemini-3.1-flash-image-preview` also exposes `outputMode`, `imageSize`, and `thinkingLevel`
+  - `gemini-3.1-flash-image-preview` `Images & Text` also reuses the `smart` structured-output contract for its text modality
   - OpenAI-style image settings are pruned from Gemini image nodes instead of being carried through as inert payload noise
 - The smart-output prompt builder derives allowed node kinds and payload summaries from the node catalog instead of hardcoded node descriptions.
 

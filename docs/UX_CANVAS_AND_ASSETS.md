@@ -154,15 +154,19 @@
   - `Nano Banana Pro` also adds `Resolution`
   - `Nano Banana 2` also adds `Output Format`, `Resolution`, and `Thinking Level`
 - successful image jobs spawn final output nodes once from the completed job output
+- `Nano Banana 2` `Images Only` spawns one generated image output node
+- `Nano Banana 2` `Images & Text` spawns one generated image output node plus `Smart Output` text/list/template nodes from the same run
 - successful OpenAI and Gemini text jobs hydrate generated nodes by output target:
   - `Text Note` -> generated text note
   - `List` -> generated list node
   - `Template` -> generated template node
   - `Smart Output` -> one or more generated nodes plus any valid returned connections
+- generated smart-output nodes without an incoming generated connection keep a source-model link so mixed image/text runs remain easy to find on canvas
 - model-spawned list/template/note nodes keep source-job provenance but are otherwise normal editable child nodes after insertion
+- model-spawned placeholders and finished child nodes now originate from the model’s current visible right edge, matching the phantom preview even when the model is actively expanded
 - copilot text runs reuse the same `Smart Output` pipeline but insert their generated nodes near the current viewport center instead of relative to a visible model node
 - invalid smart-output connections are dropped with a warning instead of failing the whole job hydration
-- pending generated-output placeholders/previews may appear while a job is queued, running, or failed, but they are separate from the final spawned child nodes
+- pending generated-output placeholders/previews may appear while a job is queued, running, or failed, but they are separate from the final spawned child nodes and are repaired in place if a completed image receipt exists but the placeholder still lacks its asset pointer
 - rerunning a model node appends a fresh set of generated child nodes instead of replacing older ones
 - deleting a generated child node keeps it deleted; completed outputs do not respawn automatically on later reloads or job polls
 - template/list pairs still compute live compatibility before generation, but the main visual emphasis for potential output rows stays in the phantom/generated preview layer rather than an oversized template side rail

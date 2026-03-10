@@ -22,13 +22,24 @@ import type {
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { isModelParameterVisible } from "@/lib/model-parameters";
 import {
-  buildGeneratedNodePosition,
   createGeneratedModelNode,
   getGeneratedDescriptorDefaultLabel,
   type GeneratedConnectionDescriptor,
   type GeneratedNodeDescriptor,
   type GeneratedNodeKind,
+  shouldConnectGeneratedDescriptorToSourceModel,
 } from "@/lib/generated-text-output";
+import {
+  hydrateGeneratedImageNode,
+  needsGeneratedImageNodeHydration,
+  shouldSkipConsumedGeneratedImageReceipt,
+} from "@/lib/generated-image-hydration";
+import {
+  buildGeneratedImageOutputPosition,
+  getGeneratedModelSpawnAnchor,
+  resolveGeneratedOutputVisualIndex,
+  resolveGeneratedTextNodePlacement,
+} from "@/lib/generated-output-positioning";
 import {
   applyCanvasCopilotSuccessSummaries,
   buildCanvasCopilotRunPreview,
@@ -132,9 +143,6 @@ import { publishCanvasMenuState, resetCanvasMenuState } from "@/renderer/canvas-
 import styles from "./canvas-view.module.css";
 
 const supportedOutputOrder = ["image", "video", "text"] as const;
-const generatedNodeBaseOffsetX = 328;
-const generatedNodeColumnOffsetX = 40;
-const generatedNodeOffsetY = 38;
 const generatedTextNodeOffsetX = 320;
 const generatedTextNodeOffsetY = 172;
 const copilotGeneratedNodeOffsetX = 252;
@@ -446,6 +454,29 @@ function getGeneratedNodeLabel(existingCount: number) {
   return `Output ${existingCount + 1}`;
 }
 
+function isCanvasPoint(value: unknown): value is { x: number; y: number } {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const point = value as { x?: unknown; y?: unknown };
+  return typeof point.x === "number" && Number.isFinite(point.x) && typeof point.y === "number" && Number.isFinite(point.y);
+}
+
+function resolveCanvasPointFallback(modelNode: Pick<WorkflowNode, "x" | "y">, point: unknown) {
+  if (isCanvasPoint(point)) {
+    return {
+      x: Math.round(point.x),
+      y: Math.round(point.y),
+    };
+  }
+
+  return {
+    x: Math.round(modelNode.x),
+    y: Math.round(modelNode.y),
+  };
+}
+
 function sortSemanticTypes(values: CanvasSemanticType[]) {
   const unique = [...new Set(values)];
   return canvasSemanticTypeOrder.filter((type) => unique.includes(type));
@@ -474,11 +505,21 @@ function createGeneratedOutputNode(
   job: Job,
   sourceNodeId: string,
   outputIndex: number,
-  visualIndex: number
+  visualIndexOrPosition?: number | { x: number; y: number } | null,
+  positionMaybe?: { x: number; y: number } | null
 ): WorkflowNode {
+  const safeVisualIndex = resolveGeneratedOutputVisualIndex(
+    typeof visualIndexOrPosition === "number" ? visualIndexOrPosition : undefined,
+    outputIndex
+  );
+  const safePosition = resolveCanvasPointFallback(
+    modelNode,
+    isCanvasPoint(visualIndexOrPosition) && !positionMaybe ? visualIndexOrPosition : positionMaybe
+  );
+
   return {
     id: uid(),
-    label: getGeneratedNodeLabel(visualIndex),
+    label: getGeneratedNodeLabel(safeVisualIndex),
     kind: "asset-source",
     providerId: modelNode.providerId,
     modelId: modelNode.modelId,
@@ -499,8 +540,8 @@ function createGeneratedOutputNode(
     promptSourceNodeId: null,
     upstreamNodeIds: [sourceNodeId],
     upstreamAssetIds: [`node:${sourceNodeId}`],
-    x: Math.round(modelNode.x + generatedNodeBaseOffsetX + Math.floor(visualIndex / 4) * generatedNodeColumnOffsetX),
-    y: Math.round(modelNode.y + (visualIndex % 4) * generatedNodeOffsetY),
+    x: safePosition.x,
+    y: safePosition.y,
     displayMode: "preview",
     size: null,
   };
@@ -564,8 +605,17 @@ function createGeneratedModelPlaceholderNode(
   job: Job,
   sourceNodeId: string,
   target: GeneratedTextPlaceholderTarget,
-  visualIndex: number
+  visualIndexOrPosition: number | { x: number; y: number } | null | undefined,
+  positionMaybe?: { x: number; y: number } | null
 ): WorkflowNode {
+  const safeVisualIndex =
+    typeof visualIndexOrPosition === "number" && Number.isFinite(visualIndexOrPosition)
+      ? Math.max(0, Math.trunc(visualIndexOrPosition))
+      : 0;
+  const safePosition = resolveCanvasPointFallback(
+    modelNode,
+    isCanvasPoint(visualIndexOrPosition) && !positionMaybe ? visualIndexOrPosition : positionMaybe
+  );
   const descriptorKind: GeneratedNodeKind =
     target === "list" ? "list" : target === "template" ? "text-template" : "text-note";
   const descriptor: GeneratedNodeDescriptor =
@@ -573,7 +623,7 @@ function createGeneratedModelPlaceholderNode(
       ? {
           descriptorId: "generated-0-0",
           kind: "list",
-          label: getGeneratedDescriptorDefaultLabel("list", visualIndex),
+          label: getGeneratedDescriptorDefaultLabel("list", safeVisualIndex),
           columns: [],
           rows: [],
           sourceJobId: job.id,
@@ -586,7 +636,7 @@ function createGeneratedModelPlaceholderNode(
         ? {
             descriptorId: "generated-0-0",
             kind: "text-template",
-            label: getGeneratedDescriptorDefaultLabel("text-template", visualIndex),
+            label: getGeneratedDescriptorDefaultLabel("text-template", safeVisualIndex),
             templateText: "",
             sourceJobId: job.id,
             sourceModelNodeId: sourceNodeId,
@@ -600,7 +650,7 @@ function createGeneratedModelPlaceholderNode(
             label:
               target === "smart"
                 ? "Structured outputs"
-                : getGeneratedDescriptorDefaultLabel("text-note", visualIndex),
+                : getGeneratedDescriptorDefaultLabel("text-note", safeVisualIndex),
             text: "",
             sourceJobId: job.id,
             sourceModelNodeId: sourceNodeId,
@@ -615,12 +665,7 @@ function createGeneratedModelPlaceholderNode(
     modelId: modelNode.modelId,
     modelNodeId: sourceNodeId,
     label: descriptor.label,
-    position: buildGeneratedNodePosition({
-      modelNode,
-      visualIndex,
-      baseOffsetX: generatedTextNodeOffsetX,
-      offsetY: generatedTextNodeOffsetY,
-    }),
+    position: safePosition,
     processingState: job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null,
     descriptor,
   });
@@ -777,6 +822,23 @@ export function CanvasView({ projectId }: Props) {
           console.error("Failed to persist canvas", error);
         });
       }, 360);
+    },
+    [persistCanvas]
+  );
+
+  const persistCanvasImmediately = useCallback(
+    async (doc: CanvasDocument) => {
+      if (!hasLoadedCanvasRef.current) {
+        pendingCanvasSaveRef.current = doc;
+        return;
+      }
+
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+
+      await persistCanvas(doc);
     },
     [persistCanvas]
   );
@@ -1828,6 +1890,7 @@ export function CanvasView({ projectId }: Props) {
     const insertedGeneratedImageCountByModelNodeId = new Map<string, number>();
     const insertedGeneratedTextCountByModelNodeId = new Map<string, number>();
     const copilotJobSummaries = new Map<string, CanvasCopilotHydrationSummary>();
+    const activeCanvasNodeId = selectedNodeIdsRef.current.length === 1 ? selectedNodeIdsRef.current[0]! : null;
     let copilotAnchorIndex = 0;
 
     const getCopilotInsertAnchor = () => {
@@ -1857,6 +1920,14 @@ export function CanvasView({ projectId }: Props) {
         !isCopilotJob && sourceNodeId
           ? workingNodes.find((node) => node.id === sourceNodeId && node.kind === "model") || null
           : null;
+      const modelSpawnAnchor =
+        !isCopilotJob && modelNode
+          ? getGeneratedModelSpawnAnchor({
+              modelNode,
+              activeNodeId: activeCanvasNodeId,
+              fullNodeId: activeFullNodeId,
+            })
+          : null;
 
       if (!isCopilotJob && (!sourceNodeId || !modelNode)) {
         continue;
@@ -1879,18 +1950,34 @@ export function CanvasView({ projectId }: Props) {
             descriptorIndex: 0,
           });
           const matchingImageAsset = findMatchingGeneratedImageAsset(job, outputIndex);
-          const pendingNodes = workingNodes.filter(
-            (node) =>
-              getGeneratedOutputReceiptKeyForNode(node) === receiptKey &&
-              !isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys)
-          );
-          const pendingNode = pendingNodes[0] || null;
+          const receiptNodes = workingNodes.filter((node) => getGeneratedOutputReceiptKeyForNode(node) === receiptKey);
+          const hydratedReceiptNode =
+            receiptNodes.find(
+              (node) =>
+                node.kind === "asset-source" &&
+                node.outputType === "image" &&
+                Boolean(node.sourceAssetId) &&
+                node.processingState === null &&
+                (!matchingImageAsset || node.sourceAssetId === matchingImageAsset.id)
+            ) || null;
+          const repairableReceiptNode =
+            matchingImageAsset
+              ? receiptNodes.find((node) => needsGeneratedImageNodeHydration(node, matchingImageAsset)) || null
+              : null;
+          const pendingNode = repairableReceiptNode || hydratedReceiptNode || receiptNodes[0] || null;
+          const duplicateReceiptNodes = receiptNodes.filter((node) => node.id !== pendingNode?.id);
           const nextProcessingState =
             job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null;
 
-          if (nextGeneratedOutputReceiptKeys.has(receiptKey)) {
-            if (pendingNodes.length > 0) {
-              filterWorkingNodes((node) => !pendingNodes.some((candidate) => candidate.id === node.id));
+          if (
+            shouldSkipConsumedGeneratedImageReceipt({
+              receiptConsumed: nextGeneratedOutputReceiptKeys.has(receiptKey),
+              receiptNodes,
+              matchingImageAsset,
+            })
+          ) {
+            if (duplicateReceiptNodes.length > 0) {
+              filterWorkingNodes((node) => !duplicateReceiptNodes.some((candidate) => candidate.id === node.id));
             }
             continue;
           }
@@ -1899,22 +1986,26 @@ export function CanvasView({ projectId }: Props) {
             const visualIndex =
               (existingGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) +
               (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0);
-            const baseNode = createGeneratedOutputNode(modelNode, job, sourceNodeId, outputIndex, visualIndex);
-            const finalNode: WorkflowNode = {
-              ...baseNode,
-              id: uid(),
-              label: pendingNode?.label || baseNode.label,
-              x: pendingNode?.x ?? baseNode.x,
-              y: pendingNode?.y ?? baseNode.y,
-              sourceAssetId: matchingImageAsset.id,
-              sourceAssetMimeType: matchingImageAsset.mimeType,
-              processingState: null,
-            };
+            const baseNode = createGeneratedOutputNode(
+              modelNode,
+              job,
+              sourceNodeId,
+              outputIndex,
+              visualIndex,
+              buildGeneratedImageOutputPosition(modelSpawnAnchor!, visualIndex)
+            );
+            const finalNode = hydrateGeneratedImageNode({
+              baseNode,
+              pendingNode,
+              providerId: job.providerId as WorkflowNode["providerId"],
+              modelId: job.modelId,
+              sourceJobId: job.id,
+              outputIndex,
+              sourceModelNodeId: sourceNodeId,
+              matchingImageAsset,
+            });
 
-            if (pendingNode) {
-              filterWorkingNodes((node) => node.id !== pendingNode.id);
-              replaceSelectedNodeId(pendingNode.id, finalNode.id);
-            } else {
+            if (!pendingNode) {
               insertedGeneratedImageCountByModelNodeId.set(
                 sourceNodeId,
                 (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) + 1
@@ -1922,14 +2013,19 @@ export function CanvasView({ projectId }: Props) {
             }
 
             upsertWorkingNode(finalNode);
-            nextGeneratedOutputReceiptKeys.add(receiptKey);
-            didReceiptChange = true;
+            if (duplicateReceiptNodes.length > 0) {
+              filterWorkingNodes((node) => !duplicateReceiptNodes.some((candidate) => candidate.id === node.id));
+            }
+            if (!nextGeneratedOutputReceiptKeys.has(receiptKey)) {
+              nextGeneratedOutputReceiptKeys.add(receiptKey);
+              didReceiptChange = true;
+            }
             continue;
           }
 
           if (job.state === "canceled") {
-            if (pendingNodes.length > 0) {
-              filterWorkingNodes((node) => !pendingNodes.some((candidate) => candidate.id === node.id));
+            if (receiptNodes.length > 0) {
+              filterWorkingNodes((node) => !receiptNodes.some((candidate) => candidate.id === node.id));
             }
             continue;
           }
@@ -1938,7 +2034,14 @@ export function CanvasView({ projectId }: Props) {
             const visualIndex =
               (existingGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0) +
               (insertedGeneratedImageCountByModelNodeId.get(sourceNodeId) || 0);
-            const outputNode = createGeneratedOutputNode(modelNode, job, sourceNodeId, outputIndex, visualIndex);
+            const outputNode = createGeneratedOutputNode(
+              modelNode,
+              job,
+              sourceNodeId,
+              outputIndex,
+              visualIndex,
+              buildGeneratedImageOutputPosition(modelSpawnAnchor!, visualIndex)
+            );
             upsertWorkingNode(outputNode);
             insertedGeneratedImageCountByModelNodeId.set(
               sourceNodeId,
@@ -1966,16 +2069,20 @@ export function CanvasView({ projectId }: Props) {
             },
           };
           upsertWorkingNode(nextPendingNode);
+          if (duplicateReceiptNodes.length > 0) {
+            filterWorkingNodes((node) => !duplicateReceiptNodes.some((candidate) => candidate.id === node.id));
+          }
         }
-        continue;
       }
 
-      if (job.nodeRunPayload?.outputType !== "text") {
-        continue;
-      }
-
-      const textOutputTarget = getTextOutputTargetFromSettings(job.nodeRunPayload?.settings);
+      const textOutputTarget = job.textOutputTarget || getTextOutputTargetFromSettings(job.nodeRunPayload?.settings);
       const generatedNodeDescriptors = job.generatedNodeDescriptors || [];
+      const shouldHydrateTextOutputs =
+        job.nodeRunPayload?.outputType === "text" || generatedNodeDescriptors.length > 0;
+
+      if (!shouldHydrateTextOutputs) {
+        continue;
+      }
 
       if (job.state === "succeeded") {
         const descriptorsToSpawn = textOutputTarget === "smart" ? generatedNodeDescriptors : generatedNodeDescriptors.slice(0, 1);
@@ -1983,16 +2090,36 @@ export function CanvasView({ projectId }: Props) {
         const createdNodeIds: string[] = [];
         let connectedCount = 0;
         let skippedConnectionCount = 0;
+        const smartPlaceholderReceiptKey =
+          !isCopilotJob && textOutputTarget === "smart"
+            ? getGeneratedOutputReceiptKey({
+                sourceJobId: job.id,
+                outputIndex: 0,
+                descriptorIndex: 0,
+              })
+            : null;
+        const genericSmartPlaceholderNodes =
+          smartPlaceholderReceiptKey && !isCopilotJob
+            ? workingNodes.filter(
+                (node) =>
+                  getGeneratedOutputReceiptKeyForNode(node) === smartPlaceholderReceiptKey &&
+                  !isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys)
+              )
+            : [];
+        const genericSmartPlaceholderNode =
+          textOutputTarget === "smart" && genericSmartPlaceholderNodes.length > 0 ? genericSmartPlaceholderNodes[0]! : null;
+        let claimedGenericSmartPlaceholderId: string | null = null;
+        let ignoreGenericSmartPlaceholder = false;
         const copilotAnchor = isCopilotJob ? getCopilotInsertAnchor() : null;
 
-        for (const descriptor of descriptorsToSpawn) {
+        for (const [descriptorOrderIndex, descriptor] of descriptorsToSpawn.entries()) {
           const receiptKey = getGeneratedOutputReceiptKey(descriptor);
           const pendingNodes = workingNodes.filter(
             (node) =>
               getGeneratedOutputReceiptKeyForNode(node) === receiptKey &&
               !isConsumedGeneratedOutputNode(node, nextGeneratedOutputReceiptKeys)
           );
-          const pendingNode = pendingNodes[0] || null;
+          const exactPendingNode = pendingNodes[0] || null;
 
           if (nextGeneratedOutputReceiptKeys.has(receiptKey)) {
             if (pendingNodes.length > 0) {
@@ -2005,6 +2132,21 @@ export function CanvasView({ projectId }: Props) {
             ? descriptor.descriptorIndex
             : (existingGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0) +
               (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0);
+          const placement = isCopilotJob
+            ? null
+            : resolveGeneratedTextNodePlacement({
+                descriptorOrderIndex,
+                fallbackVisualIndex: visualIndex,
+                exactPendingNode,
+                genericSmartPlaceholderNode: ignoreGenericSmartPlaceholder ? null : genericSmartPlaceholderNode,
+                allowGenericSmartPlaceholder:
+                  !ignoreGenericSmartPlaceholder &&
+                  Boolean(genericSmartPlaceholderNode) &&
+                  (descriptorOrderIndex === 0 || claimedGenericSmartPlaceholderId === genericSmartPlaceholderNode?.id),
+                modelAnchor: modelSpawnAnchor!,
+              });
+          const pendingNode = placement?.pendingNode || null;
+          const duplicatePendingNodes = pendingNodes.filter((node) => node.id !== pendingNode?.id);
           const finalNode = createGeneratedModelNode({
             id: uid(),
             providerId: (isCopilotJob ? job.providerId : modelNode!.providerId) as WorkflowNode["providerId"],
@@ -2018,16 +2160,26 @@ export function CanvasView({ projectId }: Props) {
                 }
               : isCopilotJob && copilotAnchor
                 ? buildCopilotGeneratedNodePosition(copilotAnchor, descriptor.descriptorIndex)
-                : buildGeneratedNodePosition({
-                    modelNode: modelNode!,
-                    visualIndex,
-                    baseOffsetX: generatedTextNodeOffsetX,
-                    offsetY: generatedTextNodeOffsetY,
-                  }),
+                : placement!.position,
             processingState: null,
             descriptor,
-            connectToSourceModel: textOutputTarget !== "smart" && !isCopilotJob,
+            connectToSourceModel: shouldConnectGeneratedDescriptorToSourceModel({
+              descriptorId: descriptor.descriptorId,
+              generatedConnections: job.generatedConnections,
+              runOrigin,
+            }),
           });
+
+          if (placement?.ignoreGenericSmartPlaceholder && genericSmartPlaceholderNodes.length > 0) {
+            const exactPendingNodeId = exactPendingNode?.id || null;
+            filterWorkingNodes(
+              (node) =>
+                !genericSmartPlaceholderNodes.some(
+                  (candidate) => candidate.id === node.id && candidate.id !== exactPendingNodeId
+                )
+            );
+            ignoreGenericSmartPlaceholder = true;
+          }
 
           if (pendingNode) {
             filterWorkingNodes((node) => node.id !== pendingNode.id);
@@ -2037,6 +2189,18 @@ export function CanvasView({ projectId }: Props) {
               sourceNodeId!,
               (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0) + 1
             );
+          }
+          if (duplicatePendingNodes.length > 0) {
+            filterWorkingNodes((node) => !duplicatePendingNodes.some((candidate) => candidate.id === node.id));
+          }
+          if (placement?.claimsGenericSmartPlaceholder && genericSmartPlaceholderNode) {
+            claimedGenericSmartPlaceholderId = genericSmartPlaceholderNode.id;
+            const duplicateGenericPlaceholderNodes = genericSmartPlaceholderNodes.filter(
+              (node) => node.id !== genericSmartPlaceholderNode.id
+            );
+            if (duplicateGenericPlaceholderNodes.length > 0) {
+              filterWorkingNodes((node) => !duplicateGenericPlaceholderNodes.some((candidate) => candidate.id === node.id));
+            }
           }
 
           upsertWorkingNode(finalNode);
@@ -2133,12 +2297,21 @@ export function CanvasView({ projectId }: Props) {
         const visualIndex =
           (existingGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0) +
           (insertedGeneratedTextCountByModelNodeId.get(sourceNodeId!) || 0);
+        const outputNodePosition = resolveGeneratedTextNodePlacement({
+          descriptorOrderIndex: 0,
+          fallbackVisualIndex: visualIndex,
+          exactPendingNode: null,
+          genericSmartPlaceholderNode: null,
+          allowGenericSmartPlaceholder: false,
+          modelAnchor: modelSpawnAnchor!,
+        }).position;
         const outputNode = createGeneratedModelPlaceholderNode(
           modelNode!,
           job,
           sourceNodeId!,
           placeholderTarget,
-          visualIndex
+          visualIndex,
+          outputNodePosition
         );
         upsertWorkingNode(outputNode);
         insertedGeneratedTextCountByModelNodeId.set(
@@ -3009,9 +3182,10 @@ export function CanvasView({ projectId }: Props) {
         );
 
         const defaultProvider = getFallbackProviderModel(providers);
+        let nextCanvasDocument: CanvasDocument | null = null;
         runUserCanvasMutation((currentState) => {
           const prev = currentState.canvasDoc;
-          const { canvasDocument: nextCanvasDocument, insertedNodeIds } = insertImportedAssetsIntoCanvasDocument(
+          const result = insertImportedAssetsIntoCanvasDocument(
             prev,
             uploaded.map(({ asset }) => asset),
             {
@@ -3021,13 +3195,17 @@ export function CanvasView({ projectId }: Props) {
               assetLabels: uploaded.map(({ file }) => file.name),
             }
           );
-          const lastSourceNodeId = insertedNodeIds[insertedNodeIds.length - 1];
+          nextCanvasDocument = result.canvasDocument;
+          const lastSourceNodeId = result.insertedNodeIds[result.insertedNodeIds.length - 1];
           return {
-            canvasDoc: nextCanvasDocument,
+            canvasDoc: result.canvasDocument,
             selectedNodeIds: lastSourceNodeId ? [lastSourceNodeId] : [],
             selectedConnection: null,
           };
-        });
+        }, { persist: false });
+        if (nextCanvasDocument) {
+          await persistCanvasImmediately(nextCanvasDocument);
+        }
         setInsertMenu(null);
         setActiveFullNodeId(null);
       } catch (error) {
@@ -3036,11 +3214,11 @@ export function CanvasView({ projectId }: Props) {
         pendingUploadAnchorRef.current = null;
       }
     },
-    [projectId, providers, runUserCanvasMutation]
+    [persistCanvasImmediately, projectId, providers, runUserCanvasMutation]
   );
 
   const addImportedAssetsToCanvas = useCallback(
-    (
+    async (
       imported: Asset[],
       position?: { x: number; y: number },
       options?: { connectToModelNodeId?: string },
@@ -3051,9 +3229,10 @@ export function CanvasView({ projectId }: Props) {
       }
 
       const defaultProvider = getFallbackProviderModel(providers);
+      let nextCanvasDocument: CanvasDocument | null = null;
       runUserCanvasMutation((currentState) => {
         const prev = currentState.canvasDoc;
-        const { canvasDocument: nextCanvasDocument, insertedNodeIds } = insertImportedAssetsIntoCanvasDocument(
+        const result = insertImportedAssetsIntoCanvasDocument(
           prev,
           imported,
           {
@@ -3063,17 +3242,21 @@ export function CanvasView({ projectId }: Props) {
             assetLabels,
           }
         );
-        const lastSourceNodeId = insertedNodeIds[insertedNodeIds.length - 1];
+        nextCanvasDocument = result.canvasDocument;
+        const lastSourceNodeId = result.insertedNodeIds[result.insertedNodeIds.length - 1];
         return {
-          canvasDoc: nextCanvasDocument,
+          canvasDoc: result.canvasDocument,
           selectedNodeIds: lastSourceNodeId ? [lastSourceNodeId] : [],
           selectedConnection: null,
         };
-      });
+      }, { persist: false });
+      if (nextCanvasDocument) {
+        await persistCanvasImmediately(nextCanvasDocument);
+      }
       setInsertMenu(null);
       setActiveFullNodeId(null);
     },
-    [providers, runUserCanvasMutation]
+    [persistCanvasImmediately, providers, runUserCanvasMutation]
   );
 
   const spawnAssetPointerNodes = useCallback(
@@ -3618,7 +3801,7 @@ export function CanvasView({ projectId }: Props) {
         }
       );
     },
-    [applyCanvasDocWithoutHistory]
+    [activeFullNodeId, applyCanvasDocWithoutHistory]
   );
 
   const animateViewportTo = useCallback(
@@ -3790,6 +3973,11 @@ export function CanvasView({ projectId }: Props) {
       if (!modelNode) {
         return;
       }
+      const modelSpawnAnchor = getGeneratedModelSpawnAnchor({
+        modelNode,
+        activeNodeId: selectedNodeIdsRef.current.length === 1 ? selectedNodeIdsRef.current[0]! : null,
+        fullNodeId: activeFullNodeId,
+      });
 
       const generatedCount = prev.workflow.nodes.filter(
         (node) =>
@@ -3800,34 +3988,14 @@ export function CanvasView({ projectId }: Props) {
       const outputNodes: WorkflowNode[] = Array.from({ length: outputCount }, (_, outputOffset) => {
         const outputIndex = outputOffset;
         const visualIndex = generatedCount + outputOffset;
-        return {
-          id: uid(),
-          label: getGeneratedNodeLabel(visualIndex),
-          kind: "asset-source",
-          providerId: modelNode.providerId,
-          modelId: modelNode.modelId,
-          nodeType: "transform",
-          outputType: "image",
-          prompt: "",
-          settings: {
-            source: "generated",
-            sourceJobId: job.id,
-            sourceModelNodeId: sourceNodeId,
-            outputIndex,
-          },
-          sourceAssetId: null,
-          sourceAssetMimeType: null,
-          sourceJobId: job.id,
-          sourceOutputIndex: outputIndex,
-          processingState: "queued",
-          promptSourceNodeId: null,
-          upstreamNodeIds: [sourceNodeId],
-          upstreamAssetIds: [`node:${sourceNodeId}`],
-          x: Math.round(modelNode.x + generatedNodeBaseOffsetX + Math.floor(visualIndex / 4) * generatedNodeColumnOffsetX),
-          y: Math.round(modelNode.y + (visualIndex % 4) * generatedNodeOffsetY),
-          displayMode: "preview",
-          size: null,
-        };
+        return createGeneratedOutputNode(
+          modelNode,
+          job,
+          sourceNodeId,
+          outputIndex,
+          visualIndex,
+          buildGeneratedImageOutputPosition(modelSpawnAnchor, visualIndex)
+        );
       });
 
       applyCanvasDocWithoutHistory({
@@ -3855,6 +4023,19 @@ export function CanvasView({ projectId }: Props) {
       if (!modelNode) {
         return;
       }
+      const visualIndex = getGeneratedModelNodeCount(prev.workflow.nodes, sourceNodeId);
+      const outputNodePosition = resolveGeneratedTextNodePlacement({
+        descriptorOrderIndex: 0,
+        fallbackVisualIndex: visualIndex,
+        exactPendingNode: null,
+        genericSmartPlaceholderNode: null,
+        allowGenericSmartPlaceholder: false,
+        modelAnchor: getGeneratedModelSpawnAnchor({
+          modelNode,
+          activeNodeId: selectedNodeIdsRef.current.length === 1 ? selectedNodeIdsRef.current[0]! : null,
+          fullNodeId: activeFullNodeId,
+        }),
+      }).position;
 
       applyCanvasDocWithoutHistory({
         ...prev,
@@ -3866,13 +4047,14 @@ export function CanvasView({ projectId }: Props) {
               job,
               sourceNodeId,
               target,
-              getGeneratedModelNodeCount(prev.workflow.nodes, sourceNodeId)
+              visualIndex,
+              outputNodePosition
             ),
           ],
         },
       });
     },
-    [applyCanvasDocWithoutHistory]
+    [activeFullNodeId, applyCanvasDocWithoutHistory]
   );
 
   const updateSelectedListSettings = useCallback(
@@ -4240,7 +4422,7 @@ export function CanvasView({ projectId }: Props) {
 
   const openImportDialog = useCallback(async () => {
     const imported = await importProjectAssets(projectId);
-    addImportedAssetsToCanvas(
+    await addImportedAssetsToCanvas(
       imported.map((item) => item.asset),
       pendingUploadAnchorRef.current
         ? { x: pendingUploadAnchorRef.current.x, y: pendingUploadAnchorRef.current.y }

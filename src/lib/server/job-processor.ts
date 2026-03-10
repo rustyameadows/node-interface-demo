@@ -12,7 +12,7 @@ import { nowIso, newId } from "@/lib/services/common";
 import { updateProviderModelAccessState } from "@/lib/services/providers";
 import { readAssetContent, saveBufferAsPreview } from "@/lib/storage/local-storage";
 import { isStructuredTextOutputTarget, readOpenAiTextOutputTarget } from "@/lib/text-output-targets";
-import type { NodePayload, NormalizedPreviewFrame, ProviderId } from "@/lib/types";
+import type { NodePayload, NormalizedOutput, NormalizedPreviewFrame, ProviderId } from "@/lib/types";
 import { buildProviderDebugRequest } from "@/lib/provider-model-helpers";
 
 function asNodePayload(value: unknown): NodePayload {
@@ -141,7 +141,7 @@ function extensionForPreviewMimeType(mimeType: string) {
   return "png";
 }
 
-function getTextOutputs(outputs: Awaited<ReturnType<ReturnType<typeof getProviderAdapter>["submitJob"]>>) {
+function getTextOutputs(outputs: NormalizedOutput[]) {
   return outputs
     .map((output, index) => ({ output, index }))
     .filter(({ output }) => output.type === "text" && typeof output.content === "string")
@@ -150,6 +150,56 @@ function getTextOutputs(outputs: Awaited<ReturnType<ReturnType<typeof getProvide
       outputIndex: typeof output.metadata.outputIndex === "number" ? Number(output.metadata.outputIndex) : index,
       metadata: output.metadata,
     }));
+}
+
+function getTextOutputTargetForOutputs(
+  textOutputs: ReturnType<typeof getTextOutputs>,
+  fallbackTarget: ReturnType<typeof readOpenAiTextOutputTarget>
+) {
+  const metadataTarget = textOutputs[0]?.metadata?.textOutputTarget;
+  return readOpenAiTextOutputTarget(metadataTarget, fallbackTarget);
+}
+
+export function buildGeneratedTextResultFromOutputs(input: {
+  outputs: NormalizedOutput[];
+  fallbackTextOutputTarget: ReturnType<typeof readOpenAiTextOutputTarget>;
+  sourceJobId: string;
+  sourceModelNodeId: string | null;
+  runOrigin: "canvas-node" | "copilot";
+}) {
+  const textOutputs = getTextOutputs(input.outputs);
+  const textOutputTarget = getTextOutputTargetForOutputs(textOutputs, input.fallbackTextOutputTarget);
+  const generatedNodeDescriptorResult =
+    textOutputs.length === 0
+      ? null
+      : isStructuredTextOutputTarget(textOutputTarget)
+        ? parseStructuredTextOutput({
+            textOutputTarget,
+            content: textOutputs[0]!.content,
+            sourceJobId: input.sourceJobId,
+            sourceModelNodeId: input.sourceModelNodeId,
+            outputIndex: textOutputs[0]!.outputIndex,
+            runOrigin: input.runOrigin,
+          })
+        : {
+            generatedNodeDescriptors: createGeneratedTextNoteDescriptorsFromRawText({
+              outputs: textOutputs.map((output) => ({
+                content: output.content,
+                outputIndex: output.outputIndex,
+              })),
+              sourceJobId: input.sourceJobId,
+              sourceModelNodeId: input.sourceModelNodeId,
+              runOrigin: input.runOrigin,
+            }),
+            generatedConnections: [],
+            warning: null,
+          };
+
+  return {
+    textOutputs,
+    textOutputTarget,
+    generatedNodeDescriptorResult,
+  };
 }
 
 async function persistPreviewFrame(projectId: string, jobId: string, previewFrame: NormalizedPreviewFrame) {
@@ -247,33 +297,13 @@ export async function processJobById(jobId: string) {
                 : null,
           }
         : null;
-    const textOutputs = getTextOutputs(outputs);
-    const textOutputTarget = readOpenAiTextOutputTarget(payload.settings.textOutputTarget);
-    const generatedNodeDescriptorResult =
-      textOutputs.length === 0
-        ? null
-        : isStructuredTextOutputTarget(textOutputTarget)
-          ? parseStructuredTextOutput({
-              textOutputTarget,
-              content: textOutputs[0]!.content,
-              sourceJobId: jobId,
-              sourceModelNodeId: payload.runOrigin === "copilot" ? null : payload.nodeId,
-              outputIndex: textOutputs[0]!.outputIndex,
-              runOrigin: payload.runOrigin,
-            })
-          : {
-              generatedNodeDescriptors: createGeneratedTextNoteDescriptorsFromRawText({
-                outputs: textOutputs.map((output) => ({
-                  content: output.content,
-                  outputIndex: output.outputIndex,
-                })),
-                sourceJobId: jobId,
-                sourceModelNodeId: payload.runOrigin === "copilot" ? null : payload.nodeId,
-                runOrigin: payload.runOrigin,
-              }),
-              generatedConnections: [],
-              warning: null,
-            };
+    const { textOutputTarget, generatedNodeDescriptorResult } = buildGeneratedTextResultFromOutputs({
+      outputs,
+      fallbackTextOutputTarget: readOpenAiTextOutputTarget(payload.settings.textOutputTarget),
+      sourceJobId: jobId,
+      sourceModelNodeId: payload.runOrigin === "copilot" ? null : payload.nodeId,
+      runOrigin: payload.runOrigin,
+    });
 
     db.insert(jobAttempts)
       .values({

@@ -263,6 +263,7 @@ export type Job = {
     content: string;
     responseId: string | null;
   }>;
+  textOutputTarget?: "note" | "list" | "template" | "smart" | null;
   generatedNodeDescriptors?: GeneratedNodeDescriptor[];
   generatedConnections?: GeneratedConnectionDescriptor[];
   generatedOutputWarning?: string | null;

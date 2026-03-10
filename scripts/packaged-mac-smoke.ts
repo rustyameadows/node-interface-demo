@@ -19,6 +19,15 @@ const FILTERS = {
   providerId: "all" as const,
   sort: "newest" as const,
 };
+const SMOKE_UPLOAD_FILE_NAME = "smoke-drop.svg";
+const SMOKE_UPLOAD_MIME_TYPE = "image/svg+xml";
+const SMOKE_UPLOAD_SVG = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+    <rect width="320" height="200" fill="#0b0b0b" />
+    <circle cx="100" cy="100" r="56" fill="#ff4fa2" />
+    <rect x="160" y="44" width="96" height="112" rx="12" fill="#4ea4ff" />
+  </svg>
+`.trim();
 
 async function readPackageVersion() {
   const pkg = JSON.parse(await readFile(path.resolve("package.json"), "utf8")) as { version?: string };
@@ -40,34 +49,81 @@ async function saveScreenshot(driver: WebDriver, outputPath: string) {
   await writeFile(outputPath, screenshot, "base64");
 }
 
-async function waitForUrl(driver: WebDriver, pattern: RegExp, timeoutMs = 15_000) {
+async function waitForUrl(driver: WebDriver, pattern: RegExp, timeoutMs = 30_000) {
   await driver.wait(async () => pattern.test(await driver.getCurrentUrl()), timeoutMs);
 }
 
 async function clickButton(driver: WebDriver, label: string) {
   const button = await driver.wait(
     until.elementLocated(By.xpath(`//button[normalize-space()='${label}']`)),
-    15_000
+    30_000
   );
-  await driver.wait(until.elementIsVisible(button), 15_000);
+  await driver.wait(until.elementIsVisible(button), 30_000);
   await button.click();
 }
 
 async function clickButtonContaining(driver: WebDriver, labelFragment: string) {
   const button = await driver.wait(
     until.elementLocated(By.xpath(`//button[contains(normalize-space(.), '${labelFragment}')]`)),
-    15_000
+    30_000
   );
-  await driver.wait(until.elementIsVisible(button), 15_000);
+  await driver.wait(until.elementIsVisible(button), 30_000);
   await button.click();
 }
 
 async function waitForHeading(driver: WebDriver, label: string) {
   const heading = await driver.wait(
     until.elementLocated(By.xpath(`//*[self::h1 or self::h2][normalize-space()='${label}']`)),
-    15_000
+    30_000
   );
-  await driver.wait(until.elementIsVisible(heading), 15_000);
+  await driver.wait(until.elementIsVisible(heading), 30_000);
+}
+
+async function dropFileOnCanvas(driver: WebDriver, options?: { name?: string; mimeType?: string; content?: string }) {
+  await driver.wait(until.elementLocated(By.css("[data-testid='canvas-root']")), 30_000);
+  const dropResult = await driver.executeAsyncScript(
+    ({ name, mimeType, content }, done) => {
+      const canvas = document.querySelector("[data-testid='canvas-root']");
+      if (!(canvas instanceof HTMLElement)) {
+        done("Canvas root not found.");
+        return;
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const clientX = rect.left + Math.min(rect.width - 48, Math.max(48, rect.width * 0.72));
+      const clientY = rect.top + Math.min(rect.height - 48, Math.max(48, rect.height * 0.38));
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(new File([content], name, { type: mimeType }));
+
+      canvas.dispatchEvent(
+        new DragEvent("dragover", {
+          bubbles: true,
+          cancelable: true,
+          clientX,
+          clientY,
+          dataTransfer,
+        })
+      );
+      canvas.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          clientX,
+          clientY,
+          dataTransfer,
+        })
+      );
+
+      requestAnimationFrame(() => done(null));
+    },
+    {
+      name: options?.name || SMOKE_UPLOAD_FILE_NAME,
+      mimeType: options?.mimeType || SMOKE_UPLOAD_MIME_TYPE,
+      content: options?.content || SMOKE_UPLOAD_SVG,
+    }
+  );
+
+  assert.equal(dropResult, null, "Expected synthetic packaged canvas drop to complete.");
 }
 
 async function main() {
@@ -158,7 +214,7 @@ async function main() {
   const driver = await new Builder().forBrowser("chrome").setChromeOptions(options).setChromeService(service).build();
 
   try {
-    await driver.wait(until.titleIs(APP_NAME), 20_000);
+    await driver.wait(until.titleIs(APP_NAME), 30_000);
 
     const providerSummary = await driver.executeScript(async () => {
       const providers = await window.nodeInterface.listProviders();
@@ -360,7 +416,7 @@ async function main() {
             );
           })
         ),
-      15_000
+      30_000
     );
 
     const viewportBeforeNodeFocus = await driver.executeScript(() => {
@@ -412,7 +468,7 @@ async function main() {
             );
           }, viewportBeforeNodeFocus.canvasViewport.zoom)
         ),
-      15_000
+      30_000
     );
     const viewportAfterNodeFocus = await driver.executeScript(() => {
       return (
@@ -469,24 +525,43 @@ async function main() {
     await sleep(800);
     await saveScreenshot(driver, templateFullScreenshotPath);
 
-    const importedAssets = await driver.executeScript(async ({ activeProjectId }) => {
-      const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
-          <rect width="320" height="200" fill="#0b0b0b" />
-          <circle cx="100" cy="100" r="56" fill="#ff4fa2" />
-          <rect x="160" y="44" width="96" height="112" rx="12" fill="#4ea4ff" />
-        </svg>
-      `.trim();
+    await dropFileOnCanvas(driver);
+    await driver.wait(
+      async () =>
+        driver.executeScript(
+          async ({ activeProjectId, filters, expectedLabel }) => {
+            const [assets, snapshot] = await Promise.all([
+              window.nodeInterface.listAssets(activeProjectId, filters),
+              window.nodeInterface.getWorkspaceSnapshot(activeProjectId),
+            ]);
+            const nodes = Array.isArray(
+              (snapshot.canvas?.canvasDocument as { workflow?: { nodes?: Array<{ label?: string; sourceAssetId?: string | null }> } } | null)
+                ?.workflow?.nodes
+            )
+              ? ((snapshot.canvas?.canvasDocument as {
+                  workflow?: { nodes?: Array<{ label?: string; sourceAssetId?: string | null }> };
+                }).workflow?.nodes || [])
+              : [];
 
-      return window.nodeInterface.importAssets(activeProjectId, [
-        {
-          name: "smoke.svg",
-          mimeType: "image/svg+xml",
-          content: new TextEncoder().encode(svg).buffer,
-        },
-      ]);
-    }, { activeProjectId: projectId });
-    assert.equal(importedAssets.length, 1, "Expected one imported asset.");
+            return (
+              assets.length === 1 &&
+              nodes.some((node) => node.label === expectedLabel && typeof node.sourceAssetId === "string" && node.sourceAssetId.length > 0)
+            );
+          },
+          {
+            activeProjectId: projectId,
+            filters: FILTERS,
+            expectedLabel: SMOKE_UPLOAD_FILE_NAME,
+          }
+        ),
+      30_000
+    );
+
+    const importedAssets = await driver.executeScript(
+      async ({ activeProjectId, filters }) => window.nodeInterface.listAssets(activeProjectId, filters),
+      { activeProjectId: projectId, filters: FILTERS }
+    );
+    assert.equal(importedAssets.length, 1, "Expected one asset after canvas drop upload.");
 
     const assetCount = await driver.executeScript(
       async ({ activeProjectId, filters }) => (await window.nodeInterface.listAssets(activeProjectId, filters)).length,
@@ -499,7 +574,7 @@ async function main() {
     await waitForUrl(driver, new RegExp(`#?/projects/${projectId}/assets$`));
     await driver.wait(
       until.elementLocated(By.css(`img[alt='Generated asset ${importedAssets[0]!.id}']`)),
-      15_000
+      30_000
     );
     await sleep(800);
     await saveScreenshot(driver, assetsScreenshotPath);

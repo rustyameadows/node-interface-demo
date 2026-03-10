@@ -60,7 +60,7 @@ What it does:
   - list full mode renders as a real editable sheet
   - template full mode keeps chips, editor, and merge preview contained
   - legacy generated nodes are auto-migrated onto one-time spawned-child behavior on reload
-- imports an SVG asset through the live preload bridge
+- drops an SVG file onto the live canvas and verifies the renderer upload path creates a persisted asset-source node
 - navigates through assets, queue, project settings, and app settings through native menu commands
 - verifies:
   - preload bridge exists
@@ -80,6 +80,7 @@ What it does:
   - canvas shortcuts stay canvas-scoped and do not fire while a prompt editor or other editable control is focused
   - asset metadata exists
   - asset file exists on disk
+  - uploaded asset nodes persist across reload and remain draggable after resize
   - generated-output receipt keys persist in the saved canvas document
   - queue screen renders
   - project settings render with project metadata only
@@ -142,7 +143,8 @@ What it does:
   - model full screenshot capture
   - list full screenshot capture
   - template full screenshot capture
-  - asset import and assets view render
+  - synthetic canvas drag/drop upload creates a persisted asset and asset-source node
+  - assets view render after the canvas upload
   - queue view render
   - project settings render without provider credentials
   - app settings render with provider credentials

@@ -146,6 +146,9 @@ test("builds Gemini image debug requests with Gemini generateContent config", ()
     contents: "Render a poster.",
     config: {
       responseModalities: ["TEXT", "IMAGE"],
+      responseMimeType: "application/json",
+      systemInstruction: debugRequest.request.config.systemInstruction,
+      responseJsonSchema: debugRequest.request.config.responseJsonSchema,
       temperature: 1,
       topP: 0.95,
       maxOutputTokens: 8192,
@@ -159,4 +162,9 @@ test("builds Gemini image debug requests with Gemini generateContent config", ()
       },
     },
   });
+  assert.equal(typeof debugRequest.request.config.systemInstruction, "string");
+  assert.equal(
+    (debugRequest.request.config.responseJsonSchema as { type: string }).type,
+    "object"
+  );
 });

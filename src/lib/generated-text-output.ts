@@ -49,6 +49,20 @@ export type GeneratedConnectionDescriptor = {
   targetDescriptorId: string;
 };
 
+export function shouldConnectGeneratedDescriptorToSourceModel(input: {
+  descriptorId: string;
+  generatedConnections?: GeneratedConnectionDescriptor[] | null;
+  runOrigin: JobRunOrigin;
+}) {
+  if (input.runOrigin === "copilot") {
+    return false;
+  }
+
+  return !(input.generatedConnections || []).some(
+    (connection) => connection.targetDescriptorId === input.descriptorId
+  );
+}
+
 type StructuredParseInput = {
   textOutputTarget: OpenAiTextOutputTarget;
   content: string;

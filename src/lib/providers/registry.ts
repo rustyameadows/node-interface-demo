@@ -606,6 +606,7 @@ function buildTextOutput(
   options: {
     textOutputTarget: ProviderTextOutputTarget;
     maxOutputTokens: number | null;
+    outputIndex?: number;
     outputFormat?: string | null;
     responseId?: string | null;
     responseStatus?: string | null;
@@ -629,7 +630,7 @@ function buildTextOutput(
     metadata: {
       providerId: input.providerId,
       modelId: input.modelId,
-      outputIndex: 0,
+      outputIndex: options.outputIndex ?? 0,
       responseId: options.responseId || null,
       responseStatus: options.responseStatus || null,
       textOutputTarget: options.textOutputTarget,
@@ -646,7 +647,8 @@ function buildGeminiImageOutput(
   input: ProviderJobInput,
   executionMode: OpenAIImageMode,
   mimeType: string,
-  b64Data: string
+  b64Data: string,
+  outputIndex: number
 ): NormalizedOutput {
   return {
     type: "image",
@@ -656,12 +658,52 @@ function buildGeminiImageOutput(
     metadata: {
       providerId: input.providerId,
       modelId: input.modelId,
-      outputIndex: 0,
+      outputIndex,
       executionMode,
       inputAssetIds: input.inputAssets.map((asset) => asset.assetId),
     },
     content: Buffer.from(b64Data, "base64"),
   };
+}
+
+export function buildGeminiImageOutputsFromResponse(input: {
+  job: ProviderJobInput;
+  executionMode: OpenAIImageMode;
+  resolvedSettings: ReturnType<typeof buildGeminiImageGenerateConfig>["resolved"];
+  response: Parameters<typeof extractGoogleGeminiImageParts>[0];
+}) {
+  const imageParts = extractGoogleGeminiImageParts(input.response);
+  const text =
+    input.resolvedSettings.outputMode === "images_and_text" ? extractGoogleGeminiText(input.response) : null;
+
+  if (imageParts.length === 0) {
+    throw createProviderError("PROVIDER_ERROR", "Gemini returned no image bytes.");
+  }
+
+  const outputs = imageParts.slice(0, 1).map((imagePart, outputIndex) =>
+    buildGeminiImageOutput(input.job, input.executionMode, imagePart.mimeType, imagePart.data, outputIndex)
+  );
+
+  if (input.resolvedSettings.outputMode === "images_and_text" && text) {
+    outputs.push(
+      buildTextOutput(
+        input.job,
+        {
+          textOutputTarget: "smart",
+          maxOutputTokens: input.resolvedSettings.maxOutputTokens,
+          outputIndex: outputs.length,
+          outputFormat: "json_schema",
+          metadata: {
+            providerResponseModality: "TEXT",
+            mixedOutputMode: "images_and_text",
+          },
+        },
+        text
+      )
+    );
+  }
+
+  return outputs;
 }
 
 async function submitOpenAiImage(input: ProviderJobInput): Promise<NormalizedOutput[]> {
@@ -983,21 +1025,18 @@ async function submitGeminiImage(input: ProviderJobInput): Promise<NormalizedOut
 
   try {
     const ai = await getGoogleGeminiClient();
-    const { config } = buildGeminiImageGenerateConfig(input.payload.settings, input.modelId);
+    const { resolved, config } = buildGeminiImageGenerateConfig(input.payload.settings, input.modelId);
     const response = await ai.models.generateContent({
       model: input.modelId,
       contents: buildGoogleGeminiContents(prompt, inputAssets),
       config,
     });
-    const imageParts = extractGoogleGeminiImageParts(response);
-
-    if (imageParts.length === 0) {
-      throw createProviderError("PROVIDER_ERROR", "Gemini returned no image bytes.");
-    }
-
-    return imageParts.slice(0, 1).map((imagePart) =>
-      buildGeminiImageOutput(input, executionMode, imagePart.mimeType, imagePart.data)
-    );
+    return buildGeminiImageOutputsFromResponse({
+      job: input,
+      executionMode,
+      resolvedSettings: resolved,
+      response,
+    });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error) {
       throw error;

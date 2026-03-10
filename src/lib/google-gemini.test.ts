@@ -4,6 +4,7 @@ import {
   buildGoogleGeminiContents,
   classifyGoogleGeminiError,
   extractGoogleGeminiImageParts,
+  extractGoogleGeminiText,
 } from "@/lib/server/google-gemini";
 
 test("classifies Gemini billing and quota errors into access states", () => {
@@ -81,4 +82,30 @@ test("builds multimodal Gemini contents and extracts image bytes", () => {
       mimeType: "image/png",
     },
   ]);
+});
+
+test("extracts Gemini text from direct text and candidate parts", () => {
+  assert.equal(extractGoogleGeminiText({ text: "  hello world  " }), "hello world");
+
+  assert.equal(
+    extractGoogleGeminiText({
+      candidates: [
+        {
+          content: {
+            parts: [
+              { text: "First paragraph." },
+              {
+                inlineData: {
+                  data: "abc123",
+                  mimeType: "image/png",
+                },
+              },
+              { text: "Second paragraph." },
+            ],
+          },
+        },
+      ],
+    }),
+    "First paragraph.\n\nSecond paragraph."
+  );
 });

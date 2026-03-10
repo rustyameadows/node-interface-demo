@@ -6,6 +6,7 @@ import {
   createGeneratedModelNode,
   getStructuredTextOutputContract,
   parseStructuredTextOutput,
+  shouldConnectGeneratedDescriptorToSourceModel,
   type GeneratedNodeDescriptor,
 } from "@/lib/generated-text-output";
 import type { WorkflowNode } from "@/components/workspace/types";
@@ -219,6 +220,41 @@ test("filters invalid smart output connections instead of failing the whole resp
   assert.equal(parsed.generatedConnections.length, 1);
   assert.equal(parsed.generatedNodeDescriptors[0]?.runOrigin, "copilot");
   assert.match(parsed.warning || "", /Ignored 1 invalid generated connection/);
+});
+
+test("anchors only root generated descriptors to the source model", () => {
+  const generatedConnections = [
+    {
+      kind: "input" as const,
+      sourceDescriptorId: "cities",
+      targetDescriptorId: "template",
+    },
+  ];
+
+  assert.equal(
+    shouldConnectGeneratedDescriptorToSourceModel({
+      descriptorId: "cities",
+      generatedConnections,
+      runOrigin: "canvas-node",
+    }),
+    true
+  );
+  assert.equal(
+    shouldConnectGeneratedDescriptorToSourceModel({
+      descriptorId: "template",
+      generatedConnections,
+      runOrigin: "canvas-node",
+    }),
+    false
+  );
+  assert.equal(
+    shouldConnectGeneratedDescriptorToSourceModel({
+      descriptorId: "cities",
+      generatedConnections,
+      runOrigin: "copilot",
+    }),
+    false
+  );
 });
 
 test("builds smart-output instructions from the node catalog summaries", () => {

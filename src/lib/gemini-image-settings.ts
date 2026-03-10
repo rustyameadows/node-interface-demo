@@ -1,3 +1,4 @@
+import { getStructuredTextOutputContract } from "@/lib/generated-text-output";
 import type { ModelParameterDefinition } from "@/lib/model-parameters";
 import type { ProviderExecutionMode } from "@/lib/types";
 import type { GeminiThinkingLevel } from "@/lib/gemini-text-settings";
@@ -408,6 +409,13 @@ export function buildGeminiImageGenerateConfig(
     ...(resolved.thinkingLevel ? { thinkingConfig: { thinkingLevel: resolved.thinkingLevel } } : {}),
     ...(Object.keys(imageConfig).length > 0 ? { imageConfig } : {}),
   };
+
+  if (resolved.outputMode === "images_and_text") {
+    const contract = getStructuredTextOutputContract("smart");
+    config.responseMimeType = "application/json";
+    config.systemInstruction = contract.instructions;
+    config.responseJsonSchema = contract.schema;
+  }
 
   return {
     resolved,

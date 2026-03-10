@@ -34,3 +34,12 @@ export function getDb() {
 
   return globalForDb.db;
 }
+
+export function resetDbForTests() {
+  if (globalForDb.sqlite) {
+    globalForDb.sqlite.close();
+  }
+
+  globalForDb.sqlite = undefined;
+  globalForDb.db = undefined;
+}
