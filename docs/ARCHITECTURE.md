@@ -24,7 +24,6 @@
   - the black canvas background treatment
 - Allowed design-system ownership around protected areas:
   - workspace menu shell
-  - queue pill
   - insert picker and asset picker
   - bottom-bar popovers
   - selection compare/download strip

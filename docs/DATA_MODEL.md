@@ -60,7 +60,7 @@ type WorkflowNode = {
 };
 
 type UploadedAssetNodeSettings = {
-  source: "upload";
+  source: "uploaded";
   assetName?: string;
   assetWidth?: number | null;
   assetHeight?: number | null;
@@ -246,10 +246,11 @@ The renderer never sees absolute paths; those refs are resolved only in main/wor
   - stored only when the node is in `resized`
   - used for text notes, lists, templates, and asset nodes
 - uploaded asset-source nodes also persist lightweight upload metadata in `WorkflowNode.settings`:
-  - `source: "upload"`
+  - `source: "uploaded"`
   - `assetName`
   - `assetWidth`
   - `assetHeight`
+- the renderer still accepts legacy `source: "upload"` nodes for backwards compatibility, but newly created uploaded asset nodes persist `source: "uploaded"`
 - renderer sizing and caption logic uses uploaded-source metadata first so uploaded image nodes keep their real ratio and uploaded-source labeling without depending on fallback provider/model ids
 - model-node `full` is intentionally not persisted; it is derived from active selection at render time
 - renderer-only phantom previews are never written into `canvasDocument`

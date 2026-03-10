@@ -56,7 +56,7 @@ export function getAssetPointerNodeLabel(asset: Asset, index: number) {
   if (fileName.trim()) {
     return normalizeAssetNodeLabel(fileName, index);
   }
-  return `Upload ${index + 1}`;
+  return `Uploaded Asset ${index + 1}`;
 }
 
 function normalizeAssetDimension(value: unknown) {
@@ -72,7 +72,7 @@ export function buildUploadedAssetNodeSettings(
   explicitLabel?: string | null
 ): UploadedAssetNodeSettings {
   return {
-    source: "upload",
+    source: "uploaded",
     assetName: getImportedAssetDisplayName(asset, index, explicitLabel),
     assetWidth: normalizeAssetDimension(asset.width),
     assetHeight: normalizeAssetDimension(asset.height),

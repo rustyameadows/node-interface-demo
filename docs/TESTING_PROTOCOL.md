@@ -228,7 +228,7 @@ Run this when touching workflow or asset UX:
 9. Open Home from the in-app `Menu` pill and confirm the project card is visible.
 10. Reopen the project from home.
 11. Add or restore at least one text note and one model node.
-12. Open the add-node picker and confirm registry-driven entries such as `Add List / Sheet`, `Add Template Node`, and `Add Uploaded Asset` are present.
+12. Open the add-node picker and confirm registry-driven entries such as `Add List / Sheet`, `Add Template Node`, and `Add Uploaded Assets` are present.
 13. Multi-select two nodes and drag them together.
 14. Press `C` with exactly two selected nodes and confirm a connection is created.
 15. Press `Enter` on a single selected node and confirm the expected inline full editor opens.

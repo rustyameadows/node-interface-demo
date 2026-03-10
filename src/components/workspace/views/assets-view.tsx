@@ -237,7 +237,7 @@ export function AssetsView({ projectId }: Props) {
                 onFilterChange({ providerId: event.target.value as AssetFilterState["providerId"] })
               }
             >
-              <option value="all">all providers + uploads</option>
+              <option value="all">all providers + uploaded assets</option>
               <option value="openai">openai</option>
               <option value="google-gemini">google-gemini</option>
               <option value="topaz">topaz</option>
@@ -406,7 +406,7 @@ export function AssetsView({ projectId }: Props) {
                   <article key={asset.id} className={styles.compareCell}>
                     <AssetPreview asset={asset} analysis />
                     <div className={styles.compareMetaOverlay}>
-                      <span>{asset.job?.providerId || "upload/local"}</span>
+                      <span>{asset.job?.providerId || "uploaded/local"}</span>
                       <span>{asset.width && asset.height ? `${asset.width}x${asset.height}` : "unknown dimensions"}</span>
                     </div>
                   </article>

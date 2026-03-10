@@ -110,7 +110,7 @@ export function AssetDetailView({ projectId, assetId }: Props) {
                   </div>
                   <div className={styles.metaRow}>
                     <dt>Provider</dt>
-                    <dd>{asset.job?.providerId || "upload/local"}</dd>
+                    <dd>{asset.job?.providerId || "uploaded/local"}</dd>
                   </div>
                   <div className={styles.metaRow}>
                     <dt>Model</dt>

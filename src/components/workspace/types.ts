@@ -137,7 +137,7 @@ export type GeneratedModelTextTemplateSettings = GeneratedModelNodeProvenance & 
 export type ListNodeSettings = BaseListNodeSettings | GeneratedModelListSettings;
 export type TextTemplateNodeSettings = BaseTextTemplateNodeSettings | GeneratedModelTextTemplateSettings;
 export type UploadedAssetNodeSettings = {
-  source: "upload";
+  source: "uploaded";
   assetName?: string;
   assetWidth?: number | null;
   assetHeight?: number | null;

@@ -122,7 +122,7 @@
   - pin the run launcher near the source output edge
 - active template nodes suppress external phantom row cards while they are in edit mode
 - multi-selection compare/download actions live in a floating selection strip near the current selection instead of the old bottom bar
-- the selection strip, queue pill, copilot pill/panel, insert picker, asset picker, and bottom-bar popovers may be restyled as overlay chrome without changing node or connection rendering
+- the selection strip, copilot pill/panel, insert picker, asset picker, and bottom-bar popovers may be restyled as overlay chrome without changing node or connection rendering
 - the canvas also includes a bottom-right copilot surface:
   - collapsed as a small fixed `Copilot` pill with the current text model label
   - expands into a session-only chat panel that grows upward/left from the pill

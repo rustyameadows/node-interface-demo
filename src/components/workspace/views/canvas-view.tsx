@@ -4686,8 +4686,6 @@ export function CanvasView({ projectId }: Props) {
       projectId={projectId}
       view="canvas"
       jobs={jobs}
-      showQueuePill
-      queuePillPlacement="top-right"
     >
       <div className={styles.page}>
         <div ref={canvasSurfaceRef} className={styles.canvasSurface}>
@@ -4826,7 +4824,7 @@ export function CanvasView({ projectId }: Props) {
                       }
                     >
                       {entry.id === "asset-uploaded"
-                        ? "Add Uploaded Asset"
+                        ? "Add Uploaded Assets"
                         : entry.id === "asset-generated"
                           ? "Add Generated Asset"
                           : `Add ${entry.label}`}
@@ -4891,8 +4889,12 @@ export function CanvasView({ projectId }: Props) {
             <section ref={assetPickerRef} className={styles.assetPickerModal}>
               <header className={styles.assetPickerHeader}>
                 <div>
-                  <strong>{assetPicker.origin === "generated" ? "Add Generated Asset" : "Add Uploaded Asset"}</strong>
-                  <span>{assetPicker.origin === "generated" ? "Spawn pointer nodes to previous generations." : "Spawn pointer nodes to previous uploads."}</span>
+                  <strong>{assetPicker.origin === "generated" ? "Add Generated Asset" : "Add Uploaded Assets"}</strong>
+                  <span>
+                    {assetPicker.origin === "generated"
+                      ? "Spawn pointer nodes to previous generations."
+                      : "Browse uploaded assets already in this project."}
+                  </span>
                 </div>
                 <button type="button" onClick={() => setAssetPicker(null)}>
                   Close
@@ -4934,7 +4936,11 @@ export function CanvasView({ projectId }: Props) {
                       )}
                       <div className={styles.assetPickerItemMeta}>
                         <strong>{getAssetPointerNodeLabel(asset, index)}</strong>
-                        <span>{asset.origin === "generated" ? `${asset.job?.providerId || "generated"} / ${asset.job?.modelId || "unknown"}` : "Uploaded asset"}</span>
+                        <span>
+                          {asset.origin === "generated"
+                            ? `${asset.job?.providerId || "generated"} / ${asset.job?.modelId || "unknown"}`
+                            : "Uploaded Asset"}
+                        </span>
                         <span>{new Date(asset.createdAt).toLocaleString()}</span>
                       </div>
                     </button>

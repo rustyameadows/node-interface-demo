@@ -238,7 +238,7 @@ export function buildNativeMenuTemplate({
             id: `canvas.add.${entry.id}`,
             label:
               entry.id === "asset-uploaded"
-                ? "Add Uploaded Asset"
+                ? "Add Uploaded Assets"
                 : entry.id === "asset-generated"
                   ? "Add Generated Asset"
                   : `Add ${entry.label}`,

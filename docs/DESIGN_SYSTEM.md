@@ -8,7 +8,7 @@ Unify the desktop app around shared foundations while letting the canvas keep it
   - light, high-clarity shell for app home, Node Library, settings, assets, queue, and asset detail
   - uses warm white surfaces with citrus/aqua accent echoes from the canvas palette
 - `canvas-overlay`
-  - dark floating chrome for the workspace menu, queue pill, insert picker, bottom tray popovers, asset picker modal, and selection action strip
+  - dark floating chrome for the workspace menu, insert picker, bottom tray popovers, asset picker modal, and selection action strip
   - keeps the overlay language aligned with the black canvas
 - `canvas-node`
   - a sibling token/recipe layer for node cards on the black canvas
@@ -22,7 +22,6 @@ Protected areas:
 Allowed wrapper changes around protected areas:
 - page framing
 - shell/menu chrome
-- queue pill
 - insert/context menus
 - compare/download selection strip
 - Node Library detail rails and canvas frame

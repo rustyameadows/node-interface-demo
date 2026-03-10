@@ -363,7 +363,7 @@ function createBaseAssetNode(overrides?: Partial<WorkflowNode>): WorkflowNode {
     nodeType: "image-gen",
     outputType: overrides?.outputType || "image",
     prompt: "",
-    settings: overrides?.settings || { source: "upload" },
+    settings: overrides?.settings || { source: "uploaded" },
     sourceAssetId: overrides?.sourceAssetId || "library-asset-ref",
     sourceAssetMimeType: overrides?.sourceAssetMimeType || "image/png",
     sourceJobId: overrides?.sourceJobId || null,
@@ -617,7 +617,7 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       const assetNode = createBaseAssetNode({
         id: "library-uploaded-asset",
         label: "Uploaded Asset",
-        settings: { source: "upload" },
+        settings: { source: "uploaded" },
         x: 260,
         y: 180,
       });

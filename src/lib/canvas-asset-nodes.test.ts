@@ -107,7 +107,7 @@ test("insertImportedAssetsIntoCanvasDocument adds asset-source nodes and connect
   assert.equal(firstAssetNode.label, "Red Fox.png");
   assert.equal(secondAssetNode.label, "Otter.png");
   assert.deepEqual(firstAssetNode.settings, {
-    source: "upload",
+    source: "uploaded",
     assetName: "Red Fox.png",
     assetWidth: null,
     assetHeight: null,
@@ -146,7 +146,7 @@ test("insertImportedAssetsIntoCanvasDocument stores uploaded asset metadata for 
 
   const uploadedNode = result.canvasDocument.workflow.nodes[0];
   assert.deepEqual(uploadedNode.settings, {
-    source: "upload",
+    source: "uploaded",
     assetName: "Living Room.png",
     assetWidth: 1600,
     assetHeight: 900,

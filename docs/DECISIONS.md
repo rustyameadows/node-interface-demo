@@ -108,7 +108,7 @@
 ## 2026-03-09 - The Design System Uses Light App Surfaces And Protected Dark Canvas Overlays
 - Decision: introduce a lightweight token/CSS-variable/component design system with two surface contexts: light `app` surfaces for non-canvas views and dark `canvas-overlay` chrome above the canvas.
 - Rationale: issue `#59` needs a coherent desktop shell without flattening the specialized node/canvas rendering language or repainting the protected black canvas.
-- Consequence: app home, Node Library wrappers, settings, assets, queue, shell menu, queue pill, insert picker, bottom-bar popovers, and selection action strip now share one tokenized system, while main canvas nodes/connections and the Node Library playground canvas internals stay visually and structurally protected.
+- Consequence: app home, Node Library wrappers, settings, assets, queue, shell menu, insert picker, bottom-bar popovers, and selection action strip now share one tokenized system, while main canvas nodes/connections and the Node Library playground canvas internals stay visually and structurally protected.
 
 ## 2026-03-09 - Canvas Nodes Move Into A Dedicated Node Design System
 - Decision: extend the design-system work into the canvas with a dedicated node-card layer instead of leaving node renderers permanently outside the system.
@@ -128,4 +128,4 @@
 ## 2026-03-09 - Uploaded Asset Nodes Carry Explicit Upload Metadata
 - Decision: treat uploaded canvas asset nodes as first-class uploaded sources with explicit node-local upload metadata instead of deriving their labels and aspect ratios from fallback provider/model fields.
 - Rationale: mac canvas uploads and menu bar imports need one durable insertion path, and uploaded assets should not inherit generated-image labeling or lose their real aspect ratio after reload.
-- Consequence: uploaded asset-source nodes now persist `source: "upload"` plus `assetName`, `assetWidth`, and `assetHeight`, native file dialog imports preserve source names through the desktop bridge, and uploaded image captions/sizing prefer upload metadata over fallback provider/model ids.
+- Consequence: uploaded asset-source nodes now persist `source: "uploaded"` plus `assetName`, `assetWidth`, and `assetHeight`, native file dialog imports preserve source names through the desktop bridge, uploaded image captions/sizing prefer uploaded metadata over fallback provider/model ids, and the renderer still accepts legacy `source: "upload"` nodes for backwards compatibility.
