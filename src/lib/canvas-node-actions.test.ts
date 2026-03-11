@@ -12,11 +12,11 @@ test("template preview actions expose edit, run, and compact controls", () => {
   });
 
   assert.deepEqual(
-    actions.map((action) => [action.id, action.tone, action.disabled ?? false]),
+    actions.map((action) => [action.id, action.slot, action.tone, action.disabled ?? false]),
     [
-      ["edit", "neutral", false],
-      ["run", "accent", false],
-      ["compact", "neutral", false],
+      ["compact", "top-left", "neutral", false],
+      ["edit", "bottom", "neutral", false],
+      ["run", "bottom", "accent", false],
     ]
   );
 });
@@ -31,10 +31,18 @@ test("image asset actions expose open, download, and debug when available", () =
     hasDebug: true,
   });
 
-  assert.deepEqual(actions.map((action) => action.id), ["open", "download", "debug"]);
+  assert.deepEqual(
+    actions.map((action) => [action.id, action.slot]),
+    [
+      ["compact", "top-left"],
+      ["open", "bottom"],
+      ["download", "bottom"],
+      ["debug", "bottom"],
+    ]
+  );
 });
 
-test("resized model actions restore default and compact modes", () => {
+test("resized model actions restore default and compact modes while keeping duplicate in the footer", () => {
   const actions = getCanvasNodeActionDescriptors({
     interactionPolicy: "model",
     persistedMode: "resized",
@@ -42,5 +50,29 @@ test("resized model actions restore default and compact modes", () => {
     isEditing: false,
   });
 
-  assert.deepEqual(actions.map((action) => action.id), ["default", "compact"]);
+  assert.deepEqual(
+    actions.map((action) => [action.id, action.slot]),
+    [
+      ["default", "top-left"],
+      ["compact", "top-left"],
+      ["duplicate", "bottom"],
+    ]
+  );
+});
+
+test("list actions place add column in the bottom rail", () => {
+  const actions = getCanvasNodeActionDescriptors({
+    interactionPolicy: "list",
+    persistedMode: "preview",
+    renderMode: "preview",
+    isEditing: false,
+  });
+
+  assert.deepEqual(
+    actions.map((action) => [action.id, action.slot]),
+    [
+      ["compact", "top-left"],
+      ["add-column", "bottom"],
+    ]
+  );
 });

@@ -7,6 +7,7 @@ import type {
 export type CanvasNodeActionId =
   | "default"
   | "compact"
+  | "add-column"
   | "duplicate"
   | "edit"
   | "run"
@@ -15,11 +16,13 @@ export type CanvasNodeActionId =
   | "debug";
 
 export type CanvasNodeActionTone = "neutral" | "accent";
+export type CanvasNodeActionSlot = "top-left" | "bottom";
 
 export type CanvasNodeActionDescriptor = {
   id: CanvasNodeActionId;
   label: string;
   tone: CanvasNodeActionTone;
+  slot: CanvasNodeActionSlot;
   disabled?: boolean;
 };
 
@@ -44,6 +47,7 @@ function getModeActionDescriptors(
       id: "default",
       label: "Default",
       tone: "neutral",
+      slot: "top-left",
     });
   }
 
@@ -52,6 +56,7 @@ function getModeActionDescriptors(
       id: "compact",
       label: "Compact",
       tone: "neutral",
+      slot: "top-left",
     });
   }
 
@@ -61,17 +66,20 @@ function getModeActionDescriptors(
 export function getCanvasNodeActionDescriptors(input: Input): CanvasNodeActionDescriptor[] {
   if (input.interactionPolicy === "image-asset" || input.interactionPolicy === "asset") {
     return [
+      ...getModeActionDescriptors(input.persistedMode, input.renderMode),
       ...(input.hasAsset
         ? [
             {
               id: "open",
               label: "Open",
               tone: "neutral",
+              slot: "bottom",
             } satisfies CanvasNodeActionDescriptor,
             {
               id: "download",
               label: "Download",
               tone: "neutral",
+              slot: "bottom",
             } satisfies CanvasNodeActionDescriptor,
           ]
         : []),
@@ -81,6 +89,7 @@ export function getCanvasNodeActionDescriptors(input: Input): CanvasNodeActionDe
               id: "debug",
               label: "Debug",
               tone: "neutral",
+              slot: "bottom",
             } satisfies CanvasNodeActionDescriptor,
           ]
         : []),
@@ -89,6 +98,7 @@ export function getCanvasNodeActionDescriptors(input: Input): CanvasNodeActionDe
 
   if (input.interactionPolicy === "text-template") {
     return [
+      ...getModeActionDescriptors(input.persistedMode, input.renderMode),
       ...(input.isEditing
         ? []
         : [
@@ -96,20 +106,41 @@ export function getCanvasNodeActionDescriptors(input: Input): CanvasNodeActionDe
               id: "edit",
               label: "Edit",
               tone: "neutral",
+              slot: "bottom",
             } satisfies CanvasNodeActionDescriptor,
           ]),
       {
         id: "run",
         label: "Run",
         tone: input.canRun ? "accent" : "neutral",
+        slot: "bottom",
         disabled: !input.canRun,
       },
-      ...getModeActionDescriptors(input.persistedMode, input.renderMode),
     ];
   }
 
   if (input.interactionPolicy === "model") {
-    return getModeActionDescriptors(input.persistedMode, input.renderMode);
+    return [
+      ...getModeActionDescriptors(input.persistedMode, input.renderMode),
+      {
+        id: "duplicate",
+        label: "Duplicate",
+        tone: "neutral",
+        slot: "bottom",
+      },
+    ];
+  }
+
+  if (input.interactionPolicy === "list") {
+    return [
+      ...getModeActionDescriptors(input.persistedMode, input.renderMode),
+      {
+        id: "add-column",
+        label: "Add column",
+        tone: "neutral",
+        slot: "bottom",
+      },
+    ];
   }
 
   return getModeActionDescriptors(input.persistedMode, input.renderMode);

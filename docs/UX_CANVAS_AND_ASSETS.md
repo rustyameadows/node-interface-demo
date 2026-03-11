@@ -93,10 +93,14 @@
   - list: single-select keeps the spreadsheet look and reveals edit affordances in place
   - template: single-select stays in preview; `Edit` or double-click enters the larger editor
 - active nodes use external chrome slots instead of in-card overlays:
-  - centered floating title rails for text, list, model, and template nodes
-  - model title rails include a citrus model-chip under the editable node title instead of plain metadata text
-  - a top-right utility slot for node-specific controls like `Drag me` and `Add column`
-  - footer caption/action stacks outside the node bounds so controls do not shift content
+  - centered floating title rails for all expanded nodes
+  - the top-left rail is reserved for display-mode pills like `Compact` and `Default`
+  - the centered title rail always includes a shared mono chip under the editable node title:
+    - model uses the current model label in citrus
+    - text note, list, and template use their node-type label in the text accent
+    - uploaded and generated asset nodes use source-specific labels with output-semantic chip colors
+  - the top-right rail is reserved for `Drag me` plus non-interactive status pills
+  - bottom action rails hold all remaining interactive node controls so body layouts stay stable
 - uploaded image asset nodes behave as first-class uploaded sources:
   - active title rails use uploaded-source labeling like `Uploaded Asset`, not fallback provider/model labels
   - default sizing and locked-aspect resizing use persisted upload width/height metadata when available
@@ -112,7 +116,7 @@
   - editable cell grid with tight spreadsheet density
   - fixed narrow row number rail
   - draft entry row at the end while active
-  - top-right external add-column action
+  - add-column action in the shared bottom rail
   - resizable column dividers
   - row/column remove controls as overlay affordances that do not consume layout space
 - template mode includes:

@@ -4,6 +4,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -24,6 +25,7 @@ import {
   getListNodeSettings,
   getTemplateVariableDisplayLabel,
 } from "@/lib/list-template";
+import { getCanvasNodeTitleChip, type CanvasNodeTitleChip } from "@/lib/canvas-node-title-chip";
 import type { TextTemplatePreview } from "@/lib/list-template";
 import type { ModelParameterDefinition } from "@/lib/model-parameters";
 import { getModelPromptSurfaceState } from "@/lib/model-node-editor";
@@ -174,17 +176,21 @@ function renderParameterField(
 function NodeTitleRail({
   node,
   activeEditor,
-  secondaryLabel,
+  titleChip,
   onLabelChange,
   onCommitTextEdits,
 }: {
   node: CanvasRenderNode;
   activeEditor: ActiveCanvasNodeEditorState | null;
-  secondaryLabel: string;
+  titleChip: CanvasNodeTitleChip | null;
   onLabelChange: (value: string) => void;
   onCommitTextEdits: () => void;
 }) {
-  const showModelPill = node.kind === "model" && secondaryLabel.trim().length > 0;
+  const titleChipStyle = titleChip
+    ? ({
+        "--title-meta-pill-background": titleChip.color,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <div className={styles.titleRail} data-node-drag-handle="true">
@@ -200,14 +206,14 @@ function NodeTitleRail({
         ) : (
           <span className={styles.titleLabel}>{node.label}</span>
         )}
-        {showModelPill ? (
+        {titleChip ? (
           <span className={styles.titleMetaPillRail}>
-            <span className={styles.titleMetaPill}>
-              <span className={styles.titleMetaPillText}>{secondaryLabel}</span>
+            <span className={styles.titleMetaPill} style={titleChipStyle}>
+              <span className={styles.titleMetaPillText}>{titleChip.label}</span>
             </span>
           </span>
         ) : (
-          <span className={styles.titleMeta}>{secondaryLabel}</span>
+          <span className={styles.titleMeta}>{node.kind}</span>
         )}
       </div>
     </div>
@@ -328,11 +334,10 @@ function NodeFooterRail({
 function NodeFrame({
   node,
   activeEditor,
-  titleLabel,
+  titleChip,
   actionDescriptors,
   actionHandlers,
   hideTitleRail = false,
-  leftUtility,
   topUtility,
   footerCaption,
   footerAlign = "center",
@@ -343,11 +348,10 @@ function NodeFrame({
 }: {
   node: CanvasRenderNode;
   activeEditor: ActiveCanvasNodeEditorState | null;
-  titleLabel: string;
+  titleChip: CanvasNodeTitleChip | null;
   actionDescriptors: ReturnType<typeof getCanvasNodeActionDescriptors>;
   actionHandlers: NodeActionHandlerMap;
   hideTitleRail?: boolean;
-  leftUtility?: ReactNode;
   topUtility?: ReactNode;
   footerCaption?: ReactNode;
   footerAlign?: NodeFooterAlign;
@@ -358,7 +362,12 @@ function NodeFrame({
 }) {
   const showTitleRail = node.presentation.showTitleRail && !hideTitleRail;
   const showDragPill = node.presentation.useRailDragHandle;
-  const leftUtilities = leftUtility ? <NodeTopUtilities>{leftUtility}</NodeTopUtilities> : null;
+  const topLeftActionDescriptors = actionDescriptors.filter((descriptor) => descriptor.slot === "top-left");
+  const bottomActionDescriptors = actionDescriptors.filter((descriptor) => descriptor.slot === "bottom");
+  const leftUtilities =
+    topLeftActionDescriptors.length > 0
+      ? <NodeTopUtilities><NodeUtilityPillRail descriptors={topLeftActionDescriptors} handlers={actionHandlers} /></NodeTopUtilities>
+      : null;
   const topUtilities = (topUtility || showDragPill) ? (
     <NodeTopUtilities>
       {topUtility}
@@ -383,7 +392,7 @@ function NodeFrame({
               <NodeTitleRail
                 node={node}
                 activeEditor={activeEditor}
-                secondaryLabel={titleLabel}
+                titleChip={titleChip}
                 onLabelChange={onLabelChange}
                 onCommitTextEdits={onCommitTextEdits}
               />
@@ -395,7 +404,7 @@ function NodeFrame({
       {children ? <div className={styles.nodeViewport}>{children}</div> : null}
       <NodeFooterRail
         caption={footerCaption}
-        actionDescriptors={node.presentation.showActionRail ? actionDescriptors : []}
+        actionDescriptors={node.presentation.showActionRail ? bottomActionDescriptors : []}
         actionHandlers={actionHandlers}
         align={footerAlign}
         spacing={footerSpacing}
@@ -1025,12 +1034,13 @@ export function CanvasNodeContent({
         }
       : null);
 
-  const secondaryLabel =
-    node.kind === "model"
-      ? editor?.selectedModel?.displayName || node.displayModelName || node.modelId
-      : node.kind === "asset-source"
-        ? node.displaySourceLabel || node.displayModelName || node.outputType
-        : node.kind;
+  const titleChip = getCanvasNodeTitleChip({
+    kind: node.kind,
+    assetOrigin: node.assetOrigin,
+    outputType: node.outputType,
+    displayModelName: node.kind === "model" ? (editor?.selectedModel?.displayName || node.displayModelName || null) : null,
+    modelId: node.modelId,
+  });
 
   const actionDescriptors = getCanvasNodeActionDescriptors({
     interactionPolicy: node.presentation.interactionPolicy,
@@ -1067,6 +1077,9 @@ export function CanvasNodeContent({
         onDownloadAssets([editor.selectedSingleImageAssetId]);
       }
     },
+    "add-column": () => {
+      onAddListColumn();
+    },
     debug: () => {
       if (editor?.selectedNodeSourceJobId) {
         onOpenQueueInspect(editor.selectedNodeSourceJobId);
@@ -1077,35 +1090,11 @@ export function CanvasNodeContent({
     },
   };
 
-  const utilityActionDescriptors =
-    node.kind === "model"
-      ? actionDescriptors.filter((descriptor) => descriptor.id === "compact" || descriptor.id === "default")
-      : [];
-  const footerActionDescriptors =
-    node.kind === "model"
-      ? ([
-          {
-            id: "duplicate",
-            label: "Duplicate",
-            tone: "neutral",
-          } satisfies CanvasNodeActionDescriptor,
-        ] as CanvasNodeActionDescriptor[])
-      : actionDescriptors;
-
   const topUtility =
     isImageAssetNode && node.processingState ? (
       <span className={styles.statusBubble} data-state={node.processingState}>
         {node.processingState}
       </span>
-    ) : node.kind === "list" && editor ? (
-      <button
-        type="button"
-        className={styles.listUtilityButton}
-        onPointerDown={stopPointer}
-        onClick={onAddListColumn}
-      >
-        Add column
-      </button>
     ) : null;
 
   const footerCaption = null;
@@ -1114,10 +1103,9 @@ export function CanvasNodeContent({
     <NodeFrame
       node={node}
       activeEditor={editor}
-      titleLabel={secondaryLabel}
-      actionDescriptors={footerActionDescriptors}
+      titleChip={titleChip}
+      actionDescriptors={actionDescriptors}
       actionHandlers={actionHandlers}
-      leftUtility={utilityActionDescriptors.length > 0 ? <NodeUtilityPillRail descriptors={utilityActionDescriptors} handlers={actionHandlers} /> : null}
       topUtility={topUtility}
       footerCaption={footerCaption}
       footerAlign={isImageAssetNode ? "start" : "center"}

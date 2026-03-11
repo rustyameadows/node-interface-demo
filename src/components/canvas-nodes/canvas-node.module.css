@@ -415,7 +415,7 @@
   height: fit-content;
   max-width: 100%;
   padding: 4px 8px 3px;
-  background: #d8ff3e;
+  background: var(--title-meta-pill-background, #d8ff3e);
   color: var(--node-surface-ink);
   flex-shrink: 0;
 }
