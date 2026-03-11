@@ -46,7 +46,6 @@ export type NodeCatalogPromptHarnessSummary = {
 };
 
 export type NodePlaygroundFixture = {
-  focusNodeId: string;
   nodes: WorkflowNode[];
   viewport?: {
     x: number;
@@ -364,14 +363,14 @@ function createBaseAssetNode(overrides?: Partial<WorkflowNode>): WorkflowNode {
     outputType: overrides?.outputType || "image",
     prompt: "",
     settings: overrides?.settings || { source: "uploaded" },
-    sourceAssetId: overrides?.sourceAssetId || "library-asset-ref",
-    sourceAssetMimeType: overrides?.sourceAssetMimeType || "image/png",
+    sourceAssetId: overrides?.sourceAssetId || null,
+    sourceAssetMimeType: overrides?.sourceAssetMimeType || null,
     sourceJobId: overrides?.sourceJobId || null,
     sourceOutputIndex: overrides?.sourceOutputIndex ?? null,
     processingState: overrides?.processingState || null,
-    promptSourceNodeId: null,
-    upstreamNodeIds: [],
-    upstreamAssetIds: [],
+    promptSourceNodeId: overrides?.promptSourceNodeId || null,
+    upstreamNodeIds: overrides?.upstreamNodeIds || [],
+    upstreamAssetIds: overrides?.upstreamAssetIds || [],
     x: overrides?.x ?? 280,
     y: overrides?.y ?? 180,
     displayMode: overrides?.displayMode || "preview",
@@ -395,24 +394,16 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       "Model nodes are the execution engines in the graph. They can take prompt notes or assets as inputs, expose provider-specific settings, and spawn generated child nodes on run.",
     settingsSummary: ["Provider + model", "Prompt text", "Provider parameters", "Output target"],
     buildFixture(providerModels) {
-      const promptNode = createBaseTextNoteNode({
-        id: "library-model-note",
-        label: "Prompt Note",
-        prompt: "Illustrate a cheerful river otter in a clean editorial style.",
-        x: 140,
-        y: 220,
-      });
       const modelNode = createBaseModelNode(providerModels, {
         id: "library-model-primary",
         label: "Image Generator",
-        promptSourceNodeId: promptNode.id,
-        x: 500,
+        prompt: "Illustrate a cheerful river otter in a clean editorial style.",
+        x: 380,
         y: 200,
       });
 
       return {
-        focusNodeId: modelNode.id,
-        nodes: [promptNode, modelNode],
+        nodes: [modelNode],
         viewport: { x: -40, y: 24, zoom: 0.9 },
       };
     },
@@ -449,7 +440,6 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
-        focusNodeId: noteNode.id,
         nodes: [noteNode],
         viewport: { x: 110, y: 44, zoom: 1.05 },
       };
@@ -520,7 +510,6 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
-        focusNodeId: listNode.id,
         nodes: [listNode],
         viewport: { x: -10, y: 20, zoom: 0.78 },
       };
@@ -593,7 +582,6 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
-        focusNodeId: templateNode.id,
         nodes: [listNode, templateNode],
         viewport: { x: -24, y: 20, zoom: 0.8 },
       };
@@ -623,7 +611,6 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
-        focusNodeId: assetNode.id,
         nodes: [assetNode],
         viewport: { x: 56, y: 42, zoom: 1.02 },
       };
@@ -662,12 +649,13 @@ const baseDefinitions: CatalogBaseDefinition[] = [
         },
         sourceJobId: "library-job-1",
         sourceOutputIndex: 0,
+        upstreamNodeIds: [modelNode.id],
+        upstreamAssetIds: [`node:${modelNode.id}`],
         x: 520,
         y: 180,
       });
 
       return {
-        focusNodeId: assetNode.id,
         nodes: [modelNode, assetNode],
         viewport: { x: 8, y: 30, zoom: 0.9 },
       };

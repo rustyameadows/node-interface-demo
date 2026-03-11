@@ -4,6 +4,7 @@ import type { ProviderModel } from "@/components/workspace/types";
 import {
   getInsertableNodeCatalogEntries,
   getModelCatalogVariants,
+  getNodeCatalogEntry,
   getNodeCatalogEntries,
   getSpawnableNodeCatalogSummaries,
 } from "@/lib/node-catalog";
@@ -237,4 +238,31 @@ test("spawnable prompt summaries are derived from the node catalog", () => {
   );
   assert.ok(summaries.every((summary) => summary.promptSummary.length > 0));
   assert.ok(summaries.every((summary) => summary.payloadSummary.length > 0));
+});
+
+test("model playground fixture is self-contained and no longer boots from a forced focus node", () => {
+  const modelEntry = getNodeCatalogEntry("model", sampleProviders);
+
+  assert.ok(modelEntry);
+  const fixture = modelEntry.buildPlaygroundFixture(sampleProviders);
+  assert.equal("focusNodeId" in fixture, false);
+  assert.equal(fixture.nodes.length, 1);
+  assert.equal(fixture.nodes[0]?.kind, "model");
+  assert.equal(fixture.nodes[0]?.promptSourceNodeId, null);
+  assert.ok(fixture.nodes[0]?.prompt.length);
+});
+
+test("generated asset playground fixture preserves source-model lineage", () => {
+  const generatedAssetEntry = getNodeCatalogEntry("asset-generated", sampleProviders);
+
+  assert.ok(generatedAssetEntry);
+  const fixture = generatedAssetEntry.buildPlaygroundFixture(sampleProviders);
+  const modelNode = fixture.nodes.find((node) => node.kind === "model");
+  const assetNode = fixture.nodes.find((node) => node.kind === "asset-source");
+
+  assert.ok(modelNode);
+  assert.ok(assetNode);
+  assert.deepEqual(assetNode.upstreamNodeIds, [modelNode.id]);
+  assert.deepEqual(assetNode.upstreamAssetIds, [`node:${modelNode.id}`]);
+  assert.equal(assetNode.sourceAssetId, null);
 });

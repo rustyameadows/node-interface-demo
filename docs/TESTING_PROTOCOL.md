@@ -51,6 +51,11 @@ What it does:
 - opens the Node Library from app home
 - verifies model, list, and template library detail playgrounds render
 - verifies the shared searchable model selector updates the model playground
+- verifies Node Library playgrounds boot neutral with no selected node/rails
+- verifies the model detail route opens its standalone model fixture in the full shell while still loading unfocused
+- verifies the model detail fixture has no upstream prompt note
+- verifies uploaded/generated asset detail fixtures render placeholder previews instead of broken images
+- verifies generated asset detail keeps the visible model-to-asset connection
 - creates a project from the native `File > New Project` menu
 - triggers one native `Canvas > Add Model Node` command on canvas
 - verifies the inserted model opens directly in the full response-settings shell

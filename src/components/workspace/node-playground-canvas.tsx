@@ -24,6 +24,7 @@ import { canConnectCanvasNodes } from "@/lib/canvas-connection-rules";
 import { resolveCanvasNodePresentation } from "@/lib/canvas-node-presentation";
 import { getGeneratedDescriptorDefaultLabel } from "@/lib/generated-text-output";
 import { getModelCatalogVariantById, getModelCatalogVariants, type NodePlaygroundFixture } from "@/lib/node-catalog";
+import { getNodePlaygroundPreviewImageUrl } from "@/lib/node-playground-preview";
 import {
   buildTextTemplatePreview,
   getGeneratedModelNodeSource,
@@ -49,6 +50,7 @@ type Props = {
   providerModels: ProviderModel[];
   selectedModelVariantId?: string | null;
   onModelVariantChange?: (variantId: string) => void;
+  initialFullModelNodeId?: string | null;
 };
 
 function cloneFixtureDoc(fixture: NodePlaygroundFixture): CanvasDocument {
@@ -294,21 +296,22 @@ export function NodePlaygroundCanvas({
   providerModels,
   selectedModelVariantId,
   onModelVariantChange,
+  initialFullModelNodeId = null,
 }: Props) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [canvasDoc, setCanvasDoc] = useState<CanvasDocument>(() => cloneFixtureDoc(fixture));
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>(() => [fixture.focusNodeId]);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedConnection, setSelectedConnection] = useState<CanvasConnection | null>(null);
   const [activeFullNodeId, setActiveFullNodeId] = useState<string | null>(null);
-  const [pinnedModelFullNodeId, setPinnedModelFullNodeId] = useState<string | null>(null);
+  const [pinnedModelFullNodeId, setPinnedModelFullNodeId] = useState<string | null>(initialFullModelNodeId);
 
   useEffect(() => {
     setCanvasDoc(cloneFixtureDoc(fixture));
-    setSelectedNodeIds([fixture.focusNodeId]);
+    setSelectedNodeIds([]);
     setSelectedConnection(null);
     setActiveFullNodeId(null);
-    setPinnedModelFullNodeId(null);
-  }, [fixture]);
+    setPinnedModelFullNodeId(initialFullModelNodeId);
+  }, [fixture, initialFullModelNodeId]);
 
   const modelCatalogVariants = useMemo(() => getModelCatalogVariants(providerModels), [providerModels]);
 
@@ -353,24 +356,26 @@ export function NodePlaygroundCanvas({
     if (!variant) {
       return;
     }
+    const providerModel = providerModels.find(
+      (model) => model.providerId === variant.providerId && model.modelId === variant.modelId
+    );
+    if (!providerModel) {
+      return;
+    }
 
     setCanvasDoc((current) => {
       const nextNodes = current.workflow.nodes.map((node) => {
         if (node.kind !== "model") {
           return node;
         }
-        const nextOutputType = resolveOutputType(node.outputType, getModelSupportedOutputs(selectedModel));
+        const nextOutputType = resolveOutputType(node.outputType, getModelSupportedOutputs(providerModel));
         return {
           ...node,
-          providerId: variant.providerId,
-          modelId: variant.modelId,
+          providerId: providerModel.providerId,
+          modelId: providerModel.modelId,
           outputType: nextOutputType,
           nodeType: nodeTypeFromOutput(nextOutputType),
-          settings: resolveModelSettings(
-            providerModels.find((model) => model.providerId === variant.providerId && model.modelId === variant.modelId),
-            node.settings,
-            "generate"
-          ),
+          settings: resolveModelSettings(providerModel, node.settings, "generate"),
         };
       });
 
@@ -381,7 +386,7 @@ export function NodePlaygroundCanvas({
         },
       };
     });
-  }, [providerModels, selectedModel, selectedModelVariantId]);
+  }, [providerModels, selectedModelVariantId]);
 
   const updateViewport = useCallback((nextViewport: CanvasDocument["canvasViewport"]) => {
     setCanvasDoc((current) => ({
@@ -706,7 +711,7 @@ export function NodePlaygroundCanvas({
             .map((inputNode) => outputSemanticType(inputNode)),
         ],
         outputSemanticType: outputSemanticType(node),
-        previewImageUrl: null,
+        previewImageUrl: getNodePlaygroundPreviewImageUrl(node),
         hasStartedJob: node.kind === "model" ? true : undefined,
         listPreviewColumns: listSettings?.columns.slice(0, 3).map((column) => column.label) || [],
         listPreviewRows:

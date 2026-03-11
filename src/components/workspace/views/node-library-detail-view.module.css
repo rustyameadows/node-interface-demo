@@ -42,8 +42,7 @@
 
 .titleBlock p,
 .section p,
-.bulletList li,
-.playgroundHeader p {
+.bulletList li {
   margin: 0;
   color: var(--ds-text-secondary);
 }
@@ -68,6 +67,30 @@
 
 .pill {
   white-space: nowrap;
+}
+
+.ioSpecList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+}
+
+.ioSpecCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-4);
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-border-subtle);
+  background: color-mix(in srgb, var(--ds-surface-raised) 88%, white 12%);
+}
+
+.ioSpecLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ds-text-muted);
 }
 
 .bulletList {

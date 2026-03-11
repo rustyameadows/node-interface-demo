@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Panel, SectionHeader, ToolbarGroup } from "@/components/ui";
+import { Badge, Button, Panel, ToolbarGroup } from "@/components/ui";
 import { SearchableModelSelect } from "@/components/searchable-model-select";
 import { getProviders } from "@/components/workspace/client-api";
 import { NodePlaygroundCanvas } from "@/components/workspace/node-playground-canvas";
@@ -61,6 +61,8 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
   }
 
   const fixture = entry.buildPlaygroundFixture(providers);
+  const initialFullModelNodeId =
+    entry.id === "model" ? fixture.nodes.find((node) => node.kind === "model")?.id || null : null;
 
   return (
     <main {...buildUiDataAttributes("app", "comfortable")} className={styles.page}>
@@ -92,13 +94,15 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
 
         <section className={styles.section}>
           <h2>I/O Contract</h2>
-          <div className={styles.pillRow}>
-            <Badge variant="neutral" className={styles.pill}>
-              {entry.inputSummary}
-            </Badge>
-            <Badge variant="neutral" className={styles.pill}>
-              {entry.outputSummary}
-            </Badge>
+          <div className={styles.ioSpecList}>
+            <div className={styles.ioSpecCard}>
+              <div className={styles.ioSpecLabel}>Input</div>
+              <p>{entry.inputSummary}</p>
+            </div>
+            <div className={styles.ioSpecCard}>
+              <div className={styles.ioSpecLabel}>Output</div>
+              <p>{entry.outputSummary}</p>
+            </div>
           </div>
         </section>
 
@@ -150,12 +154,6 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
       </Panel>
 
       <Panel variant="panel" className={styles.playgroundCard}>
-        <SectionHeader
-          eyebrow="Protected Canvas"
-          title="Interactive Playground"
-          description="The right side uses the actual canvas node renderers and editing surfaces."
-        />
-
         <div className={styles.canvasFrame}>
           <NodePlaygroundCanvas
             key={`${entry.id}-${playgroundSeed}`}
@@ -163,6 +161,7 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
             providerModels={providers}
             selectedModelVariantId={selectedModelVariantId}
             onModelVariantChange={setSelectedModelVariantId}
+            initialFullModelNodeId={initialFullModelNodeId}
           />
         </div>
       </Panel>

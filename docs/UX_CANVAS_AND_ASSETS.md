@@ -6,7 +6,7 @@
 - `/nodes`
   - app-level Node Library gallery sourced from the canonical node catalog
 - `/nodes/$nodeId`
-  - node detail page with left-rail metadata and an interactive playground using the real node renderer
+  - node detail page with left-rail metadata and a neutral playground using the real node renderer
 - `/settings/app`
   - app-wide provider credentials and readiness
 - `/projects/$projectId/canvas`
@@ -79,6 +79,13 @@
 - the same provider/model catalog also powers the shared searchable model picker used in:
   - full model nodes
   - node-library model detail/playground
+- Node Library detail surfaces mirror the real canvas renderer with demo-safe fixtures:
+  - playgrounds load with no selected node and no rails showing by default
+  - the model detail route is the exception: its standalone model fixture opens in the full shell on first load while remaining unfocused
+  - the left rail shows wrapped `Input` and `Output` contract cards instead of clipped badge pills
+  - model detail uses a standalone model fixture rather than a fake upstream prompt note
+  - uploaded and generated image asset demos use a local placeholder preview when no real asset file exists
+  - generated asset demos keep their visible source-model connection line
 - provider-model variants stay visible even when blocked for the current credentials or provider project
 - variant statuses render as:
   - `Ready`
@@ -237,7 +244,7 @@ Controls:
 - app home is reachable from the in-canvas `Menu` pill, app settings, and the native macOS `Project` menu
 - Node Library is reachable from app home, the in-canvas `Menu` pill, and the native macOS app/project menus
 - App Settings shows per-provider readiness; the Gemini row includes per-project access summary plus a manual `Refresh Access` action
-- Node Library detail keeps the actual playground canvas black and protected while the surrounding rails and wrappers follow the light app surface system
+- Node Library detail keeps the actual playground canvas black while the surrounding rails and wrappers follow the light app surface system
 - browser uploads are replaced by native file dialogs
 - native file dialog imports and mac menu bar imports both create uploaded asset-source nodes through the same shared insertion path
 - when the mac menu bar adds assets to the project that is already open on canvas, the live canvas refreshes in place immediately; the user should not need to leave and re-enter the canvas route
