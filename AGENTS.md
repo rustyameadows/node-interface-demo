@@ -35,6 +35,14 @@ Build a local-first Next.js app for node-based media generation and post-process
 - Favor explicit typed contracts between canvas nodes, jobs, assets, and providers.
 - Preserve deterministic behavior for project switching, job state transitions, and asset filtering.
 
+## Paper Safety Rules
+- Never delete anything from Paper.
+- Never delete, remove, or replace an artboard in Paper, even if the agent created it earlier in the session.
+- Treat all existing Paper artboards and nodes as user-owned unless the user explicitly asks to edit that exact artifact.
+- When the user asks for a new Paper artifact, create a new artboard from scratch instead of duplicating or modifying an existing one.
+- When a Paper design needs revision, duplicate, rename, or create a new artboard/node instead of deleting an existing one.
+- If an incorrect Paper artifact is created, leave it in place and add the corrected version separately.
+
 ## Documentation Governance
 - Docs are code. Any behavior/interface/schema change must include doc updates in the same PR.
 - Add dated entries to [docs/DECISIONS.md](docs/DECISIONS.md) for non-trivial product or architecture decisions.

@@ -33,28 +33,25 @@
   position: fixed;
   z-index: 42;
   display: flex;
-  padding: var(--ds-space-4);
-  border: 1px solid var(--ds-border-contrast);
-  border-radius: var(--ds-radius-lg);
-  background:
-    linear-gradient(180deg, var(--ds-state-accent-bg) 0%, transparent 100%),
-    var(--ds-surface-overlay);
-  color: var(--ds-text-primary);
-  box-shadow: var(--ds-shadow-overlay);
-  backdrop-filter: blur(var(--ds-popover-blur));
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 0.34);
+  background: #d2ff00;
+  color: #000000;
+  box-shadow: 0 28px 72px rgb(0 0 0 / 0.36);
+  backdrop-filter: blur(16px);
   transform: translate(10px, 10px);
 }
 
 .insertMenuColumns {
   display: flex;
   align-items: flex-start;
-  gap: var(--ds-space-4);
+  gap: 12px;
 }
 
 .insertMenuPrimaryColumn {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-2);
+  gap: 8px;
   width: 208px;
   min-width: 208px;
 }
@@ -62,57 +59,79 @@
 .insertMenuSecondaryColumn {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-3);
+  gap: 8px;
   width: 292px;
   min-width: 292px;
 }
 
 .insertMenuTitle,
-.insertMenuSecondaryTitle,
-.insertMenuProviderLabel {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+.insertMenuSecondaryTitle {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 12px;
+  text-align: center;
   text-transform: uppercase;
-  color: var(--ds-text-muted);
+  color: #000000;
+}
+
+.insertMenuProviderLabel {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 12px;
+  text-align: center;
+  text-transform: uppercase;
+  color: #9baab5;
 }
 
 .insertMenu button {
-  min-height: var(--ds-control-height-sm);
-  border: 1px solid var(--ds-control-border);
-  background: var(--ds-control-bg);
-  color: var(--ds-text-primary);
-  border-radius: var(--canvas-corner-radius);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.08);
+  color: #f7fafc;
+  border-radius: 0;
   font: inherit;
-  font-size: var(--ds-font-size-xs);
-  font-weight: 600;
-  padding: 0 var(--ds-space-3);
+  text-shadow: none;
   text-align: left;
   cursor: pointer;
   transition:
-    border-color var(--ds-motion-micro) var(--ds-ease-standard),
     background var(--ds-motion-micro) var(--ds-ease-standard),
-    transform var(--ds-motion-micro) var(--ds-ease-standard);
+    border-color var(--ds-motion-micro) var(--ds-ease-standard);
 }
 
-.insertMenu button:hover {
-  background:
-    linear-gradient(135deg, var(--ds-state-info-bg) 0%, transparent 100%),
-    var(--ds-control-bg-hover);
-  border-color: var(--ds-border-contrast);
-  transform: translateY(-1px);
+.insertMenu button:hover,
+.insertMenu button:focus-visible {
+  background: rgb(255 255 255 / 0.12);
+  border-color: rgb(255 255 255 / 0.2);
+}
+
+.insertMenuPrimaryList,
+.insertMenuSubmenu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 4px;
+  background: #000000;
 }
 
 .insertMenuSubmenuGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-2);
+  gap: 8px;
+}
+
+.insertMenuPrimaryButton {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 11.84px;
+  line-height: 16px;
 }
 
 .insertMenuRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--ds-space-2);
+  gap: 8px;
 }
 
 .insertMenuAction {
@@ -121,37 +140,63 @@
 
 .insertMenuDisclosure {
   min-width: 40px;
+  width: 40px;
+  padding: 0;
   text-align: center !important;
-}
-
-.insertMenuSubmenu {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ds-space-2);
-  width: 100%;
-  padding: var(--ds-space-3);
-  border-radius: var(--ds-radius-lg);
-  background: var(--ds-surface-panel-muted);
 }
 
 .insertMenuProviderGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-2);
+  gap: 8px;
+  width: 100%;
 }
 
 .insertMenuVariantButton {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ds-space-3);
+  gap: 12px;
+  padding: 6px 12px;
+  min-height: 26px;
 }
 
-.insertMenuVariantButton span:last-child {
-  font-size: 0.68rem;
-  color: var(--ds-text-muted);
+.insertMenuVariantLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #f7fafc;
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.insertMenuVariantStatus {
+  flex: 0 0 auto;
+  font-family: var(--font-family-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-size: 8px;
+  line-height: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.insertMenuStatusReady {
+  color: #5ed53f;
+}
+
+.insertMenuStatusSoon {
+  color: #d2ff00;
+}
+
+.insertMenuStatusMissing {
+  color: #ff3b30;
+}
+
+.insertMenuStatusWarn {
+  color: #f5c451;
+}
+
+.insertMenuStatusMuted {
+  color: #9baab5;
 }
 
 .assetPickerBackdrop {
