@@ -46,6 +46,11 @@ export type NodeCatalogPromptHarnessSummary = {
 };
 
 export type NodePlaygroundFixture = {
+  primaryNodeId: string;
+  resizePresetSize: {
+    width: number;
+    height: number;
+  };
   nodes: WorkflowNode[];
   viewport?: {
     x: number;
@@ -389,7 +394,7 @@ const baseDefinitions: CatalogBaseDefinition[] = [
     insertableOnCanvas: true,
     insertContexts: ["canvas"],
     hasVariants: true,
-    supportedDisplayModes: ["preview", "compact", "full"],
+    supportedDisplayModes: ["preview", "compact", "full", "resized"],
     detailCopy:
       "Model nodes are the execution engines in the graph. They can take prompt notes or assets as inputs, expose provider-specific settings, and spawn generated child nodes on run.",
     settingsSummary: ["Provider + model", "Prompt text", "Provider parameters", "Output target"],
@@ -403,6 +408,8 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
+        primaryNodeId: modelNode.id,
+        resizePresetSize: { width: 640, height: 420 },
         nodes: [modelNode],
         viewport: { x: -40, y: 24, zoom: 0.9 },
       };
@@ -440,6 +447,8 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
+        primaryNodeId: noteNode.id,
+        resizePresetSize: { width: 420, height: 280 },
         nodes: [noteNode],
         viewport: { x: 110, y: 44, zoom: 1.05 },
       };
@@ -510,6 +519,8 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
+        primaryNodeId: listNode.id,
+        resizePresetSize: { width: 760, height: 460 },
         nodes: [listNode],
         viewport: { x: -10, y: 20, zoom: 0.78 },
       };
@@ -582,6 +593,8 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
+        primaryNodeId: templateNode.id,
+        resizePresetSize: { width: 640, height: 420 },
         nodes: [listNode, templateNode],
         viewport: { x: -24, y: 20, zoom: 0.8 },
       };
@@ -611,6 +624,8 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
+        primaryNodeId: assetNode.id,
+        resizePresetSize: { width: 320, height: 320 },
         nodes: [assetNode],
         viewport: { x: 56, y: 42, zoom: 1.02 },
       };
@@ -656,6 +671,8 @@ const baseDefinitions: CatalogBaseDefinition[] = [
       });
 
       return {
+        primaryNodeId: assetNode.id,
+        resizePresetSize: { width: 320, height: 320 },
         nodes: [modelNode, assetNode],
         viewport: { x: 8, y: 30, zoom: 0.9 },
       };

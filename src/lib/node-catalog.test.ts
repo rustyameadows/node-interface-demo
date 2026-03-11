@@ -246,10 +246,13 @@ test("model playground fixture is self-contained and no longer boots from a forc
   assert.ok(modelEntry);
   const fixture = modelEntry.buildPlaygroundFixture(sampleProviders);
   assert.equal("focusNodeId" in fixture, false);
+  assert.equal(fixture.primaryNodeId, "library-model-primary");
+  assert.deepEqual(fixture.resizePresetSize, { width: 640, height: 420 });
   assert.equal(fixture.nodes.length, 1);
   assert.equal(fixture.nodes[0]?.kind, "model");
   assert.equal(fixture.nodes[0]?.promptSourceNodeId, null);
   assert.ok(fixture.nodes[0]?.prompt.length);
+  assert.deepEqual(modelEntry.supportedDisplayModes, ["preview", "compact", "full", "resized"]);
 });
 
 test("generated asset playground fixture preserves source-model lineage", () => {
@@ -262,6 +265,8 @@ test("generated asset playground fixture preserves source-model lineage", () => 
 
   assert.ok(modelNode);
   assert.ok(assetNode);
+  assert.equal(fixture.primaryNodeId, assetNode.id);
+  assert.deepEqual(fixture.resizePresetSize, { width: 320, height: 320 });
   assert.deepEqual(assetNode.upstreamNodeIds, [modelNode.id]);
   assert.deepEqual(assetNode.upstreamAssetIds, [`node:${modelNode.id}`]);
   assert.equal(assetNode.sourceAssetId, null);

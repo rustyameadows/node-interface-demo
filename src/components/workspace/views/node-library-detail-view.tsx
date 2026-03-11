@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Panel, ToolbarGroup } from "@/components/ui";
+import { Button, Panel, ToolbarGroup } from "@/components/ui";
 import { SearchableModelSelect } from "@/components/searchable-model-select";
 import { getProviders } from "@/components/workspace/client-api";
 import { NodePlaygroundCanvas } from "@/components/workspace/node-playground-canvas";
@@ -61,8 +61,7 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
   }
 
   const fixture = entry.buildPlaygroundFixture(providers);
-  const initialFullModelNodeId =
-    entry.id === "model" ? fixture.nodes.find((node) => node.kind === "model")?.id || null : null;
+  const initialFullNodeId = entry.id === "model" ? fixture.primaryNodeId : null;
 
   return (
     <main {...buildUiDataAttributes("app", "comfortable")} className={styles.page}>
@@ -103,17 +102,6 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
               <div className={styles.ioSpecLabel}>Output</div>
               <p>{entry.outputSummary}</p>
             </div>
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <h2>Display Modes</h2>
-          <div className={styles.pillRow}>
-            {entry.supportedDisplayModes.map((mode) => (
-              <Badge key={`${entry.id}-${mode}`} variant="info" className={styles.pill}>
-                {mode}
-              </Badge>
-            ))}
           </div>
         </section>
 
@@ -161,7 +149,7 @@ export function NodeLibraryDetailView({ nodeId }: Props) {
             providerModels={providers}
             selectedModelVariantId={selectedModelVariantId}
             onModelVariantChange={setSelectedModelVariantId}
-            initialFullModelNodeId={initialFullModelNodeId}
+            initialFullNodeId={initialFullNodeId}
           />
         </div>
       </Panel>

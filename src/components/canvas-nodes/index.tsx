@@ -73,6 +73,7 @@ type Props = {
   node: CanvasRenderNode;
   activeEditor: ActiveCanvasNodeEditorState | null;
   passiveModelEditor?: CanvasModelEditorState | null;
+  passiveTemplateEditor?: boolean;
   pickerDismissKey?: string | number | null;
   onSetDisplayMode: (mode: "preview" | "compact") => void;
   onEnterEditMode: () => void;
@@ -843,15 +844,19 @@ function TemplatePreviewBody({
 }
 
 function TemplateEditorBody({
+  node,
   activeEditor,
+  interactive,
   onPromptChange,
   onCommitTextEdits,
 }: {
-  activeEditor: ActiveCanvasNodeEditorState;
+  node: CanvasRenderNode;
+  activeEditor?: ActiveCanvasNodeEditorState | null;
+  interactive: boolean;
   onPromptChange: (value: string) => void;
   onCommitTextEdits: () => void;
 }) {
-  const availableColumns = activeEditor.selectedTemplateListNode
+  const availableColumns = activeEditor?.selectedTemplateListNode
     ? activeEditor.selectedTemplatePreview?.columns || []
     : [];
   const variableChips =
@@ -860,25 +865,43 @@ function TemplateEditorBody({
           key: column.id,
           label: column.label,
         }))
-      : (activeEditor.selectedTemplatePreview?.tokens || []).map((token) => ({
-          key: token.key,
-          label: token.label,
-        }));
-  const unresolvedTokens = (activeEditor.selectedTemplatePreview?.unresolvedTokens || []).map((token) => ({
+      : (activeEditor?.selectedTemplatePreview?.tokens || node.templateTokens || []).map((token, index) =>
+          typeof token === "string"
+            ? {
+                key: `${token}:${index}`,
+                label: token,
+              }
+            : {
+                key: token.key,
+                label: token.label,
+              }
+        );
+  const unresolvedTokens = (activeEditor?.selectedTemplatePreview?.unresolvedTokens || []).map((token) => ({
     key: token.key,
     label: token.label,
   }));
   const statusMessage =
     unresolvedTokens.length > 0
       ? "Add columns for the missing variables."
-      : activeEditor.selectedTemplatePreview?.disabledReason || activeEditor.selectedTemplatePreview?.readyMessage || "Ready";
+      : activeEditor?.selectedTemplatePreview?.disabledReason ||
+        activeEditor?.selectedTemplatePreview?.readyMessage ||
+        node.templateStatusMessage ||
+        "Ready";
+  const rowSummary = activeEditor
+    ? `${activeEditor.selectedTemplatePreview?.nonBlankRowCount || 0} rows`
+    : node.templateStatusMessage && node.templateStatusMessage !== statusMessage
+      ? node.templateStatusMessage
+      : null;
 
   return (
     <div className={styles.templateEditorShell}>
       <TemplateVariablePillList
         tokens={variableChips}
-        interactive
+        interactive={interactive}
         onSelect={(token) => {
+          if (!interactive || !activeEditor) {
+            return;
+          }
           const insertText = buildTemplateVariableInsertText(token.label);
           if (!insertText) {
             return;
@@ -886,18 +909,24 @@ function TemplateEditorBody({
           onPromptChange(`${activeEditor.selectedNode.prompt}${insertText}`);
         }}
       />
-      <textarea
-        className={styles.templateEditor}
-        value={activeEditor.selectedNode.prompt}
-        onChange={(event) => onPromptChange(event.target.value)}
-        onBlur={onCommitTextEdits}
-        onPointerDown={stopPointer}
-        placeholder="Write template with [[variables]]"
-      />
+      {interactive && activeEditor ? (
+        <textarea
+          className={styles.templateEditor}
+          value={activeEditor.selectedNode.prompt}
+          onChange={(event) => onPromptChange(event.target.value)}
+          onBlur={onCommitTextEdits}
+          onPointerDown={stopPointer}
+          placeholder="Write template with [[variables]]"
+        />
+      ) : (
+        <div className={cx(styles.templateEditor, styles.templateEditorReadOnly)}>
+          {node.prompt.trim() || "Write template with [[variables]]"}
+        </div>
+      )}
       <div className={styles.templateStatusArea}>
         <div className={styles.templateStatusStrip}>
           <span>{statusMessage}</span>
-          <span>{`${activeEditor.selectedTemplatePreview?.nonBlankRowCount || 0} rows`}</span>
+          {rowSummary ? <span>{rowSummary}</span> : null}
         </div>
         {unresolvedTokens.length > 0 ? (
           <TemplateVariablePillList
@@ -1043,6 +1072,7 @@ export function CanvasNodeContent({
   node,
   activeEditor,
   passiveModelEditor = null,
+  passiveTemplateEditor = false,
   pickerDismissKey,
   onSetDisplayMode,
   onEnterEditMode,
@@ -1221,7 +1251,17 @@ export function CanvasNodeContent({
     return frame(
       node.presentation.isEditing && editor ? (
         <TemplateEditorBody
+          node={node}
           activeEditor={editor}
+          interactive
+          onPromptChange={onPromptChange}
+          onCommitTextEdits={onCommitTextEdits}
+        />
+      ) : passiveTemplateEditor && node.presentation.renderMode === "full" ? (
+        <TemplateEditorBody
+          node={node}
+          activeEditor={null}
+          interactive={false}
           onPromptChange={onPromptChange}
           onCommitTextEdits={onCommitTextEdits}
         />

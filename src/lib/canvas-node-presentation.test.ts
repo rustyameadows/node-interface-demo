@@ -149,6 +149,27 @@ test("keeps templates in preview on single selection and only enters full mode w
   assert.equal(editingPresentation.isEditing, true);
 });
 
+test("allows a library-only forced full render mode without exposing active rails", () => {
+  const presentation = resolveCanvasNodePresentation({
+    node: {
+      kind: "list",
+      outputType: "text",
+      displayMode: "preview",
+      size: null,
+    },
+    activeNodeId: null,
+    fullNodeId: null,
+    nodeId: "node-1",
+    forcedRenderMode: "full",
+  });
+
+  assert.equal(presentation.persistedMode, "preview");
+  assert.equal(presentation.renderMode, "full");
+  assert.equal(presentation.showTitleRail, false);
+  assert.equal(presentation.showActionRail, false);
+  assert.deepEqual(presentation.size, { width: 840, height: 500 });
+});
+
 test("clamps resized list nodes to their minimum inline spreadsheet size", () => {
   const presentation = resolveCanvasNodePresentation({
     node: {

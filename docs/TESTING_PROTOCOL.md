@@ -53,6 +53,10 @@ What it does:
 - verifies the shared searchable model selector updates the model playground
 - verifies Node Library playgrounds boot neutral with no selected node/rails
 - verifies the model detail route opens its standalone model fixture in the full shell while still loading unfocused
+- verifies the left rail no longer shows a `Display Modes` section
+- verifies the bottom canvas overlay row exposes `Compact`, `Preview`, `Edit`, and `Resize`
+- verifies the bottom row changes the primary demo node mode without auto-selecting it
+- verifies mode switches keep the primary demo node centered in the playground
 - verifies the model detail fixture has no upstream prompt note
 - verifies uploaded/generated asset detail fixtures render placeholder previews instead of broken images
 - verifies generated asset detail keeps the visible model-to-asset connection

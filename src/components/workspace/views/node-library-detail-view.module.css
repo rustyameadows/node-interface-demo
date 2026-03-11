@@ -59,16 +59,6 @@
   color: var(--ds-text-primary);
 }
 
-.pillRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ds-space-2);
-}
-
-.pill {
-  white-space: nowrap;
-}
-
 .ioSpecList {
   display: flex;
   flex-direction: column;

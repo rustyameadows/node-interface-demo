@@ -1012,6 +1012,15 @@
   line-height: 1.48;
 }
 
+.templateEditorReadOnly {
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--node-surface-ink);
+  background: color-mix(in srgb, var(--node-surface-paper) 92%, white 8%);
+  border: 1px solid var(--node-border-soft);
+  padding: var(--ds-space-3);
+}
+
 .templateStatusArea {
   display: flex;
   flex-direction: column;

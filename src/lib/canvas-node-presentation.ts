@@ -262,6 +262,7 @@ export function resolveCanvasNodePresentation(input: {
   fullNodeId: string | null;
   nodeId: string;
   aspectRatio?: number;
+  forcedRenderMode?: CanvasNodeRenderMode | null;
 }): ResolvedCanvasNodePresentation {
   const persistedMode = normalizeWorkflowNodeDisplayMode(input.node.displayMode);
   const interactionPolicy = getCanvasNodeInteractionPolicy(input.node);
@@ -271,7 +272,11 @@ export function resolveCanvasNodePresentation(input: {
     input.fullNodeId === input.nodeId && interactionPolicy === "model" && persistedMode !== "resized";
   let renderMode: CanvasNodeRenderMode = persistedMode;
 
-  if (isModelFullOpen) {
+  if (input.forcedRenderMode === "full") {
+    renderMode = "full";
+  } else if (input.forcedRenderMode === "resized") {
+    renderMode = "resized";
+  } else if (isModelFullOpen) {
     renderMode = "full";
   } else if (interactionPolicy === "text-template" && isEditing) {
     renderMode = persistedMode === "resized" ? "resized" : "full";
