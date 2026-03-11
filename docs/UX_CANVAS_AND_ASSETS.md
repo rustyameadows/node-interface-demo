@@ -61,6 +61,8 @@
   - undo canvas change
   - redo canvas change
 - native canvas insertions land at the current viewport center with a small stagger and use the same save/selection path as the insert popup
+- insert-picker node creation centers the new node shell on the requested canvas point instead of dropping its top-left corner there
+- focusing or selecting a node promotes it to the front of the canvas stack and that frontmost order persists after the node is deselected or the canvas reloads
 - the same provider/model catalog also powers the shared searchable model picker used in:
   - full model nodes
   - node-library model detail/playground

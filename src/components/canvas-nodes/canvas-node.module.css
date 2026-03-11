@@ -189,7 +189,6 @@
 .nodeResizedMode {
   padding: 0;
   cursor: default;
-  z-index: 9;
 }
 
 .nodeWithImage.nodeFullMode,

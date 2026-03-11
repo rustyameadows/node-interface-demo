@@ -5,7 +5,7 @@ import type {
   UploadedAssetNodeSettings,
   WorkflowNode,
 } from "@/components/workspace/types";
-import { createCanvasLocalId, nextCanvasNodePosition } from "@/lib/canvas-document";
+import { createCanvasLocalId, nextCanvasNodePosition, nextCanvasNodeZIndex } from "@/lib/canvas-document";
 import { isRunnableTextModel } from "@/lib/provider-model-helpers";
 
 const CANVAS_CENTER_STAGGER_X = 44;
@@ -113,6 +113,7 @@ export function createUploadedAssetSourceNode(
   options: {
     defaultProvider: Pick<ProviderModel, "providerId" | "modelId">;
     position: { x: number; y: number };
+    zIndex: number;
     label?: string | null;
   }
 ): WorkflowNode {
@@ -137,6 +138,7 @@ export function createUploadedAssetSourceNode(
     upstreamAssetIds: [],
     x: Math.round(options.position.x),
     y: Math.round(options.position.y),
+    zIndex: options.zIndex,
     displayMode: "preview",
     size: null,
   };
@@ -205,6 +207,7 @@ export function insertImportedAssetsIntoCanvasDocument(
   }
 
   const basePosition = nextCanvasNodePosition(canvasDocument.workflow.nodes.length, options.position);
+  const baseZIndex = nextCanvasNodeZIndex(canvasDocument.workflow.nodes);
   const sourceNodes = assets.map((asset, index) => {
     const explicitLabel = options.assetLabels?.[index] || "";
     return createUploadedAssetSourceNode(asset, index, {
@@ -213,6 +216,7 @@ export function insertImportedAssetsIntoCanvasDocument(
         x: basePosition.x + index * 34,
         y: basePosition.y + index * 26,
       },
+      zIndex: baseZIndex + index,
       label: explicitLabel,
     });
   });

@@ -106,6 +106,8 @@ import {
   insertImportedAssetsIntoCanvasDocument,
   outputTypeFromAssetType,
 } from "@/lib/canvas-asset-nodes";
+import { centerCanvasInsertPosition } from "@/lib/canvas-layout";
+import { nextCanvasNodeZIndex } from "@/lib/canvas-document";
 import {
   buildProviderDebugRequest,
   getFallbackProviderModel,
@@ -158,6 +160,10 @@ const NODE_FOCUS_MAX_ZOOM = 1.08;
 const NODE_FOCUS_ANIMATION_DURATION_MS = 165;
 const NODE_FOCUS_SETTLE_MAX_FRAMES = 18;
 const NODE_FOCUS_SETTLE_STABLE_FRAMES = 2;
+const INSERT_MENU_NODE_PREVIEW_SIZE = {
+  width: 212,
+  height: 72,
+} as const;
 
 type Props = {
   projectId: string;
@@ -182,6 +188,10 @@ type AssetPickerState = {
 type PreviewFrameSummary = NonNullable<Job["latestPreviewFrames"]>[number];
 type CanvasSemanticType = WorkflowNode["outputType"] | "function" | "citrus";
 const canvasSemanticTypeOrder: CanvasSemanticType[] = ["text", "image", "video", "function", "citrus"];
+type PendingCenteredInsert = {
+  nodeId: string;
+  anchor: { x: number; y: number };
+};
 
 type CanvasHistoryStacks = {
   undo: CanvasHistoryPatch<CanvasConnection>[];
@@ -219,6 +229,10 @@ function getNodeSemanticOutputType(node: WorkflowNode): CanvasSemanticType {
 
 function capabilityEnabled(value: unknown) {
   return value === true || value === "true" || value === 1;
+}
+
+function getCenteredInsertPosition(position: { x: number; y: number }) {
+  return centerCanvasInsertPosition(position, INSERT_MENU_NODE_PREVIEW_SIZE);
 }
 
 function insertMenuVariantStatusClassName(status: NodeCatalogVariant["status"]) {
@@ -287,6 +301,33 @@ function nextCanvasNodePosition(nodeCount: number, position?: { x: number; y: nu
     x: Math.round(position?.x ?? (120 + (nodeCount % 4) * 260)),
     y: Math.round(position?.y ?? (120 + Math.floor(nodeCount / 4) * 160)),
   };
+}
+
+function promoteCanvasNodesToFront(nodes: WorkflowNode[], nodeIds: string[]) {
+  if (nodeIds.length === 0) {
+    return null;
+  }
+
+  const uniqueNodeIds = [...new Set(nodeIds)].filter((nodeId) => nodes.some((node) => node.id === nodeId));
+  if (uniqueNodeIds.length === 0) {
+    return null;
+  }
+
+  let nextZIndex = nextCanvasNodeZIndex(nodes);
+  let didChange = false;
+  const nextNodes = nodes.map((node) => {
+    if (!uniqueNodeIds.includes(node.id)) {
+      return node;
+    }
+
+    didChange = true;
+    return {
+      ...node,
+      zIndex: nextZIndex++,
+    };
+  });
+
+  return didChange ? nextNodes : null;
 }
 
 function applyCanvasNodeConnection(
@@ -524,6 +565,7 @@ function createGeneratedOutputNode(
   modelNode: WorkflowNode,
   job: Job,
   sourceNodeId: string,
+  zIndex: number,
   outputIndex: number,
   visualIndexOrPosition?: number | { x: number; y: number } | null,
   positionMaybe?: { x: number; y: number } | null
@@ -562,6 +604,7 @@ function createGeneratedOutputNode(
     upstreamAssetIds: [`node:${sourceNodeId}`],
     x: safePosition.x,
     y: safePosition.y,
+    zIndex,
     displayMode: "preview",
     size: null,
   };
@@ -586,6 +629,7 @@ function createGeneratedTextOutputNode(
   listNodeId: string,
   batchId: string,
   row: ReturnType<typeof buildTextTemplatePreview>["rows"][number],
+  zIndex: number,
   visualIndex: number,
   generatedIndex: number
 ): WorkflowNode {
@@ -615,6 +659,7 @@ function createGeneratedTextOutputNode(
     upstreamAssetIds: [`node:${templateNode.id}`],
     x: Math.round(templateNode.x + generatedTextNodeOffsetX),
     y: Math.round(templateNode.y + visualIndex * generatedTextNodeOffsetY),
+    zIndex,
     displayMode: "preview",
     size: null,
   };
@@ -625,6 +670,7 @@ function createGeneratedModelPlaceholderNode(
   job: Job,
   sourceNodeId: string,
   target: GeneratedTextPlaceholderTarget,
+  zIndex: number,
   visualIndexOrPosition: number | { x: number; y: number } | null | undefined,
   positionMaybe?: { x: number; y: number } | null
 ): WorkflowNode {
@@ -686,6 +732,7 @@ function createGeneratedModelPlaceholderNode(
     modelNodeId: sourceNodeId,
     label: descriptor.label,
     position: safePosition,
+    zIndex,
     processingState: job.state === "queued" || job.state === "running" || job.state === "failed" ? job.state : null,
     descriptor,
   });
@@ -742,6 +789,7 @@ export function CanvasView({ projectId }: Props) {
   const [selectedConnection, setSelectedConnection] = useState<CanvasConnection | null>(null);
   const [activeFullNodeId, setActiveFullNodeId] = useState<string | null>(null);
   const [pendingViewportFocusNodeId, setPendingViewportFocusNodeId] = useState<string | null>(null);
+  const [pendingCenteredInsert, setPendingCenteredInsert] = useState<PendingCenteredInsert | null>(null);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotDraft, setCopilotDraft] = useState("");
   const [copilotMessages, setCopilotMessages] = useState<CanvasCopilotMessage[]>([]);
@@ -1530,37 +1578,118 @@ export function CanvasView({ projectId }: Props) {
 
   const selectSingleNode = useCallback((nodeId: string | null) => {
     commitPendingCoalescedHistory();
-    setTrackedSelectedConnection(null);
-    setTrackedSelectedNodeIds(nodeId ? [nodeId] : []);
+    if (!nodeId) {
+      setTrackedSelectedConnection(null);
+      setTrackedSelectedNodeIds([]);
+      setActiveFullNodeId(null);
+      return;
+    }
+
+    const didPromote = runUserCanvasMutation((currentState) => {
+      const nextNodes = promoteCanvasNodesToFront(currentState.canvasDoc.workflow.nodes, [nodeId]);
+      if (!nextNodes) {
+        return null;
+      }
+
+      return {
+        canvasDoc: {
+          ...currentState.canvasDoc,
+          workflow: {
+            nodes: nextNodes,
+          },
+        },
+        selectedNodeIds: [nodeId],
+        selectedConnection: null,
+      };
+    });
+
+    if (!didPromote) {
+      setTrackedSelectedConnection(null);
+      setTrackedSelectedNodeIds([nodeId]);
+    }
     setActiveFullNodeId((current) => (current && current === nodeId ? current : null));
-  }, [commitPendingCoalescedHistory, setTrackedSelectedConnection, setTrackedSelectedNodeIds]);
+  }, [commitPendingCoalescedHistory, runUserCanvasMutation, setTrackedSelectedConnection, setTrackedSelectedNodeIds]);
 
   const toggleNodeSelection = useCallback((nodeId: string) => {
     commitPendingCoalescedHistory();
+    const isSelected = selectedNodeIdsRef.current.includes(nodeId);
+    const nextSelectedNodeIds = isSelected
+      ? selectedNodeIdsRef.current.filter((id) => id !== nodeId)
+      : [...selectedNodeIdsRef.current, nodeId];
+
+    if (!isSelected) {
+      const didPromote = runUserCanvasMutation((currentState) => {
+        const nextNodes = promoteCanvasNodesToFront(currentState.canvasDoc.workflow.nodes, [nodeId]);
+        if (!nextNodes) {
+          return null;
+        }
+
+        return {
+          canvasDoc: {
+            ...currentState.canvasDoc,
+            workflow: {
+              nodes: nextNodes,
+            },
+          },
+          selectedNodeIds: nextSelectedNodeIds,
+          selectedConnection: null,
+        };
+      });
+
+      if (didPromote) {
+        setActiveFullNodeId(null);
+        return;
+      }
+    }
+
     setTrackedSelectedConnection(null);
-    setTrackedSelectedNodeIds(
-      selectedNodeIdsRef.current.includes(nodeId)
-        ? selectedNodeIdsRef.current.filter((id) => id !== nodeId)
-        : [...selectedNodeIdsRef.current, nodeId]
-    );
+    setTrackedSelectedNodeIds(nextSelectedNodeIds);
     setActiveFullNodeId(null);
-  }, [commitPendingCoalescedHistory, setTrackedSelectedConnection, setTrackedSelectedNodeIds]);
+  }, [commitPendingCoalescedHistory, runUserCanvasMutation, setTrackedSelectedConnection, setTrackedSelectedNodeIds]);
 
   const addNodesToSelection = useCallback((nodeIds: string[]) => {
     commitPendingCoalescedHistory();
-    setTrackedSelectedConnection(null);
     const seen = new Set(selectedNodeIdsRef.current);
     const merged = [...selectedNodeIdsRef.current];
+    const newlyAddedNodeIds: string[] = [];
     for (const nodeId of nodeIds) {
       if (seen.has(nodeId)) {
         continue;
       }
       seen.add(nodeId);
       merged.push(nodeId);
+      newlyAddedNodeIds.push(nodeId);
     }
+
+    if (newlyAddedNodeIds.length > 0) {
+      const didPromote = runUserCanvasMutation((currentState) => {
+        const nextNodes = promoteCanvasNodesToFront(currentState.canvasDoc.workflow.nodes, newlyAddedNodeIds);
+        if (!nextNodes) {
+          return null;
+        }
+
+        return {
+          canvasDoc: {
+            ...currentState.canvasDoc,
+            workflow: {
+              nodes: nextNodes,
+            },
+          },
+          selectedNodeIds: merged,
+          selectedConnection: null,
+        };
+      });
+
+      if (didPromote) {
+        setActiveFullNodeId(null);
+        return;
+      }
+    }
+
+    setTrackedSelectedConnection(null);
     setTrackedSelectedNodeIds(merged);
     setActiveFullNodeId(null);
-  }, [commitPendingCoalescedHistory, setTrackedSelectedConnection, setTrackedSelectedNodeIds]);
+  }, [commitPendingCoalescedHistory, runUserCanvasMutation, setTrackedSelectedConnection, setTrackedSelectedNodeIds]);
 
   const selectCanvasConnection = useCallback(
     (nextConnection: CanvasConnection | null) => {
@@ -2010,6 +2139,7 @@ export function CanvasView({ projectId }: Props) {
               modelNode,
               job,
               sourceNodeId,
+              pendingNode?.zIndex ?? nextCanvasNodeZIndex(workingNodes),
               outputIndex,
               visualIndex,
               buildGeneratedImageOutputPosition(modelSpawnAnchor!, visualIndex)
@@ -2058,6 +2188,7 @@ export function CanvasView({ projectId }: Props) {
               modelNode,
               job,
               sourceNodeId,
+              nextCanvasNodeZIndex(workingNodes),
               outputIndex,
               visualIndex,
               buildGeneratedImageOutputPosition(modelSpawnAnchor!, visualIndex)
@@ -2181,6 +2312,7 @@ export function CanvasView({ projectId }: Props) {
               : isCopilotJob && copilotAnchor
                 ? buildCopilotGeneratedNodePosition(copilotAnchor, descriptor.descriptorIndex)
                 : placement!.position,
+            zIndex: pendingNode?.zIndex ?? nextCanvasNodeZIndex(workingNodes),
             processingState: null,
             descriptor,
             connectToSourceModel: shouldConnectGeneratedDescriptorToSourceModel({
@@ -2330,6 +2462,7 @@ export function CanvasView({ projectId }: Props) {
           job,
           sourceNodeId!,
           placeholderTarget,
+          nextCanvasNodeZIndex(workingNodes),
           visualIndex,
           outputNodePosition
         );
@@ -2463,7 +2596,12 @@ export function CanvasView({ projectId }: Props) {
   const addModelNode = useCallback(
     (
       position?: { x: number; y: number },
-      options?: { connectFromNodeId?: string; providerId?: WorkflowNode["providerId"]; modelId?: string }
+      options?: {
+        connectFromNodeId?: string;
+        providerId?: WorkflowNode["providerId"];
+        modelId?: string;
+        centerOnPosition?: { x: number; y: number };
+      }
     ) => {
       const chosenProvider =
         (options?.providerId && options?.modelId
@@ -2473,15 +2611,17 @@ export function CanvasView({ projectId }: Props) {
             )
           : null) || getFallbackProviderModel(providers);
 
-      runUserCanvasMutation((currentState) => {
+      const nodeId = uid();
+      const didMutate = runUserCanvasMutation((currentState) => {
         const prev = currentState.canvasDoc;
         const outputType = resolveOutputType(undefined, getModelSupportedOutputs(chosenProvider));
         const nextPosition = nextCanvasNodePosition(prev.workflow.nodes.length, position);
+        const zIndex = nextCanvasNodeZIndex(prev.workflow.nodes);
         const connectFromNode = options?.connectFromNodeId
           ? prev.workflow.nodes.find((candidate) => candidate.id === options.connectFromNodeId) || null
           : null;
         const node: WorkflowNode = {
-          id: uid(),
+          id: nodeId,
           label: `Node ${prev.workflow.nodes.length + 1}`,
           kind: "model",
           providerId: chosenProvider.providerId,
@@ -2504,6 +2644,7 @@ export function CanvasView({ projectId }: Props) {
               : [],
           x: nextPosition.x,
           y: nextPosition.y,
+          zIndex,
           displayMode: "preview",
           size: null,
         };
@@ -2521,6 +2662,12 @@ export function CanvasView({ projectId }: Props) {
           selectedConnection: null,
         };
       });
+      if (didMutate && options?.centerOnPosition) {
+        setPendingCenteredInsert({
+          nodeId,
+          anchor: options.centerOnPosition,
+        });
+      }
       setInsertMenu(null);
       setActiveFullNodeId(null);
     },
@@ -2528,14 +2675,19 @@ export function CanvasView({ projectId }: Props) {
   );
 
   const addTextNote = useCallback(
-    (position?: { x: number; y: number }, options?: { connectToModelNodeId?: string }) => {
+    (
+      position?: { x: number; y: number },
+      options?: { connectToModelNodeId?: string; centerOnPosition?: { x: number; y: number } }
+    ) => {
       const defaultProvider = getFallbackProviderModel(providers);
 
-      runUserCanvasMutation((currentState) => {
+      const nodeId = uid();
+      const didMutate = runUserCanvasMutation((currentState) => {
         const prev = currentState.canvasDoc;
         const nextPosition = nextCanvasNodePosition(prev.workflow.nodes.length, position);
+        const zIndex = nextCanvasNodeZIndex(prev.workflow.nodes);
         const node: WorkflowNode = {
-          id: uid(),
+          id: nodeId,
           label: `Note ${prev.workflow.nodes.filter((item) => item.kind === "text-note").length + 1}`,
           kind: "text-note",
           providerId: defaultProvider.providerId,
@@ -2554,6 +2706,7 @@ export function CanvasView({ projectId }: Props) {
           upstreamAssetIds: [],
           x: nextPosition.x,
           y: nextPosition.y,
+          zIndex,
           displayMode: "preview",
           size: null,
         };
@@ -2582,6 +2735,12 @@ export function CanvasView({ projectId }: Props) {
           selectedConnection: null,
         };
       });
+      if (didMutate && options?.centerOnPosition) {
+        setPendingCenteredInsert({
+          nodeId,
+          anchor: options.centerOnPosition,
+        });
+      }
       setInsertMenu(null);
       setActiveFullNodeId(null);
     },
@@ -2589,14 +2748,19 @@ export function CanvasView({ projectId }: Props) {
   );
 
   const addListNode = useCallback(
-    (position?: { x: number; y: number }, options?: { connectToTemplateNodeId?: string }) => {
+    (
+      position?: { x: number; y: number },
+      options?: { connectToTemplateNodeId?: string; centerOnPosition?: { x: number; y: number } }
+    ) => {
       const defaultProvider = getFallbackProviderModel(providers);
 
-      runUserCanvasMutation((currentState) => {
+      const nodeId = uid();
+      const didMutate = runUserCanvasMutation((currentState) => {
         const prev = currentState.canvasDoc;
         const nextPosition = nextCanvasNodePosition(prev.workflow.nodes.length, position);
+        const zIndex = nextCanvasNodeZIndex(prev.workflow.nodes);
         const node: WorkflowNode = {
-          id: uid(),
+          id: nodeId,
           label: `List ${prev.workflow.nodes.filter((item) => item.kind === "list").length + 1}`,
           kind: "list",
           providerId: defaultProvider.providerId,
@@ -2615,6 +2779,7 @@ export function CanvasView({ projectId }: Props) {
           upstreamAssetIds: [],
           x: nextPosition.x,
           y: nextPosition.y,
+          zIndex,
           displayMode: "preview",
           size: null,
         };
@@ -2644,6 +2809,12 @@ export function CanvasView({ projectId }: Props) {
           selectedConnection: null,
         };
       });
+      if (didMutate && options?.centerOnPosition) {
+        setPendingCenteredInsert({
+          nodeId,
+          anchor: options.centerOnPosition,
+        });
+      }
       setInsertMenu(null);
       setActiveFullNodeId(null);
     },
@@ -2651,18 +2822,23 @@ export function CanvasView({ projectId }: Props) {
   );
 
   const addTextTemplateNode = useCallback(
-    (position?: { x: number; y: number }, options?: { connectFromListNodeId?: string }) => {
+    (
+      position?: { x: number; y: number },
+      options?: { connectFromListNodeId?: string; centerOnPosition?: { x: number; y: number } }
+    ) => {
       const defaultProvider = getFallbackProviderModel(providers);
 
-      runUserCanvasMutation((currentState) => {
+      const nodeId = uid();
+      const didMutate = runUserCanvasMutation((currentState) => {
         const prev = currentState.canvasDoc;
         const nextPosition = nextCanvasNodePosition(prev.workflow.nodes.length, position);
+        const zIndex = nextCanvasNodeZIndex(prev.workflow.nodes);
         const connectFromNode =
           options?.connectFromListNodeId
             ? prev.workflow.nodes.find((candidate) => candidate.id === options.connectFromListNodeId && candidate.kind === "list") || null
             : null;
         const node: WorkflowNode = {
-          id: uid(),
+          id: nodeId,
           label: `Template ${prev.workflow.nodes.filter((item) => item.kind === "text-template").length + 1}`,
           kind: "text-template",
           providerId: defaultProvider.providerId,
@@ -2681,6 +2857,7 @@ export function CanvasView({ projectId }: Props) {
           upstreamAssetIds: connectFromNode ? buildAssetRefsFromNodes([connectFromNode.id], prev.workflow.nodes) : [],
           x: nextPosition.x,
           y: nextPosition.y,
+          zIndex,
           displayMode: "preview",
           size: null,
         };
@@ -2698,6 +2875,12 @@ export function CanvasView({ projectId }: Props) {
           selectedConnection: null,
         };
       });
+      if (didMutate && options?.centerOnPosition) {
+        setPendingCenteredInsert({
+          nodeId,
+          anchor: options.centerOnPosition,
+        });
+      }
       setInsertMenu(null);
       setActiveFullNodeId(null);
     },
@@ -2768,35 +2951,42 @@ export function CanvasView({ projectId }: Props) {
       }
 
       if (entryId === "model") {
-        addModelNode(position, {
+        addModelNode(getCenteredInsertPosition(position), {
           providerId: options?.providerId,
           modelId: options?.modelId,
+          centerOnPosition: position,
         });
         return;
       }
 
       if (entryId === "text-note") {
         addTextNote(
-          position,
-          menuState.mode === "model-input" && menuState.connectToNodeId
-            ? { connectToModelNodeId: menuState.connectToNodeId }
-            : undefined
+          getCenteredInsertPosition(position),
+          {
+            connectToModelNodeId:
+              menuState.mode === "model-input" && menuState.connectToNodeId ? menuState.connectToNodeId : undefined,
+            centerOnPosition: position,
+          }
         );
         return;
       }
 
       if (entryId === "list") {
         addListNode(
-          position,
-          menuState.mode === "template-input" && menuState.connectToNodeId
-            ? { connectToTemplateNodeId: menuState.connectToNodeId }
-            : undefined
+          getCenteredInsertPosition(position),
+          {
+            connectToTemplateNodeId:
+              menuState.mode === "template-input" && menuState.connectToNodeId ? menuState.connectToNodeId : undefined,
+            centerOnPosition: position,
+          }
         );
         return;
       }
 
       if (entryId === "text-template") {
-        addTextTemplateNode(position);
+        addTextTemplateNode(getCenteredInsertPosition(position), {
+          centerOnPosition: position,
+        });
         return;
       }
 
@@ -3290,6 +3480,7 @@ export function CanvasView({ projectId }: Props) {
         const prev = currentState.canvasDoc;
         const baseX = position?.x ?? Math.round(120 + (prev.workflow.nodes.length % 4) * 260);
         const baseY = position?.y ?? Math.round(120 + Math.floor(prev.workflow.nodes.length / 4) * 170);
+        const baseZIndex = nextCanvasNodeZIndex(prev.workflow.nodes);
 
         const sourceNodes = assets.map((asset, index) => {
           if (!asset.jobId && asset.origin !== "generated") {
@@ -3299,6 +3490,7 @@ export function CanvasView({ projectId }: Props) {
                 x: baseX + index * 34,
                 y: baseY + index * 26,
               },
+              zIndex: baseZIndex + index,
               label: getAssetPointerNodeLabel(asset, index),
             });
           }
@@ -3333,6 +3525,7 @@ export function CanvasView({ projectId }: Props) {
             upstreamAssetIds: [],
             x: Math.round(baseX + index * 34),
             y: Math.round(baseY + index * 26),
+            zIndex: baseZIndex + index,
             displayMode: "preview" as const,
             size: null,
           };
@@ -3541,6 +3734,7 @@ export function CanvasView({ projectId }: Props) {
           label: sourceNode.label.endsWith(" Copy") ? sourceNode.label : `${sourceNode.label} Copy`,
           x: Math.round(sourceNode.x + 44),
           y: Math.round(sourceNode.y + 36),
+          zIndex: nextCanvasNodeZIndex(prev.workflow.nodes),
         };
 
         return {
@@ -3865,6 +4059,71 @@ export function CanvasView({ projectId }: Props) {
   );
 
   useEffect(() => {
+    if (!pendingCenteredInsert) {
+      return;
+    }
+
+    const targetNode = canvasDoc.workflow.nodes.find((node) => node.id === pendingCenteredInsert.nodeId);
+    const surfaceElement = canvasSurfaceRef.current;
+    if (!targetNode || !surfaceElement) {
+      return;
+    }
+
+    const nodeElement = surfaceElement.querySelector<HTMLElement>(`[data-node-id="${pendingCenteredInsert.nodeId}"]`);
+    if (!nodeElement || nodeElement.offsetWidth === 0 || nodeElement.offsetHeight === 0) {
+      return;
+    }
+
+    const nextPosition = centerCanvasInsertPosition(pendingCenteredInsert.anchor, {
+      width: nodeElement.offsetWidth,
+      height: nodeElement.offsetHeight,
+    });
+
+    if (targetNode.x === nextPosition.x && targetNode.y === nextPosition.y) {
+      setPendingCenteredInsert(null);
+      return;
+    }
+
+    runUserCanvasMutation(
+      (currentState) => {
+        const prev = currentState.canvasDoc;
+        let didChange = false;
+        const nextNodes = prev.workflow.nodes.map((node) => {
+          if (node.id !== pendingCenteredInsert.nodeId) {
+            return node;
+          }
+
+          if (node.x === nextPosition.x && node.y === nextPosition.y) {
+            return node;
+          }
+
+          didChange = true;
+          return {
+            ...node,
+            x: nextPosition.x,
+            y: nextPosition.y,
+          };
+        });
+
+        if (!didChange) {
+          return null;
+        }
+
+        return {
+          canvasDoc: {
+            ...prev,
+            workflow: {
+              nodes: nextNodes,
+            },
+          },
+        };
+      },
+      { persist: true }
+    );
+    setPendingCenteredInsert(null);
+  }, [canvasDoc.workflow.nodes, pendingCenteredInsert, runUserCanvasMutation]);
+
+  useEffect(() => {
     if (!pendingViewportFocusNodeId) {
       return;
     }
@@ -4016,6 +4275,7 @@ export function CanvasView({ projectId }: Props) {
           modelNode,
           job,
           sourceNodeId,
+          nextCanvasNodeZIndex(prev.workflow.nodes) + outputOffset,
           outputIndex,
           visualIndex,
           buildGeneratedImageOutputPosition(modelSpawnAnchor, visualIndex)
@@ -4071,6 +4331,7 @@ export function CanvasView({ projectId }: Props) {
               job,
               sourceNodeId,
               target,
+              nextCanvasNodeZIndex(prev.workflow.nodes),
               visualIndex,
               outputNodePosition
             ),
@@ -4279,6 +4540,7 @@ export function CanvasView({ projectId }: Props) {
             listNode.id,
             batchId,
             row,
+            nextCanvasNodeZIndex(prev.workflow.nodes) + outputOffset,
             existingGeneratedCount + outputOffset,
             outputOffset
           )

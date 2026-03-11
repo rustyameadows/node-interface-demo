@@ -95,6 +95,7 @@ export function normalizeCanvasNode(raw: Record<string, unknown>, index: number)
     settings: normalizedSettings,
     x: typeof raw.x === "number" ? raw.x : 120 + (index % 4) * 260,
     y: typeof raw.y === "number" ? raw.y : 120 + Math.floor(index / 4) * 160,
+    zIndex: typeof raw.zIndex === "number" && Number.isFinite(raw.zIndex) ? Math.trunc(raw.zIndex) : index + 1,
     displayMode: normalizeWorkflowNodeDisplayMode(raw.displayMode),
     size: normalizeWorkflowNodeSize(raw.size),
   };
@@ -105,6 +106,10 @@ export function nextCanvasNodePosition(nodeCount: number, position?: { x: number
     x: Math.round(position?.x ?? (120 + (nodeCount % 4) * 260)),
     y: Math.round(position?.y ?? (120 + Math.floor(nodeCount / 4) * 160)),
   };
+}
+
+export function nextCanvasNodeZIndex(nodes: Pick<WorkflowNode, "zIndex">[]) {
+  return nodes.reduce((maxValue, node) => Math.max(maxValue, node.zIndex), 0) + 1;
 }
 
 export function normalizeCanvasDocument(raw: Record<string, unknown> | null | undefined): CanvasDocument {

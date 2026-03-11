@@ -24,6 +24,7 @@ import type {
 } from "@/components/canvas-node-types";
 import { clampWorkflowNodeSize } from "@/lib/canvas-node-presentation";
 import { getUploadedAssetNodeAspectRatio } from "@/lib/canvas-asset-nodes";
+import { sortCanvasNodesForDisplay } from "@/lib/canvas-layout";
 import {
   getCanvasNodeAccentColor,
   getCanvasNodeAccentGlow,
@@ -478,19 +479,19 @@ export function InfiniteCanvas({
   } | null>(null);
 
   const displayNodes = useMemo(() => {
-    if (!dragDraftPositions) {
-      return nodes;
-    }
+    const laidOutNodes = !dragDraftPositions
+      ? nodes
+      : nodes.map((node) =>
+          dragDraftPositions[node.id]
+            ? {
+                ...node,
+                x: dragDraftPositions[node.id].x,
+                y: dragDraftPositions[node.id].y,
+              }
+            : node
+        );
 
-    return nodes.map((node) =>
-      dragDraftPositions[node.id]
-        ? {
-            ...node,
-            x: dragDraftPositions[node.id].x,
-            y: dragDraftPositions[node.id].y,
-          }
-        : node
-    );
+    return sortCanvasNodesForDisplay(laidOutNodes);
   }, [dragDraftPositions, nodes]);
 
   const nodesById = useMemo(() => {
@@ -1528,6 +1529,7 @@ export function InfiniteCanvas({
           const nodeStyle: CSSProperties = {
             left: `${node.x}px`,
             top: `${node.y}px`,
+            zIndex: node.zIndex,
             width: `${getNodeSize(node.id).width}px`,
             height: autoHeight ? undefined : `${getNodeSize(node.id).height}px`,
             "--node-output-accent": outputColor,

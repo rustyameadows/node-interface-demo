@@ -31,6 +31,7 @@ export type CanvasRenderNode = Pick<
   | "upstreamAssetIds"
   | "x"
   | "y"
+  | "zIndex"
   | "displayMode"
   | "size"
 > & {

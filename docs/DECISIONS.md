@@ -159,3 +159,8 @@
 - Decision: ignore persisted asset-view filter state when opening the Assets route and reset any stale saved filter payloads back to the default unfiltered state.
 - Rationale: restrictive saved filters like `providerId = topaz` make the library look incomplete and break the core debugging expectation that opening Assets should show every project asset immediately.
 - Consequence: asset layout still persists, but the asset grid now always boots with `all` origin/type/provider and no tag/rating/flag constraints, while stale workspace filter snapshots are cleared on first hydrate.
+
+## 2026-03-11 - Canvas Stacking Order Persists In The Document
+- Decision: canvas nodes now carry a persisted `zIndex`, focusing/selecting a node promotes it to the front by updating that saved order, and insert-picker creation still centers the new shell on the requested canvas coordinate.
+- Rationale: temporary selection-only layering makes overlap debugging feel unstable because the node drops back under neighbors as soon as focus changes, while users expect "bring to front" to stay exactly where they last saw it.
+- Consequence: saved canvas documents now preserve node stacking order across deselection and reload, newly created nodes spawn at the front by default, and overlap behavior is driven by document state rather than transient CSS-only selected styling.

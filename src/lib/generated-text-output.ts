@@ -481,6 +481,7 @@ type CreateGeneratedModelNodeInput = {
   modelNodeId?: string | null;
   label: string;
   position: { x: number; y: number };
+  zIndex: number;
   processingState: WorkflowNode["processingState"];
   descriptor: GeneratedNodeDescriptor;
   connectToSourceModel?: boolean;
@@ -503,6 +504,7 @@ export function createGeneratedModelNode(input: CreateGeneratedModelNodeInput): 
     upstreamAssetIds: connectToSourceModel && input.modelNodeId ? [`node:${input.modelNodeId}`] : [],
     x: input.position.x,
     y: input.position.y,
+    zIndex: input.zIndex,
     displayMode: "preview" as const,
     size: null,
   } satisfies Omit<
@@ -592,6 +594,7 @@ export function applyGeneratedDescriptorToNode(
       x: node.x,
       y: node.y,
     },
+    zIndex: node.zIndex,
     processingState: input.processingState,
     descriptor: input.descriptor,
     connectToSourceModel: input.connectToSourceModel,

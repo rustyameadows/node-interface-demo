@@ -190,6 +190,7 @@ export type WorkflowNode = {
   upstreamAssetIds: string[];
   x: number;
   y: number;
+  zIndex: number;
   displayMode: WorkflowNodeDisplayMode;
   size: WorkflowNodeSize | null;
 };
