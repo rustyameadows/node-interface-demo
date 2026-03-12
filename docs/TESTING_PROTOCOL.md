@@ -57,6 +57,7 @@ What it does:
 - verifies the bottom canvas overlay row exposes `Compact`, `Preview`, `Edit`, and `Resize`
 - verifies the bottom row changes the primary demo node mode without auto-selecting it
 - verifies mode switches keep the primary demo node centered in the playground
+- verifies those mode switches feel like one motion instead of a resize snap followed by a second recenter jump
 - verifies the model detail fixture has no upstream prompt note
 - verifies uploaded/generated asset detail fixtures render placeholder previews instead of broken images
 - verifies generated asset detail keeps the visible model-to-asset connection

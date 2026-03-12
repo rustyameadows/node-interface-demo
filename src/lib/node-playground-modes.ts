@@ -102,3 +102,54 @@ export function buildFramedViewportForNode(input: {
     surfaceSize: input.surfaceSize,
   });
 }
+
+export function buildNodePlaygroundTransitionLayout(input: {
+  currentPosition: { x: number; y: number };
+  currentSize: WorkflowNodeSize;
+  nextSize: WorkflowNodeSize;
+  surfaceSize: { width: number; height: number };
+}) {
+  const targetCenter = {
+    x: input.currentPosition.x + input.currentSize.width / 2,
+    y: input.currentPosition.y + input.currentSize.height / 2,
+  };
+  const nodePosition = positionNodeAroundCenter(targetCenter, input.nextSize);
+
+  return {
+    targetCenter,
+    nodePosition,
+    viewport: buildFramedViewportForNode({
+      nodePosition,
+      nodeSize: input.nextSize,
+      surfaceSize: input.surfaceSize,
+    }),
+  };
+}
+
+export function buildNodePlaygroundMeasuredCorrection(input: {
+  targetCenter: { x: number; y: number };
+  measuredSize: WorkflowNodeSize;
+  surfaceSize: { width: number; height: number };
+}) {
+  const nodePosition = positionNodeAroundCenter(input.targetCenter, input.measuredSize);
+
+  return {
+    nodePosition,
+    viewport: buildFramedViewportForNode({
+      nodePosition,
+      nodeSize: input.measuredSize,
+      surfaceSize: input.surfaceSize,
+    }),
+  };
+}
+
+export function shouldCorrectNodePlaygroundMeasuredSize(
+  predictedSize: WorkflowNodeSize,
+  measuredSize: WorkflowNodeSize,
+  tolerance = 1
+) {
+  return (
+    Math.abs(predictedSize.width - measuredSize.width) > tolerance ||
+    Math.abs(predictedSize.height - measuredSize.height) > tolerance
+  );
+}

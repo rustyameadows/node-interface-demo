@@ -29,11 +29,13 @@ import { getGeneratedDescriptorDefaultLabel } from "@/lib/generated-text-output"
 import { getModelCatalogVariantById, getModelCatalogVariants, type NodePlaygroundFixture } from "@/lib/node-catalog";
 import { getNodePlaygroundPreviewImageUrl } from "@/lib/node-playground-preview";
 import {
+  buildNodePlaygroundMeasuredCorrection,
+  buildNodePlaygroundTransitionLayout,
   buildFramedViewportForNode,
   getActiveNodePlaygroundMode,
   getInitialNodePlaygroundMode,
-  positionNodeAroundCenter,
   preserveNodeCenterPosition,
+  shouldCorrectNodePlaygroundMeasuredSize,
   type NodePlaygroundMode,
 } from "@/lib/node-playground-modes";
 import {
@@ -70,6 +72,8 @@ const PLAYGROUND_MODE_OPTIONS: Array<{ id: NodePlaygroundMode; label: string }> 
   { id: "edit", label: "Edit" },
   { id: "resize", label: "Resize" },
 ];
+const PLAYGROUND_LAYOUT_MOTION_MS = 240;
+const PLAYGROUND_LAYOUT_MOTION_BUFFER_MS = 48;
 
 function cloneFixtureDoc(fixture: NodePlaygroundFixture): CanvasDocument {
   return {
@@ -323,12 +327,13 @@ export function NodePlaygroundCanvas({
   const [activeFullNodeId, setActiveFullNodeId] = useState<string | null>(null);
   const [pinnedModelFullNodeId, setPinnedModelFullNodeId] = useState<string | null>(null);
   const [libraryFullNodeId, setLibraryFullNodeId] = useState<string | null>(initialFullNodeId);
-  const [pendingCenterCorrection, setPendingCenterCorrection] = useState<{
+  const [primaryNodeTransition, setPrimaryNodeTransition] = useState<{
     nodeId: string;
     targetCenter: { x: number; y: number };
-    reframeViewport?: boolean;
+    predictedSize: WorkflowNodeSize;
   } | null>(null);
-  const [lastFramedPrimaryModeKey, setLastFramedPrimaryModeKey] = useState<string | null>(null);
+  const [hasCenteredFixture, setHasCenteredFixture] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
     setCanvasDoc(cloneFixtureDoc(fixture));
@@ -337,9 +342,26 @@ export function NodePlaygroundCanvas({
     setActiveFullNodeId(null);
     setPinnedModelFullNodeId(null);
     setLibraryFullNodeId(initialFullNodeId);
-    setPendingCenterCorrection(null);
-    setLastFramedPrimaryModeKey(null);
+    setPrimaryNodeTransition(null);
+    setHasCenteredFixture(false);
   }, [fixture, initialFullNodeId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handleChange = () => {
+      setPrefersReducedMotion(mediaQuery.matches);
+    };
+
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
 
   const modelCatalogVariants = useMemo(() => getModelCatalogVariants(providerModels), [providerModels]);
 
@@ -396,6 +418,18 @@ export function NodePlaygroundCanvas({
     }
 
     return { width, height };
+  }, []);
+
+  const getCanvasSurfaceSize = useCallback(() => {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    if (!bounds || bounds.width < 120 || bounds.height < 120) {
+      return null;
+    }
+
+    return {
+      width: bounds.width,
+      height: bounds.height,
+    };
   }, []);
 
   useEffect(() => {
@@ -502,7 +536,10 @@ export function NodePlaygroundCanvas({
     if (libraryFullNodeId === nodeId) {
       setLibraryFullNodeId(null);
     }
-  }, [activeFullNodeId, libraryFullNodeId, nodesById, pinnedModelFullNodeId, updateNode]);
+    if (primaryNodeId === nodeId) {
+      setPrimaryNodeTransition(null);
+    }
+  }, [activeFullNodeId, libraryFullNodeId, nodesById, pinnedModelFullNodeId, primaryNodeId, updateNode]);
 
   const handleNodeSizeCommit = useCallback((nodeId: string, size: WorkflowNodeSize) => {
     updateNode(nodeId, (node) => ({
@@ -519,7 +556,10 @@ export function NodePlaygroundCanvas({
     if (libraryFullNodeId === nodeId) {
       setLibraryFullNodeId(null);
     }
-  }, [activeFullNodeId, libraryFullNodeId, pinnedModelFullNodeId, updateNode]);
+    if (primaryNodeId === nodeId) {
+      setPrimaryNodeTransition(null);
+    }
+  }, [activeFullNodeId, libraryFullNodeId, pinnedModelFullNodeId, primaryNodeId, updateNode]);
 
   const handleModelVariantSelection = useCallback((variantId: string) => {
     if (!selectedNode || selectedNode.kind !== "model") {
@@ -807,13 +847,8 @@ export function NodePlaygroundCanvas({
   }, [initialFullNodeId, primaryRenderNode, primaryWorkflowNode]);
 
   const centerPrimaryNodeInViewport = useCallback(() => {
-    const surfaceElement = canvasRef.current;
-    if (!surfaceElement || !primaryRenderNode) {
-      return;
-    }
-
-    const bounds = surfaceElement.getBoundingClientRect();
-    if (bounds.width < 120 || bounds.height < 120) {
+    const surfaceSize = getCanvasSurfaceSize();
+    if (!surfaceSize || !primaryRenderNode) {
       return;
     }
 
@@ -822,13 +857,10 @@ export function NodePlaygroundCanvas({
       buildFramedViewportForNode({
         nodePosition: { x: primaryRenderNode.x, y: primaryRenderNode.y },
         nodeSize: measuredSize,
-        surfaceSize: {
-          width: bounds.width,
-          height: bounds.height,
-        },
+        surfaceSize,
       })
     );
-  }, [getRenderedNodeSize, primaryRenderNode, updateViewport]);
+  }, [getCanvasSurfaceSize, getRenderedNodeSize, primaryRenderNode, updateViewport]);
 
   function transitionPrimaryNode(mode: NodePlaygroundMode) {
     const nodeId = primaryNodeId;
@@ -839,11 +871,8 @@ export function NodePlaygroundCanvas({
     }
 
     const currentSize = getRenderedNodeSize(nodeId) || renderNode.resolvedSize;
-    const targetCenter = {
-      x: workflowNode.x + currentSize.width / 2,
-      y: workflowNode.y + currentSize.height / 2,
-    };
     const aspectRatio = getUploadedAssetNodeAspectRatio(workflowNode) || 1;
+    const surfaceSize = getCanvasSurfaceSize();
 
     let nextDisplayMode = workflowNode.displayMode;
     let nextSize: WorkflowNodeSize | null = workflowNode.size;
@@ -868,11 +897,21 @@ export function NodePlaygroundCanvas({
       mode === "resize"
         ? fixture.resizePresetSize
         : getWorkflowNodeDefaultSize(workflowNode.kind, mode === "edit" ? "full" : nextDisplayMode, aspectRatio);
-    const nextPosition = preserveNodeCenterPosition(
-      { x: workflowNode.x, y: workflowNode.y },
-      currentSize,
-      resolvedNextSize
-    );
+    const transitionLayout = surfaceSize
+      ? buildNodePlaygroundTransitionLayout({
+          currentPosition: { x: workflowNode.x, y: workflowNode.y },
+          currentSize,
+          nextSize: resolvedNextSize,
+          surfaceSize,
+        })
+      : null;
+    const nextPosition = transitionLayout
+      ? transitionLayout.nodePosition
+      : preserveNodeCenterPosition(
+          { x: workflowNode.x, y: workflowNode.y },
+          currentSize,
+          resolvedNextSize
+        );
 
     updateNode(nodeId, (node) => ({
       ...node,
@@ -884,76 +923,134 @@ export function NodePlaygroundCanvas({
     setActiveFullNodeId(null);
     setPinnedModelFullNodeId(null);
     setLibraryFullNodeId(nextForcedFullNodeId);
-    setPendingCenterCorrection({
-      nodeId,
-      targetCenter,
-      reframeViewport: true,
-    });
+    if (transitionLayout) {
+      updateViewport(transitionLayout.viewport);
+      setPrimaryNodeTransition(
+        prefersReducedMotion
+          ? null
+          : {
+              nodeId,
+              targetCenter: transitionLayout.targetCenter,
+              predictedSize: resolvedNextSize,
+            }
+      );
+    } else {
+      setPrimaryNodeTransition(null);
+    }
   }
 
-  const primaryModeFrameKey = primaryRenderNode ? `${primaryRenderNode.id}:${activePlaygroundMode}` : null;
-
   useEffect(() => {
-    if (!primaryRenderNode || !primaryModeFrameKey || primaryModeFrameKey === lastFramedPrimaryModeKey) {
+    if (hasCenteredFixture || !primaryRenderNode) {
       return;
     }
 
     const frameId = window.requestAnimationFrame(() => {
       centerPrimaryNodeInViewport();
-      setLastFramedPrimaryModeKey(primaryModeFrameKey);
+      setHasCenteredFixture(true);
     });
 
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [centerPrimaryNodeInViewport, lastFramedPrimaryModeKey, primaryModeFrameKey, primaryRenderNode]);
+  }, [centerPrimaryNodeInViewport, hasCenteredFixture, primaryRenderNode]);
 
   useEffect(() => {
-    if (!pendingCenterCorrection) {
+    if (!primaryNodeTransition || prefersReducedMotion) {
       return;
     }
 
+    let cancelled = false;
+    let observer: ResizeObserver | null = null;
+    let frameId = 0;
+    let corrected = false;
     const timeoutId = window.setTimeout(() => {
-      const workflowNode = nodesById[pendingCenterCorrection.nodeId];
-      const renderNode = canvasNodes.find((node) => node.id === pendingCenterCorrection.nodeId) || null;
-      const measuredSize =
-        getRenderedNodeSize(pendingCenterCorrection.nodeId) || renderNode?.resolvedSize || null;
-      if (!workflowNode || !measuredSize) {
-        setPendingCenterCorrection(null);
+      setPrimaryNodeTransition((current) =>
+        current?.nodeId === primaryNodeTransition.nodeId ? null : current
+      );
+    }, PLAYGROUND_LAYOUT_MOTION_MS + PLAYGROUND_LAYOUT_MOTION_BUFFER_MS);
+
+    const maybeCorrectMeasuredSize = (measuredSize: WorkflowNodeSize | null) => {
+      if (
+        cancelled ||
+        corrected ||
+        !measuredSize ||
+        !shouldCorrectNodePlaygroundMeasuredSize(primaryNodeTransition.predictedSize, measuredSize)
+      ) {
         return;
       }
 
-      const nextPosition = positionNodeAroundCenter(pendingCenterCorrection.targetCenter, measuredSize);
-      if (nextPosition.x !== workflowNode.x || nextPosition.y !== workflowNode.y) {
-        updateNode(pendingCenterCorrection.nodeId, (node) => ({
-          ...node,
-          x: nextPosition.x,
-          y: nextPosition.y,
-        }));
+      const surfaceSize = getCanvasSurfaceSize();
+      if (!surfaceSize) {
+        return;
       }
-      if (pendingCenterCorrection.reframeViewport) {
-        const surfaceElement = canvasRef.current;
-        const bounds = surfaceElement?.getBoundingClientRect();
-        if (bounds && bounds.width >= 120 && bounds.height >= 120) {
-          updateViewport(
-            buildFramedViewportForNode({
-              nodePosition: nextPosition,
-              nodeSize: measuredSize,
-              surfaceSize: {
-                width: bounds.width,
-                height: bounds.height,
-              },
-            })
-          );
+
+      corrected = true;
+      const correction = buildNodePlaygroundMeasuredCorrection({
+        targetCenter: primaryNodeTransition.targetCenter,
+        measuredSize,
+        surfaceSize,
+      });
+
+      updateNode(primaryNodeTransition.nodeId, (node) => ({
+        ...node,
+        x: correction.nodePosition.x,
+        y: correction.nodePosition.y,
+      }));
+      updateViewport(correction.viewport);
+    };
+
+    const attachObserver = () => {
+      if (cancelled) {
+        return;
+      }
+
+      const surfaceElement = canvasRef.current;
+      const nodeElement = surfaceElement?.querySelector<HTMLElement>(`[data-node-id="${primaryNodeTransition.nodeId}"]`);
+      if (!nodeElement) {
+        frameId = window.requestAnimationFrame(attachObserver);
+        return;
+      }
+
+      observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) {
+          return;
         }
-      }
-      setPendingCenterCorrection(null);
-    }, 180);
+
+        maybeCorrectMeasuredSize({
+          width: Math.round(entry.contentRect.width),
+          height: Math.round(entry.contentRect.height),
+        });
+      });
+      observer.observe(nodeElement);
+      maybeCorrectMeasuredSize(getRenderedNodeSize(primaryNodeTransition.nodeId));
+    };
+
+    frameId = window.requestAnimationFrame(attachObserver);
 
     return () => {
+      cancelled = true;
+      observer?.disconnect();
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
       window.clearTimeout(timeoutId);
     };
-  }, [canvasNodes, getRenderedNodeSize, nodesById, pendingCenterCorrection, updateNode]);
+  }, [
+    getCanvasSurfaceSize,
+    getRenderedNodeSize,
+    prefersReducedMotion,
+    primaryNodeTransition,
+    updateNode,
+    updateViewport,
+  ]);
+
+  useEffect(() => {
+    if (!prefersReducedMotion) {
+      return;
+    }
+    setPrimaryNodeTransition(null);
+  }, [prefersReducedMotion]);
 
   const enterNodeEditMode = useCallback((nodeId: string) => {
     const node = nodesById[nodeId];
@@ -964,27 +1061,44 @@ export function NodePlaygroundCanvas({
     if (nodeId === primaryNodeId && node.displayMode !== "resized" && (node.kind === "model" || node.kind === "text-template")) {
       const renderNode = canvasNodes.find((candidate) => candidate.id === nodeId) || null;
       const currentSize = getRenderedNodeSize(nodeId) || renderNode?.resolvedSize;
+      const surfaceSize = getCanvasSurfaceSize();
       if (currentSize) {
         const aspectRatio = getUploadedAssetNodeAspectRatio(node) || 1;
         const nextSize = getWorkflowNodeDefaultSize(node.kind, "full", aspectRatio);
-        const nextPosition = preserveNodeCenterPosition(
-          { x: node.x, y: node.y },
-          currentSize,
-          nextSize
-        );
+        const transitionLayout = surfaceSize
+          ? buildNodePlaygroundTransitionLayout({
+              currentPosition: { x: node.x, y: node.y },
+              currentSize,
+              nextSize,
+              surfaceSize,
+            })
+          : null;
+        const nextPosition = transitionLayout
+          ? transitionLayout.nodePosition
+          : preserveNodeCenterPosition(
+              { x: node.x, y: node.y },
+              currentSize,
+              nextSize
+            );
         updateNode(nodeId, (currentNode) => ({
           ...currentNode,
           x: nextPosition.x,
           y: nextPosition.y,
         }));
-        setPendingCenterCorrection({
-          nodeId,
-          targetCenter: {
-            x: node.x + currentSize.width / 2,
-            y: node.y + currentSize.height / 2,
-          },
-          reframeViewport: true,
-        });
+        if (transitionLayout) {
+          updateViewport(transitionLayout.viewport);
+          setPrimaryNodeTransition(
+            prefersReducedMotion
+              ? null
+              : {
+                  nodeId,
+                  targetCenter: transitionLayout.targetCenter,
+                  predictedSize: nextSize,
+                }
+          );
+        } else {
+          setPrimaryNodeTransition(null);
+        }
       }
     }
 
@@ -1005,7 +1119,17 @@ export function NodePlaygroundCanvas({
         setLibraryFullNodeId(null);
       }
     }
-  }, [canvasNodes, getRenderedNodeSize, libraryFullNodeId, nodesById, primaryNodeId, updateNode]);
+  }, [
+    canvasNodes,
+    getCanvasSurfaceSize,
+    getRenderedNodeSize,
+    libraryFullNodeId,
+    nodesById,
+    prefersReducedMotion,
+    primaryNodeId,
+    updateNode,
+    updateViewport,
+  ]);
 
   const focusNodeViewport = useCallback((nodeId: string) => {
     const node = canvasNodes.find((candidate) => candidate.id === nodeId);
@@ -1036,6 +1160,7 @@ export function NodePlaygroundCanvas({
       })
     );
   }, [canvasNodes, updateViewport]);
+  const transitioningPrimaryNodeId = prefersReducedMotion ? null : primaryNodeTransition?.nodeId || null;
 
   const renderNodeContent = useCallback(
     (node: CanvasRenderNode) => {
@@ -1427,6 +1552,8 @@ export function NodePlaygroundCanvas({
         activePhantomPreview={activePhantomPreview}
         onRunActiveNode={() => undefined}
         selectionActions={[]}
+        enableProgrammaticViewportMotion={!prefersReducedMotion}
+        programmaticMotionNodeIds={transitioningPrimaryNodeId ? [transitioningPrimaryNodeId] : []}
       />
       {primaryWorkflowNode ? (
         <div className={styles.playgroundModeDock}>

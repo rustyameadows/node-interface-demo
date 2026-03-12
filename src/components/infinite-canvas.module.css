@@ -30,7 +30,8 @@
 .canvasInteractionActive .inlineNodeSurface,
 .canvasInteractionActive .assetNodeLayout,
 .canvasInteractionActive .phantomNode,
-.canvasInteractionActive .edgeRunButton {
+.canvasInteractionActive .edgeRunButton,
+.canvasInteractionActive .world {
   transition: none !important;
 }
 
@@ -42,6 +43,11 @@
   position: absolute;
   inset: 0;
   transform-origin: top left;
+}
+
+.worldAnimated {
+  transition: transform var(--ds-motion-layout) var(--ds-ease-standard);
+  will-change: transform;
 }
 
 .connectionLayer {
@@ -112,6 +118,18 @@
     box-shadow 140ms ease,
     filter 140ms ease,
     background 120ms ease;
+}
+
+.nodeProgrammaticMotion {
+  transition:
+    left var(--ds-motion-layout) var(--ds-ease-standard),
+    top var(--ds-motion-layout) var(--ds-ease-standard),
+    width var(--ds-motion-layout) var(--ds-ease-standard),
+    height var(--ds-motion-layout) var(--ds-ease-standard),
+    box-shadow var(--ds-motion-micro) var(--ds-ease-standard),
+    filter var(--ds-motion-micro) var(--ds-ease-standard),
+    background var(--ds-motion-micro) var(--ds-ease-standard);
+  will-change: left, top, width, height;
 }
 
 .node[data-rail-drag="true"] {
@@ -702,6 +720,10 @@
     transform 110ms ease;
 }
 
+.nodeProgrammaticMotion .inlineNodeContentWrap {
+  animation: nodeProgrammaticContentReveal var(--ds-motion-ui) var(--ds-ease-standard);
+}
+
 .assetNodeLayout {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -729,6 +751,34 @@
     transform 100ms ease;
 }
 
+.nodeProgrammaticMotion .inlineNodeSurface {
+  animation: nodeProgrammaticSurfaceReveal var(--ds-motion-ui) var(--ds-ease-standard);
+}
+
+@keyframes nodeProgrammaticContentReveal {
+  from {
+    opacity: 0.72;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nodeProgrammaticSurfaceReveal {
+  from {
+    opacity: 0.84;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .inlineNodeHeader {
   display: flex;
   align-items: flex-start;
@@ -739,6 +789,16 @@
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 250, 248, 0.88));
   cursor: move;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .worldAnimated,
+  .nodeProgrammaticMotion,
+  .nodeProgrammaticMotion .inlineNodeContentWrap,
+  .nodeProgrammaticMotion .inlineNodeSurface {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 .inlineNodeHeaderMeta {

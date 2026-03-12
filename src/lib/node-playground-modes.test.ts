@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildNodePlaygroundMeasuredCorrection,
+  buildNodePlaygroundTransitionLayout,
   buildCenteredViewportForNode,
   buildFramedViewportForNode,
   getActiveNodePlaygroundMode,
   getInitialNodePlaygroundMode,
   positionNodeAroundCenter,
   preserveNodeCenterPosition,
+  shouldCorrectNodePlaygroundMeasuredSize,
 } from "@/lib/node-playground-modes";
 
 test("initial node playground modes derive from persisted display mode unless the fixture opens in edit", () => {
@@ -69,4 +72,60 @@ test("buildFramedViewportForNode fits and centers the node with playground paddi
     x: -109,
     y: -8,
   });
+});
+
+test("buildNodePlaygroundTransitionLayout keeps the node center stable while reframing the viewport", () => {
+  const layout = buildNodePlaygroundTransitionLayout({
+    currentPosition: { x: 120, y: 180 },
+    currentSize: { width: 236, height: 84 },
+    nextSize: { width: 640, height: 420 },
+    surfaceSize: { width: 920, height: 948 },
+  });
+
+  assert.deepEqual(layout.targetCenter, { x: 238, y: 222 });
+  assert.deepEqual(layout.nodePosition, { x: -82, y: 12 });
+  assert.deepEqual(layout.viewport, {
+    zoom: 1.1875,
+    x: 177,
+    y: 210,
+  });
+});
+
+test("buildNodePlaygroundMeasuredCorrection recenters measured size drift without changing the target center", () => {
+  const correction = buildNodePlaygroundMeasuredCorrection({
+    targetCenter: { x: 238, y: 222 },
+    measuredSize: { width: 612, height: 392 },
+    surfaceSize: { width: 920, height: 948 },
+  });
+
+  assert.deepEqual(correction.nodePosition, { x: -68, y: 26 });
+  assert.deepEqual(correction.viewport, {
+    zoom: 1.2418300653594772,
+    x: 164,
+    y: 198,
+  });
+});
+
+test("shouldCorrectNodePlaygroundMeasuredSize only flags meaningful size drift", () => {
+  assert.equal(
+    shouldCorrectNodePlaygroundMeasuredSize(
+      { width: 640, height: 420 },
+      { width: 640, height: 420 }
+    ),
+    false
+  );
+  assert.equal(
+    shouldCorrectNodePlaygroundMeasuredSize(
+      { width: 640, height: 420 },
+      { width: 641, height: 420 }
+    ),
+    false
+  );
+  assert.equal(
+    shouldCorrectNodePlaygroundMeasuredSize(
+      { width: 640, height: 420 },
+      { width: 644, height: 420 }
+    ),
+    true
+  );
 });

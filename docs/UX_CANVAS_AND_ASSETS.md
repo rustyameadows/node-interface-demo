@@ -85,6 +85,7 @@
   - the left rail shows wrapped `Input` and `Output` contract cards instead of clipped badge pills
   - display-mode switching moved out of the left rail and into a bottom-centered canvas overlay row with `Compact`, `Preview`, `Edit`, and `Resize`
   - the bottom row drives the fixture's primary node without auto-selecting it, and keeps that primary node centered through shell transitions
+  - library mode changes animate the primary node shell position/size plus the viewport reframing as one motion; reduced-motion users keep the snap behavior
   - model detail uses a standalone model fixture rather than a fake upstream prompt note
   - uploaded and generated image asset demos use a local placeholder preview when no real asset file exists
   - generated asset demos keep their visible source-model connection line
