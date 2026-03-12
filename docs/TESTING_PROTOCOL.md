@@ -49,6 +49,11 @@ What it does:
 - waits for app home
 - opens app settings from app home before any project exists
 - opens the Node Library from app home
+- verifies the Node Library index uses the quiet specimen-first gallery:
+  - compact header with home action + inline search only
+  - no hero metrics, I/O pills, or display-mode pills on the index
+  - each card renders a centered real node specimen with no clipping
+  - desktop stays on a stable 3-column gallery instead of a cramped auto-fit 4-up grid
 - verifies model, list, and template library detail playgrounds render
 - verifies the shared searchable model selector updates the model playground
 - verifies Node Library playgrounds boot neutral with no selected node/rails
@@ -100,6 +105,7 @@ What it does:
   - SQLite file is created
   - native new-project and add-node commands round-trip into the renderer
   - Node Library routes and playgrounds render in the real Electron app
+  - Node Library index cards render specimen-first stages instead of metadata-heavy cards
   - the canvas insert picker shows registry-driven node labels
   - native model-variant insertion can create a preconfigured model node
   - canvas data round-trips
@@ -160,7 +166,7 @@ What it does:
   - branded bundle metadata and icon wiring
   - preload bridge availability
   - app home render
-  - Node Library gallery render
+  - Node Library gallery render with centered specimen cards
   - one model detail playground screenshot
   - one list detail playground screenshot
   - app settings render with provider credentials before any project exists

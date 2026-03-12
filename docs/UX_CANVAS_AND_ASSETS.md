@@ -5,6 +5,7 @@
   - app home with create-project actions, active project grid, and archived project section
 - `/nodes`
   - app-level Node Library gallery sourced from the canonical node catalog
+  - specimen-first index with a compact title/search bar and real node shells centered on dark mini-canvas stages
 - `/nodes/$nodeId`
   - node detail page with left-rail metadata and a neutral playground using the real node renderer
 - `/settings/app`
@@ -93,6 +94,12 @@
   - model detail uses a standalone model fixture rather than a fake upstream prompt note
   - uploaded and generated image asset demos use a local placeholder preview when no real asset file exists
   - generated asset demos keep their visible source-model connection line
+- Node Library index cards are specimen-first:
+  - the index removes hero copy, metrics, I/O pills, and display-mode pills
+  - each card centers the fixture's `primaryNodeId` in a static dark stage using the real node renderer path
+  - specimens are unfocused, non-interactive, rail-free, and port-free
+  - card footers keep only the node label, a short description, and a minimal model-only variant stat
+  - the gallery uses a controlled 3 / 2 / 1 column grid instead of auto-fit drift
 - provider-model variants stay visible even when blocked for the current credentials or provider project
 - variant statuses render as:
   - `Ready`

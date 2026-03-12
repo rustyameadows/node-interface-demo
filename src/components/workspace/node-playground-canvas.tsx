@@ -13,7 +13,6 @@ import {
 import { InfiniteCanvas } from "@/components/infinite-canvas";
 import type {
   CanvasConnection,
-  CanvasNodeGeneratedProvenance,
   CanvasPhantomPreview,
   CanvasRenderNode,
 } from "@/components/canvas-node-types";
@@ -27,11 +26,13 @@ import type {
 import { canConnectCanvasNodes } from "@/lib/canvas-connection-rules";
 import {
   getWorkflowNodeDefaultSize,
-  resolveCanvasNodePresentation,
 } from "@/lib/canvas-node-presentation";
 import { getGeneratedDescriptorDefaultLabel } from "@/lib/generated-text-output";
 import { getModelCatalogVariantById, getModelCatalogVariants, type NodePlaygroundFixture } from "@/lib/node-catalog";
-import { getNodePlaygroundPreviewImageUrl } from "@/lib/node-playground-preview";
+import {
+  buildNodeCatalogCanvasRenderNode,
+  buildNodeCatalogCanvasRenderNodes,
+} from "@/lib/node-catalog-render";
 import {
   buildNodePlaygroundMeasuredCorrection,
   buildNodePlaygroundTransitionLayout,
@@ -43,8 +44,6 @@ import {
 } from "@/lib/node-playground-modes";
 import {
   buildTextTemplatePreview,
-  getGeneratedModelNodeSource,
-  getGeneratedTextNoteSettings,
   getListNodeSettings,
 } from "@/lib/list-template";
 import { isModelParameterVisible } from "@/lib/model-parameters";
@@ -168,16 +167,6 @@ function resolveModelSettings(
   return resolveProviderModelSettings(model?.providerId, model?.modelId, mergedSettings, executionMode);
 }
 
-function outputSemanticType(node: WorkflowNode) {
-  if (node.kind === "text-template") {
-    return "operator" as const;
-  }
-  if (node.kind === "model") {
-    return "citrus" as const;
-  }
-  return node.outputType;
-}
-
 function getNodeSourceJobId(node: WorkflowNode | null | undefined) {
   if (!node) {
     return null;
@@ -189,36 +178,6 @@ function getNodeSourceJobId(node: WorkflowNode | null | undefined) {
     return String((node.settings as Record<string, unknown>).sourceJobId);
   }
   return null;
-}
-
-function getSourceModelNodeId(node: WorkflowNode) {
-  if (node.kind === "asset-source" && node.settings && typeof node.settings === "object") {
-    const value = (node.settings as Record<string, unknown>).sourceModelNodeId;
-    return typeof value === "string" ? value : null;
-  }
-
-  if ((node.kind === "list" || node.kind === "text-template" || node.kind === "text-note") && node.settings && typeof node.settings === "object") {
-    const value = (node.settings as Record<string, unknown>).sourceModelNodeId;
-    return typeof value === "string" ? value : null;
-  }
-
-  return null;
-}
-
-function isGeneratedAssetNode(node: WorkflowNode) {
-  return node.kind === "asset-source" && getNodeSourceJobId(node) !== null;
-}
-
-function getGeneratedNodeProvenance(node: WorkflowNode): CanvasNodeGeneratedProvenance | null {
-  if (node.kind === "asset-source" && isGeneratedAssetNode(node)) {
-    return "model";
-  }
-
-  if (node.kind === "text-note" && getGeneratedTextNoteSettings(node.settings)) {
-    return "operator";
-  }
-
-  return getGeneratedModelNodeSource(node.settings) ? "model" : null;
 }
 
 function getExecutionModeForModelNode(node: WorkflowNode, model: ProviderModel | undefined) {
@@ -779,88 +738,18 @@ export function NodePlaygroundCanvas({
   );
 
   const canvasNodes = useMemo<CanvasRenderNode[]>(() => {
-    const displayNameMap = providerModels.reduce<Record<string, string>>((acc, model) => {
-      acc[`${model.providerId}:${model.modelId}`] = model.displayName;
-      return acc;
-    }, {});
-
-    return canvasDoc.workflow.nodes.map((node) => {
-      const listSettings = node.kind === "list" ? getListNodeSettings(node.settings) : null;
-      const connectedListNode =
-        node.kind === "text-template"
-          ? canvasDoc.workflow.nodes.find((candidate) => candidate.id === node.upstreamNodeIds[0] && candidate.kind === "list") || null
-          : null;
-      const templatePreview =
-        node.kind === "text-template"
-          ? buildTextTemplatePreview(node.prompt, connectedListNode ? getListNodeSettings(connectedListNode.settings) : null)
-          : null;
-      const uploadedAssetAspectRatio = getUploadedAssetNodeAspectRatio(node) || undefined;
-      const presentation = resolveCanvasNodePresentation({
-        node,
-        activeNodeId,
-        fullNodeId: effectiveFullNodeId,
-        nodeId: node.id,
-        aspectRatio: uploadedAssetAspectRatio,
-        forcedRenderMode: libraryFullNodeId === node.id ? "full" : null,
-      });
-      const generatedProvenance = getGeneratedNodeProvenance(node);
-      return {
-        ...node,
-        presentation,
-        assetOrigin: node.kind === "asset-source" ? (isGeneratedAssetNode(node) ? "generated" : "uploaded") : null,
-        sourceModelNodeId: getSourceModelNodeId(node),
-        generatedProvenance,
-        displayModelName:
-          node.kind === "asset-source"
-            ? null
-            : node.kind === "list"
-              ? "List"
-              : node.kind === "text-template"
-                ? "Template"
-                : displayNameMap[`${node.providerId}:${node.modelId}`] || node.modelId,
-        displaySourceLabel:
-          node.kind === "asset-source"
-            ? isGeneratedAssetNode(node)
-              ? "Generated Asset"
-              : "Uploaded Asset"
-            : node.kind === "list"
-              ? `${listSettings?.columns.length || 0} col${(listSettings?.columns.length || 0) === 1 ? "" : "s"}`
-              : node.kind === "text-template"
-                ? templatePreview?.disabledReason || `${templatePreview?.nonBlankRowCount || 0} rows ready`
-                : displayNameMap[`${node.providerId}:${node.modelId}`] || node.modelId,
-        inputSemanticTypes: [
-          ...(node.kind === "model" && node.promptSourceNodeId ? (["text"] as const) : []),
-          ...node.upstreamNodeIds
-            .map((nodeId) => nodesById[nodeId] || null)
-            .filter((inputNode): inputNode is WorkflowNode => Boolean(inputNode))
-            .map((inputNode) => outputSemanticType(inputNode)),
-        ],
-        outputSemanticType: outputSemanticType(node),
-        previewImageUrl: getNodePlaygroundPreviewImageUrl(node),
-        hasStartedJob: node.kind === "model" ? true : undefined,
-        listPreviewColumns: listSettings?.columns.slice(0, 3).map((column) => column.label) || [],
-        listPreviewRows:
-          listSettings?.rows.slice(0, 3).map((row) =>
-            listSettings.columns.slice(0, 3).map((column) => String(row.values[column.id] || "—"))
-          ) || [],
-        listRowCount: listSettings?.rows.length || 0,
-        listColumnCount: listSettings?.columns.length || 0,
-        templateRegisteredColumnCount: templatePreview?.columns.length || 0,
-        templateUnresolvedCount: templatePreview?.unresolvedTokens.length || 0,
-        templateReady: Boolean(templatePreview && !templatePreview.disabledReason),
-        templateTokens:
-          (templatePreview?.columns.length || 0) > 0
-            ? (templatePreview?.columns || []).map((column) => column.label)
-            : (templatePreview?.tokens || []).map((token) => token.label),
-        templatePreviewRows: (templatePreview?.rows || []).slice(0, 4).map((row) => row.text),
-        templateStatusMessage: templatePreview?.disabledReason || templatePreview?.readyMessage || null,
-        renderMode: presentation.renderMode,
-        canResize: presentation.canResize,
-        lockAspectRatio: presentation.lockAspectRatio,
-        resolvedSize: presentation.size,
-      };
+    return buildNodeCatalogCanvasRenderNodes({
+      nodes: canvasDoc.workflow.nodes,
+      providerModels,
+      activeNodeId,
+      fullNodeId: effectiveFullNodeId,
+      forcedRenderModesById: libraryFullNodeId
+        ? {
+            [libraryFullNodeId]: "full",
+          }
+        : undefined,
     });
-  }, [activeNodeId, canvasDoc.workflow.nodes, effectiveFullNodeId, libraryFullNodeId, nodesById, providerModels]);
+  }, [activeNodeId, canvasDoc.workflow.nodes, effectiveFullNodeId, libraryFullNodeId, providerModels]);
 
   const buildRenderNodeForMeasurement = useCallback(
     (
@@ -871,14 +760,10 @@ export function NodePlaygroundCanvas({
         forcedRenderMode?: "full" | "resized" | null;
       }
     ) => {
-      const baseNode = canvasNodes.find((node) => node.id === candidateNode.id) || null;
-      if (!baseNode) {
-        return null;
-      }
-
-      const uploadedAssetAspectRatio = getUploadedAssetNodeAspectRatio(candidateNode) || undefined;
-      const presentation = resolveCanvasNodePresentation({
+      return buildNodeCatalogCanvasRenderNode({
         node: candidateNode,
+        nodes: canvasDoc.workflow.nodes,
+        providerModels,
         activeNodeId:
           options && Object.prototype.hasOwnProperty.call(options, "activeNodeId")
             ? options.activeNodeId ?? null
@@ -887,8 +772,6 @@ export function NodePlaygroundCanvas({
           options && Object.prototype.hasOwnProperty.call(options, "fullNodeId")
             ? options.fullNodeId ?? null
             : effectiveFullNodeId,
-        nodeId: candidateNode.id,
-        aspectRatio: uploadedAssetAspectRatio,
         forcedRenderMode:
           options && Object.prototype.hasOwnProperty.call(options, "forcedRenderMode")
             ? options.forcedRenderMode ?? null
@@ -896,18 +779,8 @@ export function NodePlaygroundCanvas({
               ? "full"
               : null,
       });
-
-      return {
-        ...baseNode,
-        ...candidateNode,
-        presentation,
-        renderMode: presentation.renderMode,
-        canResize: presentation.canResize,
-        lockAspectRatio: presentation.lockAspectRatio,
-        resolvedSize: presentation.size,
-      } satisfies CanvasRenderNode;
     },
-    [activeNodeId, canvasNodes, effectiveFullNodeId, libraryFullNodeId]
+    [activeNodeId, canvasDoc.workflow.nodes, effectiveFullNodeId, libraryFullNodeId, providerModels]
   );
 
   const primaryRenderNode = useMemo(
