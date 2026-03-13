@@ -293,4 +293,5 @@ The canvas now includes a dedicated `Reference` node for durable project entitie
 ### Workflow behavior
 - Can be inserted from the node catalog on canvas and model-input insertion flows.
 - Can connect to model nodes as canonical prompt context, similar to prompt notes.
+- Editing reference fields updates both settings metadata and the node's prompt-source text so prompt-linked model runs receive the latest reference content.
 - Keeps durable, reusable subject context in one object instead of scattering it across notes and repeated prompt text.

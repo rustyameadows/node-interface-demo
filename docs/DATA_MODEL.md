@@ -319,6 +319,7 @@ Reference settings are stored in `WorkflowNode.settings` with `source: "referenc
 - `status` (`draft | imported | enriched | user-reviewed | stale | needs-attention`): enrichment lifecycle state.
 - `sourceUrl` (string): optional canonical source pointer.
 - `attributes` (`Record<string, string>`): flexible structured facts.
+- Reference nodes also persist a synthesized `prompt` string derived from reference settings so model `promptSourceNodeId` links always resolve deterministic prompt text at execution time.
 - `sourceNotes` (string): unstructured context and guidance.
 - `visualAssetIds` (string[]): optional associated visual asset ids.
 - `provenance` (`manual | url-import | source-material | model-derived`): origin of the current data.

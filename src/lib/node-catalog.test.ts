@@ -271,3 +271,15 @@ test("generated asset playground fixture preserves source-model lineage", () => 
   assert.deepEqual(assetNode.upstreamAssetIds, [`node:${modelNode.id}`]);
   assert.equal(assetNode.sourceAssetId, null);
 });
+
+
+test("reference node fixture includes prompt text derived from settings", () => {
+  const referenceEntry = getNodeCatalogEntry("reference", sampleProviders);
+
+  assert.ok(referenceEntry);
+  const fixture = referenceEntry.buildPlaygroundFixture(sampleProviders);
+  const referenceNode = fixture.nodes[0];
+
+  assert.equal(referenceNode?.kind, "reference");
+  assert.ok((referenceNode?.prompt || "").trim().length > 0);
+});

@@ -136,6 +136,37 @@ export function createReferenceNodeSettings(): ReferenceNodeSettings {
   };
 }
 
+export function buildReferencePromptText(settings: ReferenceNodeSettings): string {
+  const lines: string[] = [];
+  const referenceType = settings.referenceType.trim();
+  const subtitle = settings.subtitle.trim();
+  const sourceUrl = settings.sourceUrl.trim();
+  const attributes = Object.entries(settings.attributes || {})
+    .map(([key, value]) => [String(key).trim(), String(value).trim()] as const)
+    .filter(([key, value]) => key.length > 0 && value.length > 0);
+
+  if (referenceType) {
+    lines.push(`Type: ${referenceType}`);
+  }
+
+  if (subtitle) {
+    lines.push(`Summary: ${subtitle}`);
+  }
+
+  if (sourceUrl) {
+    lines.push(`Source URL: ${sourceUrl}`);
+  }
+
+  if (attributes.length > 0) {
+    lines.push("Attributes:");
+    attributes.forEach(([key, value]) => {
+      lines.push(`- ${key}: ${value}`);
+    });
+  }
+
+  return lines.join("\n");
+}
+
 export function getReferenceNodeSettings(value: unknown): ReferenceNodeSettings {
   const record = asRecord(value);
   const attributesRecord = asRecord(record.attributes);

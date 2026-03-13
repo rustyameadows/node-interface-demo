@@ -100,6 +100,7 @@ import {
 import {
   buildTextTemplatePreview,
   createDefaultListNodeSettings,
+  buildReferencePromptText,
   createGeneratedTextNoteSettings,
   createReferenceNodeSettings,
   createTextNoteSettings,
@@ -3108,6 +3109,7 @@ export function CanvasView({ projectId }: Props) {
         const prev = currentState.canvasDoc;
         const nextPosition = nextCanvasNodePosition(prev.workflow.nodes.length, position);
         const zIndex = nextCanvasNodeZIndex(prev.workflow.nodes);
+        const settings = createReferenceNodeSettings();
         const node: WorkflowNode = {
           id: nodeId,
           label: `Reference ${prev.workflow.nodes.filter((item) => item.kind === "reference").length + 1}`,
@@ -3116,8 +3118,8 @@ export function CanvasView({ projectId }: Props) {
           modelId: defaultProvider.modelId,
           nodeType: "reference",
           outputType: "text",
-          prompt: "",
-          settings: createReferenceNodeSettings(),
+          prompt: buildReferencePromptText(settings),
+          settings,
           sourceAssetId: null,
           sourceAssetMimeType: null,
           sourceJobId: null,
@@ -4229,6 +4231,7 @@ export function CanvasView({ projectId }: Props) {
         selectedNode.id,
         {
           settings: nextSettings,
+          prompt: buildReferencePromptText(nextSettings),
         },
         {
           historyMode: "coalesced",

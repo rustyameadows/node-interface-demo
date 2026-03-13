@@ -1,4 +1,5 @@
 import {
+  buildReferencePromptText,
   createDefaultListNodeSettings,
   createReferenceNodeSettings,
   createTextNoteSettings,
@@ -313,6 +314,7 @@ function createBaseTextNoteNode(overrides?: Partial<WorkflowNode>): WorkflowNode
 
 
 function createBaseReferenceNode(overrides?: Partial<WorkflowNode>): WorkflowNode {
+  const referenceSettings = overrides?.settings || createReferenceNodeSettings();
   return {
     id: overrides?.id || "library-reference",
     label: overrides?.label || "Reference",
@@ -321,8 +323,8 @@ function createBaseReferenceNode(overrides?: Partial<WorkflowNode>): WorkflowNod
     kind: "reference",
     nodeType: "reference",
     outputType: "text",
-    prompt: overrides?.prompt || "",
-    settings: overrides?.settings || createReferenceNodeSettings(),
+    prompt: overrides?.prompt || buildReferencePromptText(referenceSettings),
+    settings: referenceSettings,
     sourceAssetId: null,
     sourceAssetMimeType: null,
     sourceJobId: null,
