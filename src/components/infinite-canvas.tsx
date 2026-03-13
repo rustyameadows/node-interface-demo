@@ -1389,6 +1389,7 @@ export function InfiniteCanvas({
           const showOutputPort =
             isListNode ||
             isTextNote ||
+            isReferenceNode ||
             isOperatorNode ||
             (node.kind === "asset-source" && !isModelNode) ||
             (isModelNode && node.outputType !== "text" && Boolean(node.hasStartedJob));
